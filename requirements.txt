@@ -1,0 +1,2 @@
+# Dependências de desenvolvimento (ex.: pytest, flake8, black)
+
