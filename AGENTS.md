@@ -4,8 +4,8 @@ Este arquivo fornece contexto a agentes de IA (OpenAI Codex, ChatGPT, etc.) sob
 
 ## 1. Visão geral do projeto
 - **Objetivo:** Coletar cotações de ações em tempo quase‑real e armazená‑las no BigQuery para análises posteriores.
-- **Estado atual:** Estrutura de projeto configurada; **nenhuma Cloud Function foi implementada ainda**.
-- **Próximo marco:** Definir a primeira função (nome, assinatura, dependências) antes de qualquer implementação.
+- **Estado atual:** Estrutura de projeto configurada; a primeira Cloud Function ainda não foi implementada.
+- **Próximo marco:** A função inicial `get_stock_data(request)` deve ser criada para coletar cotações e gravar no BigQuery. Antes da implementação, defina suas dependências em `requirements.txt`.
 
 ## 2. Convenções de código
 - **Formatação:** `black` + `isort`
@@ -25,4 +25,4 @@ Este arquivo fornece contexto a agentes de IA (OpenAI Codex, ChatGPT, etc.) sob
 - `GCP_PROJECT` → ID do projeto GCP
 
 ---
-> **Importante:** Não criar ou referenciar funções neste momento. Atualize este guia à medida que novos componentes sejam adicionados.
+> **Importante:** Ainda não há código de Cloud Functions implementado. Primeiro defina o diretório da função e suas dependências antes de iniciar a programação.
