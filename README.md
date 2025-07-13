@@ -22,3 +22,21 @@ Coleta cotações de ações e carrega no **BigQuery** usando **Google Cloud Fun
    ```
 
 Consulte os comentários nos diretórios para mais detalhes.
+
+## Deploy
+
+O workflow `.github/workflows/deploy.yml` realiza o deploy automático da função
+para o **Google Cloud Functions** a cada push na branch `main`. Configure os
+segredos `GCP_SA_KEY` e `GCP_PROJECT` (além do `BQ_TABLE` usado pela função) no
+repositório do GitHub.
+
+O comando executado é:
+
+```bash
+gcloud functions deploy get_stock_data \
+    --runtime python311 \
+    --trigger-http \
+    --entry-point get_stock_data \
+    --source functions/get_stock_data \
+    --allow-unauthenticated
+```
