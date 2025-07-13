@@ -1,2 +1,10 @@
-# Dependências de desenvolvimento (ex.: pytest, flake8, black)
-
+# Dependências de desenvolvimento e execução das funções
+black
+flake8
+isort
+pytest
+yfinance
+pandas
+google-cloud-bigquery>=3.12
+google-cloud-storage
+pytz

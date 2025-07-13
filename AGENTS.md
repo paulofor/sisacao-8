@@ -18,8 +18,11 @@ sisacao-8/
 ├── requirements.txt          # Dependências compartilhadas para dev local
 ├── config/
 │   └── env.example           # Variáveis de ambiente de exemplo (BQ_TABLE, GCP_PROJECT…)
-├── functions/                # **Vazio por enquanto. NÃO adicionar código agora.**
-│   └── README.md             # Mantém instruções genéricas para criar funções futuramente
+├── functions/
+│   ├── README.md             # Instruções genéricas
+│   └── get_stock_data/
+│       ├── main.py           # Primeira Cloud Function
+│       └── requirements.txt  # Dependências da função
 ├── scripts/
 │   └── local_test.py         # Framework para testes locais (ficará ocioso até existirem funções)
 └── tests/
@@ -46,8 +49,8 @@ Este arquivo fornece contexto a agentes de IA (OpenAI Codex, ChatGPT, etc.) sob
 
 ## 1. Visão geral do projeto
 - **Objetivo:** Coletar cotações de ações em tempo quase‑real e armazená‑las no BigQuery para análises posteriores.
-- **Estado atual:** Estrutura de projeto configurada; **nenhuma Cloud Function foi implementada ainda**.
-- **Próximo marco:** Definir a primeira função (nome, assinatura, dependências) antes de qualquer implementação.
+- **Estado atual:** Primeira Cloud Function implementada (`get_stock_data`).
+- **Próximo marco:** Evoluir o processo de coleta e documentar novas funções.
 
 ## 2. Convenções de código
 - **Formatação:** `black` + `isort`
@@ -67,7 +70,7 @@ Este arquivo fornece contexto a agentes de IA (OpenAI Codex, ChatGPT, etc.) sob
 - `GCP_PROJECT` → ID do projeto GCP
 
 ---
-> **Importante:** Não criar ou referenciar funções neste momento. Atualize este guia à medida que novos componentes sejam adicionados.
+> **Importante:** Novas funções devem seguir o padrão deste repositório. Mantenha o guia atualizado a cada adição.
 ```
 
 ---
