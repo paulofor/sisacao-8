@@ -1,6 +1,6 @@
 # sisacao-8
 
-Estrutura inicial para coletar cotações de ações e carregar no **BigQuery** usando **Google Cloud Functions**.
+Coleta cotações de ações e carrega no **BigQuery** usando **Google Cloud Functions**.
 
 ## Como usar
 
@@ -14,11 +14,11 @@ Estrutura inicial para coletar cotações de ações e carregar no **BigQuery** 
 
 2. Crie um arquivo `.env` baseado em `config/env.example`.
 
-3. Quando as funções estiverem implementadas, você poderá testá‑las localmente:
+3. Teste localmente a Cloud Function `get_stock_data`:
 
    ```bash
    pip install functions-framework
-   functions-framework --target=<function_name>
+   functions-framework --target=get_stock_data
    ```
 
 Consulte os comentários nos diretórios para mais detalhes.
