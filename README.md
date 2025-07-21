@@ -28,7 +28,8 @@ Consulte os comentários nos diretórios para mais detalhes.
 O workflow `.github/workflows/deploy.yml` realiza o deploy automático da função
 para o **Google Cloud Functions** a cada push na branch `main`. Configure o
 segredo `GCP_SA_KEY` (além do `BQ_TABLE` usado pela função) no repositório do
-GitHub. A função será publicada no projeto `ingestaokraken`.
+GitHub. A função será publicada no projeto `ingestaokraken`, região
+`us-central1`.
 
 O comando executado é:
 
@@ -39,5 +40,6 @@ gcloud functions deploy get_stock_data \
     --entry-point get_stock_data \
     --source functions/get_stock_data \
     --allow-unauthenticated \
-    --project ingestaokraken
+    --project ingestaokraken \
+    --region us-central1
 ```

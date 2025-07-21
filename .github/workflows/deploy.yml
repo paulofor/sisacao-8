@@ -24,4 +24,5 @@ jobs:
             --entry-point get_stock_data \
             --source functions/get_stock_data \
             --allow-unauthenticated \
-            --project ingestaokraken
+            --project ingestaokraken \
+            --region us-central1
