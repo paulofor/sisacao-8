@@ -12,20 +12,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Auth GCP
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: '${{ secrets.GCP_SA_KEY }}'
-          project_id: 'ingestaokraken'
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
-      - name: Deploy Functions
+        with:
+          project_id: ingestaokraken
+      - name: Authenticate and deploy
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
         run: |
+          echo "$GCP_SA_KEY" > ${{ runner.temp }}/sa_key.json
+          gcloud auth activate-service-account --key-file=${{ runner.temp }}/sa_key.json
+          gcloud config set project ingestaokraken
+          gcloud config set run/region us-central1
           gcloud functions deploy get_stock_data \
             --runtime python311 \
             --trigger-http \
             --entry-point get_stock_data \
             --source functions/get_stock_data \
-            --allow-unauthenticated \
-            --project ingestaokraken \
-            --region us-central1
+            --allow-unauthenticated
