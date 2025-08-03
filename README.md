@@ -32,6 +32,11 @@ Configure o segredo `GCP_SA_KEY` (além do `BQ_TABLE` usado pela função) no
 repositório do GitHub. A função será publicada no projeto `ingestaokraken`,
 região `us-central1`.
 
+A conta de serviço utilizada pelo deploy precisa dos papéis
+`Cloud Functions Developer`, `Cloud Run Admin`, `Service Account User` e
+`Cloud Build Service Account`. A ausência de algum desses papéis pode gerar
+erros como `run.services.setIamPolicy` permission denied.
+
 O comando executado é:
 
 ```bash
