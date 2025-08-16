@@ -8,14 +8,18 @@ import yfinance as yf
 from google.cloud import bigquery, storage
 from pytz import timezone
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(message)s",
+)
 
 DATASET_ID = "cotacao_intraday"
 TABELA_ID = "cotacao_bovespa"
 BUCKET_NAME = "cotacao-intraday"
 ARQUIVO_TICKER = "bovespa.csv"
 
-timeout = 120
+# Timeout em segundos para requisições ao yfinance
+TIMEOUT = 120
 
 client = bigquery.Client()
 storage_client = storage.Client()
@@ -45,13 +49,27 @@ def download_in_batches(
         batch = tickers[i:end_index]
         logging.info("Buscando batch: %s", batch)
         try:
+            params = {
+                "tickers": batch,
+                "period": "1d",
+                "interval": "15m",
+                "threads": False,
+                "progress": False,
+                "auto_adjust": False,
+                "show_errors": False,
+                "timeout": TIMEOUT,
+            }
+            logging.info("yfinance params: %s", params)
             batch_data = yf.download(
                 batch,
                 period="1d",
-                interval="1m",
+                interval="15m",
                 group_by="ticker",
                 threads=False,
                 progress=False,
+                auto_adjust=False,
+                show_errors=False,
+                timeout=TIMEOUT,
             )
             if isinstance(batch_data.columns, pd.MultiIndex):
                 for ticker in batch:
@@ -60,8 +78,17 @@ def download_in_batches(
             else:
                 ticker = batch[0]
                 all_data[ticker] = batch_data.dropna()
+            row_counts = {}
+            for t in batch:
+                row_counts[t] = len(all_data.get(t, pd.DataFrame()))
+            logging.info("Batch %s retornou linhas: %s", batch, row_counts)
         except Exception as exc:  # noqa: BLE001
-            logging.warning("Erro ao baixar dados do batch %s: %s", batch, exc)
+            logging.warning(
+                "Erro ao baixar dados do batch %s: %s",
+                batch,
+                exc,
+                exc_info=True,
+            )
         time.sleep(pause)
     return all_data
 
@@ -119,6 +146,10 @@ def get_stock_data(request):
     try:
         logging.info("Iniciando download de %s tickers...", len(tickers))
         data_dict = download_in_batches(tickers, batch_size=10, pause=10)
+        logging.info(
+            "Download concluído: %s tickers com dados",
+            len(data_dict),
+        )
 
         if not data_dict:
             logging.warning("Nenhum dado foi retornado pelo yfinance.")
