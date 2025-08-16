@@ -3,10 +3,11 @@ import logging
 import time
 from typing import List
 
-import pandas as pd
-import yfinance as yf
-from google.cloud import bigquery, storage
-from pytz import timezone
+import pandas as pd  # type: ignore[import-untyped]
+import yfinance as yf  # type: ignore[import-untyped]
+from google.cloud import bigquery  # type: ignore[import-untyped]
+from google.cloud import storage  # type: ignore[import-untyped, attr-defined]
+from pytz import timezone  # type: ignore[import-untyped]
 
 logging.basicConfig(
     level=logging.INFO,
@@ -56,7 +57,6 @@ def download_in_batches(
                 "threads": False,
                 "progress": False,
                 "auto_adjust": False,
-                "show_errors": False,
                 "timeout": TIMEOUT,
             }
             logging.info("yfinance params: %s", params)
@@ -68,7 +68,6 @@ def download_in_batches(
                 threads=False,
                 progress=False,
                 auto_adjust=False,
-                show_errors=False,
                 timeout=TIMEOUT,
             )
             if isinstance(batch_data.columns, pd.MultiIndex):
