@@ -1,10 +1,11 @@
 import datetime
+import io
 import logging
-import time
-from typing import List
+import zipfile
+from typing import Dict, List, Optional, Tuple
 
 import pandas as pd  # type: ignore[import-untyped]
-import yfinance as yf  # type: ignore[import-untyped]
+import requests  # type: ignore[import-untyped]
 from google.cloud import bigquery  # type: ignore[import-untyped]
 from google.cloud import storage  # type: ignore[import-untyped, attr-defined]
 from pytz import timezone  # type: ignore[import-untyped]
@@ -19,7 +20,7 @@ TABELA_ID = "cotacao_bovespa"
 BUCKET_NAME = "cotacao-intraday"
 ARQUIVO_TICKER = "bovespa.csv"
 
-# Timeout em segundos para requisições ao yfinance
+# Timeout em segundos para requisições HTTP
 TIMEOUT = 120
 
 client = bigquery.Client()
@@ -40,56 +41,53 @@ def get_tickers_from_gcs() -> List[str]:
         return []
 
 
-def download_in_batches(
-    tickers: List[str], batch_size: int = 10, pause: int = 10
-) -> dict:
-    """Download data from yfinance in batches."""
-    all_data: dict = {}
-    for i in range(0, len(tickers), batch_size):
-        end_index = i + batch_size
-        batch = tickers[i:end_index]
-        logging.info("Buscando batch: %s", batch)
-        try:
-            params = {
-                "tickers": batch,
-                "period": "1d",
-                "interval": "1m",
-                "threads": False,
-                "progress": False,
-                "auto_adjust": False,
-                "timeout": TIMEOUT,
-            }
-            logging.info("yfinance params: %s", params)
-            batch_data = yf.download(
-                batch,
-                period="1d",
-                interval="1m",
-                group_by="ticker",
-                threads=False,
-                progress=False,
-                auto_adjust=False,
-                timeout=TIMEOUT,
-            )
-            if isinstance(batch_data.columns, pd.MultiIndex):
-                for ticker in batch:
-                    if ticker in batch_data.columns.levels[0]:
-                        all_data[ticker] = batch_data[ticker].dropna()
-            else:
-                ticker = batch[0]
-                all_data[ticker] = batch_data.dropna()
-            row_counts = {}
-            for t in batch:
-                row_counts[t] = len(all_data.get(t, pd.DataFrame()))
-            logging.info("Batch %s retornou linhas: %s", batch, row_counts)
-        except Exception as exc:  # noqa: BLE001
-            logging.warning(
-                "Erro ao baixar dados do batch %s: %s",
-                batch,
-                exc,
-                exc_info=True,
-            )
-        time.sleep(pause)
-    return all_data
+def download_from_b3(
+    tickers: List[str], date: Optional[datetime.date] = None
+) -> Dict[str, Tuple[str, float]]:
+    """Download closing prices from official B3 daily file.
+
+    Returns a mapping of ticker to a tuple (date, close_price).
+    """
+    if date is None:
+        date = datetime.date.today()
+    date_str = date.strftime("%Y%m%d")
+    url = (
+        "https://www.b3.com.br/pesquisapregao/"
+        f"download?filelist=COTAHIST_D{date_str}.ZIP"
+    )
+    headers = {
+        "User-Agent": "Mozilla/5.0",
+        "Referer": "https://www.b3.com.br/",
+    }
+    result: Dict[str, Tuple[str, float]] = {}
+    try:
+        response = requests.get(url, headers=headers, timeout=TIMEOUT)
+        response.raise_for_status()
+        with zipfile.ZipFile(io.BytesIO(response.content)) as zf:
+            nome_arquivo = zf.namelist()[0]
+            with zf.open(nome_arquivo) as arquivo:
+                for linha in io.TextIOWrapper(arquivo, encoding="latin1"):
+                    if not linha.startswith("01"):
+                        continue
+                    ticker = linha[12:24].strip()
+                    if ticker not in tickers:
+                        continue
+                    data_cotacao = datetime.datetime.strptime(
+                        linha[2:10], "%Y%m%d"
+                    ).strftime("%Y-%m-%d")
+                    preco_str = linha[108:121].strip()
+                    try:
+                        preco = float(preco_str) / 100.0
+                        result[ticker] = (data_cotacao, preco)
+                    except ValueError:
+                        logging.warning(
+                            "Valor inválido para %s: %s",
+                            ticker,
+                            preco_str,
+                        )
+    except Exception as exc:  # noqa: BLE001
+        logging.error("Erro ao baixar arquivo da B3: %s", exc, exc_info=True)
+    return result
 
 
 def append_dataframe_to_bigquery(df: pd.DataFrame) -> None:
@@ -144,14 +142,14 @@ def get_stock_data(request):
 
     try:
         logging.info("Iniciando download de %s tickers...", len(tickers))
-        data_dict = download_in_batches(tickers, batch_size=10, pause=10)
+        data_dict = download_from_b3(tickers)
         logging.info(
             "Download concluído: %s tickers com dados",
             len(data_dict),
         )
 
         if not data_dict:
-            logging.warning("Nenhum dado foi retornado pelo yfinance.")
+            logging.warning("Nenhum dado foi retornado pelos arquivos da B3.")
             return "No data fetched"
 
         brasil_tz = timezone("America/Sao_Paulo")
@@ -162,43 +160,21 @@ def get_stock_data(request):
         rows = []
 
         for ticker in tickers:
-            ticker_data = data_dict.get(ticker)
-            try:
-                if ticker_data is not None and not ticker_data.empty:
-                    ult_value = ticker_data["Close"].iloc[-1]
-                    timestamp = ticker_data.index[-1]
-
-                    if timestamp.tzinfo is None:
-                        timestamp = timestamp.tz_localize("UTC")
-                    timestamp_brt = timestamp.tz_convert("America/Sao_Paulo")
-
-                    date_str = timestamp_brt.strftime("%Y-%m-%d")
-                    time_str = timestamp_brt.strftime("%H:%M")
-
-                    rows.append(
-                        {
-                            "ticker": ticker,
-                            "data": date_str,
-                            "hora": time_str,
-                            "valor": round(ult_value, 2),
-                            "hora_atual": hora_atual,
-                            "data_hora_atual": data_hora_atual,
-                        }
-                    )
-                else:
-                    logging.warning("Dados não disponíveis para %s", ticker)
-                    rows.append(
-                        {
-                            "ticker": ticker,
-                            "data": data_atual,
-                            "hora": None,
-                            "valor": -1,
-                            "hora_atual": hora_atual,
-                            "data_hora_atual": data_hora_atual,
-                        }
-                    )
-            except Exception as exc:  # noqa: BLE001
-                logging.warning("Erro ao processar %s: %s", ticker, exc)
+            ticker_info = data_dict.get(ticker)
+            if ticker_info is not None:
+                date_str, price = ticker_info
+                rows.append(
+                    {
+                        "ticker": ticker,
+                        "data": date_str,
+                        "hora": "18:00",
+                        "valor": round(price, 2),
+                        "hora_atual": hora_atual,
+                        "data_hora_atual": data_hora_atual,
+                    }
+                )
+            else:
+                logging.warning("Dados não disponíveis para %s", ticker)
                 rows.append(
                     {
                         "ticker": ticker,
