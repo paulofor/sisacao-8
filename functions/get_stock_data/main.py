@@ -53,7 +53,7 @@ def download_in_batches(
             params = {
                 "tickers": batch,
                 "period": "1d",
-                "interval": "15m",
+                "interval": "1m",
                 "threads": False,
                 "progress": False,
                 "auto_adjust": False,
@@ -63,7 +63,7 @@ def download_in_batches(
             batch_data = yf.download(
                 batch,
                 period="1d",
-                interval="15m",
+                interval="1m",
                 group_by="ticker",
                 threads=False,
                 progress=False,
