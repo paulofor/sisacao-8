@@ -7,7 +7,6 @@ from typing import Dict, List, Optional, Tuple
 import pandas as pd  # type: ignore[import-untyped]
 import requests  # type: ignore[import-untyped]
 from google.cloud import bigquery  # type: ignore[import-untyped]
-from google.cloud import storage  # type: ignore[import-untyped, attr-defined]
 from pytz import timezone  # type: ignore[import-untyped]
 
 logging.basicConfig(
@@ -17,28 +16,11 @@ logging.basicConfig(
 
 DATASET_ID = "cotacao_intraday"
 TABELA_ID = "cotacao_bovespa"
-BUCKET_NAME = "cotacao-intraday"
-ARQUIVO_TICKER = "bovespa.csv"
 
 # Timeout em segundos para requisições HTTP
 TIMEOUT = 120
 
 client = bigquery.Client()
-storage_client = storage.Client()
-
-
-def get_tickers_from_gcs() -> List[str]:
-    """Read tickers list from a GCS bucket."""
-    try:
-        bucket = storage_client.bucket(BUCKET_NAME)
-        blob = bucket.blob(ARQUIVO_TICKER)
-        data = blob.download_as_text()
-        tickers = [line.strip() for line in data.splitlines() if line.strip()]
-        logging.info("Tickers lidos do GCS: %s", tickers)
-        return tickers
-    except Exception as exc:  # noqa: BLE001
-        logging.error("Erro ao buscar tickers no GCS: %s", exc, exc_info=True)
-        return []
 
 
 def download_from_b3(
@@ -136,9 +118,8 @@ def append_dataframe_to_bigquery(df: pd.DataFrame) -> None:
 
 def get_stock_data(request):
     """Entry point for the Cloud Function."""
-    tickers = get_tickers_from_gcs()
-    if not tickers:
-        return "Nenhum ticker encontrado no GCS."
+    tickers = ["YDUQ3"]
+    logging.info("Processando ticker fixo: %s", tickers[0])
 
     try:
         logging.info("Iniciando download de %s tickers...", len(tickers))
