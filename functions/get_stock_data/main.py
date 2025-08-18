@@ -20,6 +20,9 @@ TABELA_ID = "cotacao_bovespa"
 BUCKET_NAME = "cotacao-intraday"
 ARQUIVO_TICKER = "bovespa.csv"
 
+# Tickers a serem usados caso a leitura do GCS falhe ou não retorne valores
+DEFAULT_TICKERS = ["YDUQ3"]
+
 # Timeout em segundos para requisições HTTP
 TIMEOUT = 120
 
@@ -28,17 +31,21 @@ storage_client = storage.Client()
 
 
 def get_tickers_from_gcs() -> List[str]:
-    """Read tickers list from a GCS bucket."""
+    """Read tickers list from a GCS bucket. Fallback to default ticker."""
     try:
         bucket = storage_client.bucket(BUCKET_NAME)
         blob = bucket.blob(ARQUIVO_TICKER)
         data = blob.download_as_text()
         tickers = [line.strip() for line in data.splitlines() if line.strip()]
-        logging.info("Tickers lidos do GCS: %s", tickers)
-        return tickers
+        if tickers:
+            logging.info("Tickers lidos do GCS: %s", tickers)
+            return tickers
+        logging.warning("Nenhum ticker encontrado no GCS. Usando padrão.")
     except Exception as exc:  # noqa: BLE001
         logging.error("Erro ao buscar tickers no GCS: %s", exc, exc_info=True)
-        return []
+
+    logging.info("Usando tickers padrão: %s", DEFAULT_TICKERS)
+    return DEFAULT_TICKERS
 
 
 def download_from_b3(
@@ -137,9 +144,6 @@ def append_dataframe_to_bigquery(df: pd.DataFrame) -> None:
 def get_stock_data(request):
     """Entry point for the Cloud Function."""
     tickers = get_tickers_from_gcs()
-    if not tickers:
-        return "Nenhum ticker encontrado no GCS."
-
     try:
         logging.info("Iniciando download de %s tickers...", len(tickers))
         data_dict = download_from_b3(tickers)
