@@ -3,7 +3,7 @@ black
 flake8
 isort
 pytest
-yfinance
+yfinance==0.1.36
 pandas
 google-cloud-bigquery>=3.12
 google-cloud-storage
