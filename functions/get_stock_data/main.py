@@ -33,10 +33,10 @@ def download_from_b3(
     if date is None:
         date = datetime.date.today()
     date_str = date.strftime("%Y%m%d")
-    url = (
-        "https://www.b3.com.br/pesquisapregao/"
-        f"download?filelist=COTAHIST_D{date_str}.ZIP"
-    )
+    nome_arquivo_zip = f"COTAHIST_D{date_str}.ZIP"
+    base_url = "https://www.b3.com.br/pesquisapregao/"
+    url = f"{base_url}download?filelist={nome_arquivo_zip}"
+    logging.info("Baixando arquivo da B3: %s", nome_arquivo_zip)
     headers = {
         "User-Agent": "Mozilla/5.0",
         "Referer": "https://www.b3.com.br/",
@@ -47,6 +47,7 @@ def download_from_b3(
         response.raise_for_status()
         with zipfile.ZipFile(io.BytesIO(response.content)) as zf:
             nome_arquivo = zf.namelist()[0]
+            logging.info("Arquivo dentro do ZIP: %s", nome_arquivo)
             with zf.open(nome_arquivo) as arquivo:
                 for linha in io.TextIOWrapper(arquivo, encoding="latin1"):
                     if not linha.startswith("01"):
