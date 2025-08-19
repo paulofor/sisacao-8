@@ -30,12 +30,12 @@ jobs:
             --project ingestaokraken \
             --region us-central1 \
             --quiet
-      - name: Deploy Cloud Run service
+      - name: Deploy Cloud Run function
         run: |
           gcloud run deploy google-finance-price \
             --source functions/google_finance_price \
+            --function google_finance_price \
             --allow-unauthenticated \
             --project ingestaokraken \
             --region us-central1 \
-            --set-env-vars FUNCTION_TARGET=google_finance_price \
             --quiet
