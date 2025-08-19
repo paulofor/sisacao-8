@@ -46,7 +46,13 @@ def download_from_b3(
         response = requests.get(url, headers=headers, timeout=TIMEOUT)
         response.raise_for_status()
         with zipfile.ZipFile(io.BytesIO(response.content)) as zf:
-            nome_arquivo = zf.namelist()[0]
+            nomes = zf.namelist()
+            arquivos_txt = [n for n in nomes if n.lower().endswith(".txt")]
+            if not arquivos_txt:
+                msg_erro = "Nenhum arquivo .txt encontrado em %s"
+                logging.error(msg_erro, nome_arquivo_zip)
+                return result
+            nome_arquivo = arquivos_txt[0]
             logging.info("Arquivo dentro do ZIP: %s", nome_arquivo)
             with zf.open(nome_arquivo) as arquivo:
                 for linha in io.TextIOWrapper(arquivo, encoding="latin1"):
