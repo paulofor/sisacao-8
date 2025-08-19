@@ -11,8 +11,8 @@ from __future__ import annotations
 import re
 from typing import Optional
 
-import requests
-from bs4 import BeautifulSoup
+import requests  # type: ignore[import-untyped]
+from bs4 import BeautifulSoup  # type: ignore[import-untyped]
 
 # Timeout in seconds for HTTP requests
 TIMEOUT = 10

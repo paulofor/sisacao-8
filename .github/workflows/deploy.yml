@@ -29,3 +29,11 @@ jobs:
             --allow-unauthenticated \
             --project ingestaokraken \
             --region us-central1
+      - name: Deploy Cloud Run service
+        run: |
+          gcloud run deploy google-finance-price \
+            --source functions/google_finance_price \
+            --entry-point google_finance_price \
+            --allow-unauthenticated \
+            --project ingestaokraken \
+            --region us-central1
