@@ -151,6 +151,7 @@ def get_stock_data(request):
             ticker_info = data_dict.get(ticker)
             if ticker_info is not None:
                 date_str, price = ticker_info
+                logging.info("Cotação obtida para %s: %.2f", ticker, price)
                 rows.append(
                     {
                         "ticker": ticker,
