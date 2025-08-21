@@ -1,6 +1,7 @@
 import datetime
 import io
 import logging
+import os
 import zipfile
 from typing import Dict, List, Optional, Tuple
 
@@ -9,8 +10,9 @@ import requests  # type: ignore[import-untyped]
 from google.cloud import bigquery  # type: ignore[import-untyped]
 from pytz import timezone  # type: ignore[import-untyped]
 
+LOG_LEVEL = os.environ.get("LOG_LEVEL", "DEBUG").upper()
 logging.basicConfig(
-    level=logging.INFO,
+    level=getattr(logging, LOG_LEVEL, logging.DEBUG),
     format="%(asctime)s %(levelname)s %(message)s",
 )
 
@@ -36,7 +38,10 @@ def download_from_b3(
     nome_arquivo_zip = f"COTAHIST_D{date_str}.ZIP"
     base_url = "https://www.b3.com.br/pesquisapregao/"
     url = f"{base_url}download?filelist={nome_arquivo_zip}"
+    logging.debug("Tickers solicitados: %s", tickers)
+    logging.debug("Data usada para download: %s", date_str)
     logging.info("Baixando arquivo da B3: %s", nome_arquivo_zip)
+    logging.debug("URL da requisição: %s", url)
     headers = {
         "User-Agent": "Mozilla/5.0",
         "Referer": "https://www.b3.com.br/",
@@ -44,9 +49,15 @@ def download_from_b3(
     result: Dict[str, Tuple[str, float]] = {}
     try:
         response = requests.get(url, headers=headers, timeout=TIMEOUT)
+        logging.debug(
+            "Resposta HTTP: %s | %s bytes",
+            getattr(response, "status_code", "unknown"),
+            len(getattr(response, "content", b"")),
+        )
         response.raise_for_status()
         with zipfile.ZipFile(io.BytesIO(response.content)) as zf:
             nomes = zf.namelist()
+            logging.debug("Arquivos no ZIP: %s", nomes)
             arquivos_txt = [n for n in nomes if n.lower().endswith(".txt")]
             if not arquivos_txt:
                 msg_erro = "Nenhum arquivo .txt encontrado em %s"
@@ -65,6 +76,12 @@ def download_from_b3(
                         linha[2:10], "%Y%m%d"
                     ).strftime("%Y-%m-%d")
                     preco_str = linha[108:121].strip()
+                    logging.debug(
+                        "Linha processada para %s: data %s preço %s",
+                        ticker,
+                        data_cotacao,
+                        preco_str,
+                    )
                     try:
                         preco = float(preco_str) / 100.0
                         result[ticker] = (data_cotacao, preco)
@@ -82,6 +99,11 @@ def download_from_b3(
 def append_dataframe_to_bigquery(df: pd.DataFrame) -> None:
     """Append a DataFrame to BigQuery table."""
     try:
+        logging.debug(
+            "DataFrame recebido com %s linhas e colunas %s",
+            len(df),
+            list(df.columns),
+        )
         if "data" in df.columns:
             df["data"] = pd.to_datetime(df["data"]).dt.date
         if "hora" in df.columns:
@@ -93,6 +115,7 @@ def append_dataframe_to_bigquery(df: pd.DataFrame) -> None:
             df["data_hora_atual"] = pd.to_datetime(df["data_hora_atual"])
 
         tabela_id = f"{client.project}.{DATASET_ID}.{TABELA_ID}"
+        logging.debug("Tabela de destino: %s", tabela_id)
         job_config = bigquery.LoadJobConfig(
             schema=[
                 bigquery.SchemaField("ticker", "STRING"),
@@ -144,6 +167,7 @@ def get_stock_data(request):
         hora_atual = datetime.datetime.now(brasil_tz).strftime("%H:%M")
         data_atual = datetime.datetime.now(brasil_tz).strftime("%Y-%m-%d")
         data_hora_atual = datetime.datetime.now(brasil_tz)
+        logging.debug("Horário atual calculado: %s %s", data_atual, hora_atual)
 
         rows = []
 
@@ -180,6 +204,7 @@ def get_stock_data(request):
             "DataFrame final com %s linhas será enviado ao BigQuery.",
             len(df),
         )
+        logging.debug("Pré-visualização do DataFrame:\n%s", df.head())
         append_dataframe_to_bigquery(df)
 
         return "Success"
