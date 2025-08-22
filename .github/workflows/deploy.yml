@@ -28,4 +28,14 @@ jobs:
             --source functions/get_stock_data \
             --allow-unauthenticated \
             --project ingestaokraken \
-            --region us-central1
+            --region us-central1 \
+            --quiet
+      - name: Deploy Cloud Run function
+        run: |
+          gcloud run deploy google-finance-price \
+            --source functions/google_finance_price \
+            --function google_finance_price \
+            --allow-unauthenticated \
+            --project ingestaokraken \
+            --region us-central1 \
+            --quiet
