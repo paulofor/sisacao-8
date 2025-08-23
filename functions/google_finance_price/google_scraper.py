@@ -8,6 +8,7 @@ performs an HTTP request and parses the HTML, but a smaller
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import Optional
 
@@ -16,6 +17,8 @@ from bs4 import BeautifulSoup  # type: ignore[import-untyped]
 
 # Timeout in seconds for HTTP requests
 TIMEOUT = 10
+
+logger = logging.getLogger(__name__)
 
 
 def extract_price_from_html(html: str) -> float:
@@ -79,8 +82,16 @@ def fetch_google_finance_price(
     """
 
     url = f"https://www.google.com/finance/quote/{ticker}:{exchange}"
+    logger.info("Fetching Google Finance URL %s for ticker %s", url, ticker)
     sess = session or requests
     headers = {"User-Agent": "Mozilla/5.0"}
     response = sess.get(url, headers=headers, timeout=TIMEOUT)
+    logger.info(
+        "Received response with status %s for ticker %s",
+        response.status_code,
+        ticker,
+    )
     response.raise_for_status()
-    return extract_price_from_html(response.text)
+    price = extract_price_from_html(response.text)
+    logger.info("Extracted price %.2f for ticker %s", price, ticker)
+    return price
