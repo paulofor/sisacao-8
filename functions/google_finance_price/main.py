@@ -25,15 +25,16 @@ def google_finance_price(request: Any) -> Tuple[Dict[str, float | str], int]:
     """
 
     ticker = request.args.get("ticker", "YDUQ3")
-    logger.info("Received request for ticker %s", ticker)
+    logger.warning("Received request for ticker %s", ticker)
     try:
         price = fetch_google_finance_price(ticker)
-        logger.info("Returning price %.2f for ticker %s", price, ticker)
+        logger.warning("Returning price %.2f for ticker %s", price, ticker)
         return {"ticker": ticker, "price": price}, 200
     except Exception as exc:  # noqa: BLE001
-        logger.exception(
+        logger.warning(
             "Failed to fetch price for ticker %s: %s",
             ticker,
             exc,
+            exc_info=True,
         )
         return {"error": str(exc)}, 500
