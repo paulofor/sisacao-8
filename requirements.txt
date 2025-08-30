@@ -5,6 +5,7 @@ isort
 pytest
 mypy
 pandas
+pyarrow
 google-cloud-bigquery>=3.12
 google-cloud-storage
 pytz
