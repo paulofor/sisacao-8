@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import datetime
 import logging
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, List, Tuple
 
 import pandas as pd  # type: ignore[import-untyped]
 from google.cloud import bigquery  # type: ignore[import-untyped]
@@ -73,21 +73,43 @@ def append_dataframe_to_bigquery(df: pd.DataFrame) -> None:
         )
 
 
-def google_finance_price(request: Any) -> Tuple[Dict[str, float | str], int]:
-    """HTTP Cloud Run entry point returning latest price for a ticker."""
+def fetch_active_tickers() -> List[str]:
+    """Return list of active tickers from ``acao_bovespa`` table."""
+    table_id = f"{client.project}.{DATASET_ID}.acao_bovespa"
+    query = f"SELECT ticker FROM `{table_id}` WHERE ativo = TRUE"
+    try:
+        df = client.query(query).to_dataframe()
+        return df["ticker"].astype(str).tolist()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "Failed to fetch active tickers: %s",
+            exc,
+            exc_info=True,
+        )
+        raise
 
-    ticker = request.args.get("ticker", "YDUQ3")
-    logger.warning("Received request for ticker %s", ticker)
+
+def google_finance_price(request: Any) -> Tuple[Dict[str, Any], int]:
+    """HTTP Cloud Run entry point returning latest prices for active
+    tickers."""
+
     brasil_tz = timezone("America/Sao_Paulo")
     now = datetime.datetime.now(brasil_tz)
     data_atual = now.strftime("%Y-%m-%d")
     hora_atual = now.strftime("%H:%M")
     data_hora_atual = now
+
     try:
-        price = fetch_google_finance_price(ticker)
-        logger.warning("Returning price %.2f for ticker %s", price, ticker)
-        df = pd.DataFrame(
-            [
+        tickers = fetch_active_tickers()
+    except Exception as exc:  # noqa: BLE001
+        return {"error": str(exc)}, 500
+
+    rows = []
+    errors: List[str] = []
+    for ticker in tickers:
+        try:
+            price = fetch_google_finance_price(ticker)
+            rows.append(
                 {
                     "ticker": ticker,
                     "data": data_atual,
@@ -96,15 +118,21 @@ def google_finance_price(request: Any) -> Tuple[Dict[str, float | str], int]:
                     "hora_atual": hora_atual,
                     "data_hora_atual": data_hora_atual,
                 }
-            ]
-        )
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Failed to fetch price for ticker %s: %s",
+                ticker,
+                exc,
+                exc_info=True,
+            )
+            errors.append(str(exc))
+
+    if rows:
+        df = pd.DataFrame(rows)
         append_dataframe_to_bigquery(df)
-        return {"ticker": ticker, "price": price}, 200
-    except Exception as exc:  # noqa: BLE001
-        logger.warning(
-            "Failed to fetch price for ticker %s: %s",
-            ticker,
-            exc,
-            exc_info=True,
-        )
-        return {"error": str(exc)}, 500
+
+    if rows:
+        return {"tickers": tickers, "processed": len(rows)}, 200
+
+    return {"error": "; ".join(errors) or "No tickers processed"}, 500
