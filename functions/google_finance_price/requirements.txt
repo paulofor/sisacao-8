@@ -3,4 +3,5 @@ requests
 beautifulsoup4
 pandas
 google-cloud-bigquery>=3.12
+pyarrow
 pytz
