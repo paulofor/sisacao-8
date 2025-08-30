@@ -11,3 +11,9 @@ def test_extract_price_from_html_success():
 def test_extract_price_from_html_missing():
     with pytest.raises(ValueError):
         gf_scraper.extract_price_from_html("<div></div>")
+
+
+def test_extract_price_from_html_wrong_class():
+    html = '<div class="YMlKec">R$ 10,50</div>'
+    with pytest.raises(ValueError):
+        gf_scraper.extract_price_from_html(html)
