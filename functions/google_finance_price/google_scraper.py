@@ -82,16 +82,16 @@ def fetch_google_finance_price(
     """
 
     url = f"https://www.google.com/finance/quote/{ticker}:{exchange}"
-    logger.info("Fetching Google Finance URL %s for ticker %s", url, ticker)
+    logger.warning("Fetching Google Finance URL %s for ticker %s", url, ticker)
     sess = session or requests
     headers = {"User-Agent": "Mozilla/5.0"}
     response = sess.get(url, headers=headers, timeout=TIMEOUT)
-    logger.info(
+    logger.warning(
         "Received response with status %s for ticker %s",
         response.status_code,
         ticker,
     )
     response.raise_for_status()
     price = extract_price_from_html(response.text)
-    logger.info("Extracted price %.2f for ticker %s", price, ticker)
+    logger.warning("Extracted price %.2f for ticker %s", price, ticker)
     return price
