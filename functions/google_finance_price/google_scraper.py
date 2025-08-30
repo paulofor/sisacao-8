@@ -21,12 +21,43 @@ TIMEOUT = 10
 logger = logging.getLogger(__name__)
 
 
+def _parse_number(value: str) -> float:
+    """Convert a price string into a float.
+
+    Parameters
+    ----------
+    value:
+        Price string such as ``"R$ 10,50"``.
+
+    Returns
+    -------
+    float
+        Parsed numeric value.
+
+    Raises
+    ------
+    ValueError
+        If the value cannot be converted to ``float``.
+    """
+
+    cleaned = re.sub(r"[^0-9.,-]", "", value)
+    if cleaned.count(",") == 1 and cleaned.count(".") == 0:
+        cleaned = cleaned.replace(",", ".")
+    else:
+        cleaned = cleaned.replace(",", "")
+
+    try:
+        return float(cleaned)
+    except ValueError as exc:
+        raise ValueError(f"Could not parse price text: {value}") from exc
+
+
 def extract_price_from_html(html: str) -> float:
     """Extract the price value from a Google Finance HTML page.
 
     The function searches for the div containing the price using the
-    ``YMlKec`` class used by Google Finance. The returned price is a float
-    in Brazilian Real.
+    ``YMlKec`` and ``fxKbKc`` classes used by Google Finance. The returned
+    price is a float in Brazilian Real.
 
     Parameters
     ----------
@@ -45,18 +76,12 @@ def extract_price_from_html(html: str) -> float:
     """
 
     soup = BeautifulSoup(html, "html.parser")
-    price_div = soup.find("div", class_="YMlKec")
+    price_div = soup.select_one("div.YMlKec.fxKbKc")
     if price_div is None:
         raise ValueError("Could not find price element in HTML")
 
-    # Clean the price string: remove currency symbols and normalize decimal
-    # separator from comma to dot.
-    price_text = price_div.text.strip()
-    price_text = re.sub(r"[^0-9,]", "", price_text)
-    if not price_text:
-        raise ValueError("Price text is empty")
-
-    return float(price_text.replace(",", "."))
+    price_text = price_div.get_text(strip=True)
+    return _parse_number(price_text)
 
 
 def fetch_google_finance_price(
