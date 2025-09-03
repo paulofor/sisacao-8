@@ -105,8 +105,11 @@ def fetch_google_finance_price(
     float
         Latest price for the ticker.
     """
+    if ticker.upper() == "IBOV":
+        url = "https://www.google.com/finance/quote/IBOV:INDEXBVMF"
+    else:
+        url = f"https://www.google.com/finance/quote/{ticker}:{exchange}"
 
-    url = f"https://www.google.com/finance/quote/{ticker}:{exchange}"
     logger.warning("Fetching Google Finance URL %s for ticker %s", url, ticker)
     sess = session or requests
     headers = {"User-Agent": "Mozilla/5.0"}
