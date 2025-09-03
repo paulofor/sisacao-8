@@ -17,3 +17,27 @@ def test_extract_price_from_html_wrong_class():
     html = '<div class="YMlKec">R$ 10,50</div>'
     with pytest.raises(ValueError):
         gf_scraper.extract_price_from_html(html)
+
+
+def test_fetch_google_finance_price_ibov(monkeypatch):
+    captured = {}
+
+    def fake_get(url, headers, timeout):  # noqa: D401, ANN001
+        captured["url"] = url
+
+        class DummyResponse:
+            status_code = 200
+            text = '<div class="YMlKec fxKbKc">R$ 10,50</div>'
+
+            def raise_for_status(self):
+                return None
+
+        return DummyResponse()
+
+    monkeypatch.setattr(gf_scraper.requests, "get", fake_get)
+    price = gf_scraper.fetch_google_finance_price("IBOV")
+    assert price == pytest.approx(10.50)
+    assert (
+        captured["url"]
+        == "https://www.google.com/finance/quote/IBOV:INDEXBVMF"  # noqa: E501
+    )
