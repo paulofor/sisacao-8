@@ -44,3 +44,8 @@ gcloud functions deploy get_stock_data \
     --project ingestaokraken \
     --region us-central1
 ```
+
+## Monitoramento
+
+Passos para agendar a consulta diária e montar um painel no Looker Studio
+estão descritos em [docs/monitoramento.md](docs/monitoramento.md).
