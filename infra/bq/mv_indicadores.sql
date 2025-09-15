@@ -1,54 +1,48 @@
--- Materialized view of technical indicators
--- Replace `PROJECT_ID` and `dataset` with your BigQuery project and dataset names.
-
-CREATE OR REPLACE VIEW `PROJECT_ID.dataset.mv_indicadores` AS
-WITH ohlc AS (
-    SELECT
-        ticker,
-        DATE(data) AS dt,
-        valor AS close,
-        -- Substitute NULLs below with actual columns `high` and `low` if available
-        NULL AS high,
-        NULL AS low,
-        LAG(valor) OVER (PARTITION BY ticker ORDER BY data) AS prev_close
-    FROM `PROJECT_ID.dataset.cotacao_bovespa`
+CREATE OR REPLACE VIEW `ingestaokraken.cotacao_intraday.mv_indicadores` AS
+WITH base AS (
+  SELECT
+    ticker AS ticker,
+    CAST(data AS DATE) AS dt,
+    valor AS px_close,
+    /* se não houver high/low, estes ficarão NULL e o ATR vira NULL */
+    NULL AS px_high,
+    NULL AS px_low,
+    LAG(valor) OVER (PARTITION BY ticker ORDER BY data) AS px_prev
+  FROM `ingestaokraken.cotacao_intraday.cotacao_bovespa`
 ),
-deltas AS (
-    SELECT
-        *,
-        close - LAG(close) OVER (PARTITION BY ticker ORDER BY dt) AS delta
-    FROM ohlc
-),
-ind AS (
-    SELECT
-        *,
-        AVG(close) OVER w20 AS sma20,
-        STDDEV_SAMP(close) OVER w20 AS std20,
-        AVG(close) OVER w50 AS sma50,
-        SAFE_DIVIDE(
-            AVG(close) OVER w50 - LAG(AVG(close) OVER w50) OVER (PARTITION BY ticker ORDER BY dt),
-            LAG(AVG(close) OVER w50) OVER (PARTITION BY ticker ORDER BY dt)
-        ) AS slope50_pct,
-        AVG(GREATEST(delta, 0)) OVER w14 AS avg_gain,
-        AVG(GREATEST(-delta, 0)) OVER w14 AS avg_loss,
-        CASE
-            WHEN high IS NOT NULL AND low IS NOT NULL THEN
-                AVG(GREATEST(high - low, ABS(high - prev_close), ABS(low - prev_close))) OVER w14
-        END AS atr14
-    FROM deltas
-    WINDOW
-        w20 AS (PARTITION BY ticker ORDER BY dt ROWS BETWEEN 19 PRECEDING AND CURRENT ROW),
-        w50 AS (PARTITION BY ticker ORDER BY dt ROWS BETWEEN 49 PRECEDING AND CURRENT ROW),
-        w14 AS (PARTITION BY ticker ORDER BY dt ROWS BETWEEN 13 PRECEDING AND CURRENT ROW)
+bb AS (
+  SELECT
+    b.*,
+    AVG(px_close) OVER w20 AS sma20,
+    STDDEV_SAMP(px_close) OVER w20 AS sd20,
+    AVG(px_close) OVER w50 AS sma50,
+    (AVG(px_close) OVER w20) + 2 * STDDEV_SAMP(px_close) OVER w20 AS bb_up,
+    (AVG(px_close) OVER w20) - 2 * STDDEV_SAMP(px_close) OVER w20 AS bb_dn,
+    -- RSI14 (aprox.) por ganhos/perdas em 14 janelas
+    SUM(GREATEST(px_close - px_prev, 0)) OVER w14
+      / NULLIF(SUM(LEAST(px_close - px_prev, 0)) OVER w14 * -1, 0) AS rs_raw,
+    -- True Range (para ATR; se high/low forem NULL, este campo ficará 0/NULL)
+    GREATEST(
+      COALESCE(px_high - px_low, 0),
+      ABS(COALESCE(px_high, px_prev) - px_prev),
+      ABS(COALESCE(px_low, px_prev) - px_prev)
+    ) AS tr
+  FROM base AS b
+  WINDOW
+    w14 AS (PARTITION BY ticker ORDER BY dt ROWS BETWEEN 13 PRECEDING AND CURRENT ROW),
+    w20 AS (PARTITION BY ticker ORDER BY dt ROWS BETWEEN 19 PRECEDING AND CURRENT ROW),
+    w50 AS (PARTITION BY ticker ORDER BY dt ROWS BETWEEN 49 PRECEDING AND CURRENT ROW)
 )
 SELECT
-    ticker,
-    dt,
-    close,
-    sma20,
-    sma20 + 2 * std20 AS bb_up,
-    sma20 - 2 * std20 AS bb_dn,
-    100 - 100 / (1 + avg_gain / NULLIF(avg_loss, 0)) AS rsi14,
-    atr14,
-    slope50_pct
-FROM ind;
+  *,
+  100 - (100 / (1 + rs_raw)) AS rsi14,
+  AVG(tr) OVER (
+    PARTITION BY ticker
+    ORDER BY dt
+    ROWS BETWEEN 13 PRECEDING AND CURRENT ROW
+  ) AS atr14,
+  SAFE_DIVIDE(
+    ABS(sma50 - LAG(sma50) OVER (PARTITION BY ticker ORDER BY dt)),
+    sma50
+  ) AS slope50_pct
+FROM bb;
