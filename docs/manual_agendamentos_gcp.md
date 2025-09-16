@@ -1,12 +1,12 @@
 # Manual de agendamentos no GCP
 
-Este manual descreve os agendamentos necessários para manter o fluxo de ingestão, processamento e alerta do projeto **sisacao-8** operando de forma totalmente automatizada no Google Cloud Platform (GCP). Ele assume que você já implantou as funções disponíveis no repositório (`get_stock_data`, `google_finance_price` e `alerts`) e possui um dataset BigQuery com as tabelas `cotacao_intraday.cotacao_bovespa` e `signals_oscilacoes`.
+Este manual descreve os agendamentos necessários para manter o fluxo de ingestão, processamento e alerta do projeto **sisacao-8** operando de forma totalmente automatizada no Google Cloud Platform (GCP). Ele assume que você já implantou as funções disponíveis no repositório (`get_stock_data`, `google_finance_price` e `alerts`) e possui um dataset BigQuery com as tabelas `cotacao_intraday.cotacao_fechamento_diario`, `cotacao_intraday.cotacao_bovespa` e `signals_oscilacoes`.
 
 ## 1. Visão geral dos agendamentos
 
 | Agendamento | Serviço GCP | Frequência sugerida | Objetivo | Recursos envolvidos |
 |-------------|-------------|---------------------|----------|----------------------|
-| Ingestão diária oficial | Cloud Scheduler → Cloud Functions | Todo dia útil às 20:00 (America/Sao_Paulo) | Invocar a função `get_stock_data` para baixar o arquivo oficial da B3 e gravar na tabela intraday. | Cloud Function `get_stock_data`, tabela `cotacao_intraday.cotacao_bovespa` |
+| Ingestão diária oficial | Cloud Scheduler → Cloud Functions | Todo dia útil às 20:00 (America/Sao_Paulo) | Invocar a função `get_stock_data` para baixar o arquivo oficial da B3 e gravar na tabela de fechamento diário. | Cloud Function `get_stock_data`, tabela `cotacao_intraday.cotacao_fechamento_diario` |
 | Complemento intraday opcional | Cloud Scheduler → Cloud Run | A cada 30 minutos entre 10:00 e 18:00 (America/Sao_Paulo) | Acionar o serviço `google_finance_price` para buscar preços recentes no Google Finance. | Serviço HTTP `google_finance_price`, tabela `cotacao_intraday.cotacao_bovespa` |
 | Geração de sinais | Scheduled Query BigQuery | Todo dia às 17:40 (America/Sao_Paulo) | Executar `infra/bq/signals_oscilacoes.sql` para popular `signals_oscilacoes`. | BigQuery, tabela `signals_oscilacoes` |
 | Notificações | Cloud Scheduler → Cloud Functions | Todo dia às 18:00 (America/Sao_Paulo) | Enviar requisição para a função `alerts` e publicar resumo no Telegram. | Cloud Function `alerts`, tabela `signals_oscilacoes` |

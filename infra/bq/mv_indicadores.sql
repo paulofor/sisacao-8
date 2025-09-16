@@ -2,13 +2,13 @@ CREATE OR REPLACE VIEW `ingestaokraken.cotacao_intraday.mv_indicadores` AS
 WITH base AS (
   SELECT
     ticker AS ticker,
-    CAST(data AS DATE) AS dt,
-    valor AS px_close,
+    CAST(data_pregao AS DATE) AS dt,
+    preco_fechamento AS px_close,
     /* se não houver high/low, estes ficarão NULL e o ATR vira NULL */
     NULL AS px_high,
     NULL AS px_low,
-    LAG(valor) OVER (PARTITION BY ticker ORDER BY data) AS px_prev
-  FROM `ingestaokraken.cotacao_intraday.cotacao_bovespa`
+    LAG(preco_fechamento) OVER (PARTITION BY ticker ORDER BY data_pregao) AS px_prev
+  FROM `ingestaokraken.cotacao_intraday.cotacao_fechamento_diario`
 ),
 bb AS (
   SELECT
