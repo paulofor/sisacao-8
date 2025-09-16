@@ -17,7 +17,8 @@ logging.basicConfig(
 )
 
 DATASET_ID = "cotacao_intraday"
-TABELA_ID = "cotacao_bovespa"
+FECHAMENTO_TABLE_ID = "cotacao_fechamento_diario"
+FONTE_FECHAMENTO = "b3_cotahist"
 
 # Timeout em segundos para requisições HTTP
 TIMEOUT = 120
@@ -97,33 +98,27 @@ def download_from_b3(
 
 
 def append_dataframe_to_bigquery(df: pd.DataFrame) -> None:
-    """Append a DataFrame to BigQuery table."""
+    """Append daily closing prices to the dedicated BigQuery table."""
     try:
         logging.warning(
             "DataFrame recebido com %s linhas e colunas %s",
             len(df),
             list(df.columns),
         )
-        if "data" in df.columns:
-            df["data"] = pd.to_datetime(df["data"]).dt.date
-        if "hora" in df.columns:
-            df["hora"] = pd.to_datetime(df["hora"], format="%H:%M").dt.time
-        if "hora_atual" in df.columns:
-            hora_atual_col = pd.to_datetime(df["hora_atual"], format="%H:%M")
-            df["hora_atual"] = hora_atual_col.dt.time
-        if "data_hora_atual" in df.columns:
-            df["data_hora_atual"] = pd.to_datetime(df["data_hora_atual"])
+        if "data_pregao" in df.columns:
+            df["data_pregao"] = pd.to_datetime(df["data_pregao"]).dt.date
+        if "data_captura" in df.columns:
+            df["data_captura"] = pd.to_datetime(df["data_captura"])
 
-        tabela_id = f"{client.project}.{DATASET_ID}.{TABELA_ID}"
+        tabela_id = f"{client.project}.{DATASET_ID}.{FECHAMENTO_TABLE_ID}"
         logging.warning("Tabela de destino: %s", tabela_id)
         job_config = bigquery.LoadJobConfig(
             schema=[
                 bigquery.SchemaField("ticker", "STRING"),
-                bigquery.SchemaField("data", "DATE"),
-                bigquery.SchemaField("hora", "TIME"),
-                bigquery.SchemaField("valor", "FLOAT"),
-                bigquery.SchemaField("hora_atual", "TIME"),
-                bigquery.SchemaField("data_hora_atual", "DATETIME"),
+                bigquery.SchemaField("data_pregao", "DATE"),
+                bigquery.SchemaField("preco_fechamento", "FLOAT"),
+                bigquery.SchemaField("data_captura", "DATETIME"),
+                bigquery.SchemaField("fonte", "STRING"),
             ],
             write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
         )
@@ -147,7 +142,7 @@ def append_dataframe_to_bigquery(df: pd.DataFrame) -> None:
 
 
 def get_stock_data(request):
-    """Entry point for the Cloud Function."""
+    """Entry point for the Cloud Function that stores daily closing prices."""
     tickers = ["YDUQ3"]
     logging.warning("Processando ticker fixo: %s", tickers[0])
 
@@ -164,44 +159,37 @@ def get_stock_data(request):
             return "No data fetched"
 
         brasil_tz = timezone("America/Sao_Paulo")
-        hora_atual = datetime.datetime.now(brasil_tz).strftime("%H:%M")
-        data_atual = datetime.datetime.now(brasil_tz).strftime("%Y-%m-%d")
-        data_hora_atual = datetime.datetime.now(brasil_tz)
-        logging.warning(
-            "Horário atual calculado: %s %s",
-            data_atual,
-            hora_atual,
-        )
+        data_captura = datetime.datetime.now(brasil_tz).replace(tzinfo=None)
+        logging.warning("Horário local da captura: %s", data_captura)
 
         rows = []
 
         for ticker in tickers:
             ticker_info = data_dict.get(ticker)
-            if ticker_info is not None:
-                date_str, price = ticker_info
-                logging.warning("Cotação obtida para %s: %.2f", ticker, price)
-                rows.append(
-                    {
-                        "ticker": ticker,
-                        "data": date_str,
-                        "hora": "18:00",
-                        "valor": round(price, 2),
-                        "hora_atual": hora_atual,
-                        "data_hora_atual": data_hora_atual,
-                    }
-                )
-            else:
+            if ticker_info is None:
                 logging.warning("Dados não disponíveis para %s", ticker)
-                rows.append(
-                    {
-                        "ticker": ticker,
-                        "data": data_atual,
-                        "hora": None,
-                        "valor": -1,
-                        "hora_atual": hora_atual,
-                        "data_hora_atual": data_hora_atual,
-                    }
-                )
+                continue
+
+            date_str, price = ticker_info
+            logging.warning(
+                "Cotação de fechamento obtida para %s em %s: %.2f",
+                ticker,
+                date_str,
+                price,
+            )
+            rows.append(
+                {
+                    "ticker": ticker,
+                    "data_pregao": date_str,
+                    "preco_fechamento": round(price, 2),
+                    "data_captura": data_captura,
+                    "fonte": FONTE_FECHAMENTO,
+                }
+            )
+
+        if not rows:
+            logging.warning("Nenhum registro válido para inserir na tabela de fechamento.")
+            return "No data loaded"
 
         df = pd.DataFrame(rows)
         logging.warning(

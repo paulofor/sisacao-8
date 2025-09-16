@@ -13,14 +13,15 @@ séries de preços sem necessidade de serviços adicionais.
 
 - `config/`: contém o arquivo `env.example` com as variáveis mínimas necessárias para definir projeto, dataset e região no GCP.
 - `functions/get_stock_data/`: Cloud Function que baixa o arquivo oficial da B3 (`COTAHIST_D{data}.ZIP`), extrai as cotações
-  solicitadas e insere os dados na tabela `cotacao_intraday.cotacao_bovespa` usando o cliente do BigQuery.
+  solicitadas e insere os dados na tabela dedicada `cotacao_intraday.cotacao_fechamento_diario` usando o cliente do BigQuery.
 - `functions/google_finance_price/`: função HTTP pensada para Cloud Run que consulta a lista de tickers ativos no BigQuery,
   busca o último preço no Google Finance via *scraping* e grava os resultados na mesma tabela de intraday.
 - `functions/alerts/`: função HTTP que consulta a tabela de sinais (`signals_oscilacoes`) e, se configurada com `BOT_TOKEN` e
   `CHAT_ID`, envia um resumo para um bot do Telegram.
-- `infra/bq/`: scripts SQL de apoio, incluindo `signals_oscilacoes.sql`, usados nas consultas agendadas do BigQuery.
-- `docs/dataset_detected.md`: documentação sobre o dataset `cotacao_intraday` e a tabela `cotacao_bovespa` mapeados no
-  projeto `ingestaokraken`.
+- `infra/bq/`: scripts SQL de apoio, incluindo `cotacao_fechamento_diario.sql` e `signals_oscilacoes.sql`, usados nas consultas
+  agendadas do BigQuery.
+- `docs/dataset_detected.md`: documentação sobre o dataset `cotacao_intraday`, destacando as tabelas `cotacao_bovespa`
+  (intraday) e `cotacao_fechamento_diario` (oficial de fechamento) mapeadas no projeto `ingestaokraken`.
 - `docs/monitoramento.md`: instruções para configurar a *scheduled query* diária e montar o painel no Looker Studio.
 - `scripts/local_test.py`: guia rápido para executar as funções localmente com o `functions-framework`.
 - `tests/`: suíte inicial de testes automatizados.
@@ -28,8 +29,8 @@ séries de preços sem necessidade de serviços adicionais.
 ## Fluxo de dados recomendado
 
 1. **Carga oficial diária:** a função `get_stock_data` deve ser agendada (ou acionada manualmente) após o fechamento do pregão.
-   Ela baixa o arquivo de cotações diário da B3, filtra os tickers desejados e grava as informações de preço, data e horário na
-   tabela `cotacao_intraday.cotacao_bovespa`.
+   Ela baixa o arquivo de cotações diário da B3, filtra os tickers desejados e grava as informações de preço e data na tabela
+   `cotacao_intraday.cotacao_fechamento_diario`.
 2. **Atualização intradiária opcional:** a função `google_finance_price` pode ser implantada como serviço HTTP para complementar
    as cotações oficiais com preços próximos ao tempo real. Ela consulta a lista de ativos marcada como `ativo = TRUE` na tabela
    `cotacao_intraday.acao_bovespa`, busca os preços no Google Finance e insere os registros no BigQuery.
