@@ -188,7 +188,9 @@ def get_stock_data(request):
             )
 
         if not rows:
-            logging.warning("Nenhum registro válido para inserir na tabela de fechamento.")
+            logging.warning(
+                "Nenhum registro válido para inserir na tabela de fechamento."
+            )
             return "No data loaded"
 
         df = pd.DataFrame(rows)
