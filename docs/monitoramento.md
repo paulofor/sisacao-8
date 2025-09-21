@@ -10,14 +10,14 @@ Este guia descreve como automatizar a geração de sinais e como visualizar os r
    - **Nome**: `signals_oscilacoes`
    - **Frequência**: `Daily`.
    - **Hora de execução**: `17:40` no fuso `America/Sao_Paulo`.
-4. Em **Destination**, escolha `project.dataset` e marque **Write if empty**.
+4. Em **Destination**, escolha `ingestaokraken.cotacao_intraday` e marque **Write if empty**.
 5. Cole o conteúdo de [`infra/bq/signals_oscilacoes.sql`](../infra/bq/signals_oscilacoes.sql) no campo de SQL.
 6. Salve para que a consulta rode automaticamente e substitua apenas a partição do dia.
 
 ## Dashboard no Looker Studio
 
 1. Acesse [Looker Studio](https://lookerstudio.google.com/) e crie um novo relatório.
-2. Selecione **BigQuery** como fonte de dados e a tabela `project.dataset.signals_oscilacoes`.
+2. Selecione **BigQuery** como fonte de dados e a tabela `ingestaokraken.cotacao_intraday.signals_oscilacoes`.
 3. Autorize o acesso e carregue os campos.
 4. Monte visualizações filtrando por `dt` e `ticker`.
 5. Salve o relatório para acompanhar os sinais diariamente.
@@ -32,13 +32,13 @@ Este guia descreve como automatizar a geração de sinais e como visualizar os r
        --trigger-http \
        --allow-unauthenticated \
        --set-secrets=BOT_TOKEN=bot-token:latest,CHAT_ID=chat-id:latest \
-       --set-env-vars=BQ_SIGNALS_TABLE=project.dataset.signals_oscilacoes
+       --set-env-vars=BQ_SIGNALS_TABLE=ingestaokraken.cotacao_intraday.signals_oscilacoes
    ```
 
 2. Teste enviando uma requisição:
 
    ```bash
-   curl -X POST "https://REGION-PROJECT.cloudfunctions.net/alerts"
+   curl -X POST "https://us-central1-ingestaokraken.cloudfunctions.net/alerts"
    ```
 
 A função consulta os sinais do dia corrente, registra a contagem por ticker e envia um resumo para o Telegram caso as variáveis `BOT_TOKEN` e `CHAT_ID` estejam configuradas.
