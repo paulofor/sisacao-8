@@ -1,6 +1,6 @@
 # Dataset detectado
 
-As consultas em `INFORMATION_SCHEMA` para as regiões `region-us-east1` e `region-us` identificaram um único dataset de cotações com os campos necessários para indicadores técnicos.
+As consultas em `INFORMATION_SCHEMA` para a região `region-us-central1` identificaram um único dataset de cotações com os campos necessários para indicadores técnicos.
 
 ## Variáveis detectadas
 
@@ -22,16 +22,10 @@ COL_LOW=NULL
 ### Listagem de datasets por região
 
 ```sql
--- region-us-east1
+-- region-us-central1
 SELECT
   schema_name
-FROM `region-us-east1`.INFORMATION_SCHEMA.SCHEMATA
-WHERE catalog_name = 'ingestaokraken';
-
--- region-us
-SELECT
-  schema_name
-FROM `region-us`.INFORMATION_SCHEMA.SCHEMATA
+FROM `region-us-central1`.INFORMATION_SCHEMA.SCHEMATA
 WHERE catalog_name = 'ingestaokraken';
 ```
 

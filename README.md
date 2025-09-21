@@ -30,7 +30,7 @@ para o **Google Cloud Functions** sempre que houver push ou pull request para a
 branch `master`. Também é possível acioná-lo manualmente via *workflow_dispatch*.
 Configure o segredo `GCP_SA_KEY` (além do `BQ_TABLE` usado pela função) no
 repositório do GitHub. A função será publicada no projeto `ingestaokraken`,
-região `us-central1`.
+região `us-central1`, e gravará dados no dataset `ingestaokraken.cotacao_intraday`.
 
 O comando executado é:
 

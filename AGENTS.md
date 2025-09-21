@@ -66,7 +66,7 @@ Este arquivo fornece contexto a agentes de IA (OpenAI Codex, ChatGPT, etc.) sob
 | `functions-framework` | Testes locais | Dev only. |
 
 ## 4. Variáveis de ambiente essenciais (pré‑definidas)
-- `BQ_TABLE` → `project.dataset.tabela`
+- `BQ_TABLE` → `ingestaokraken.cotacao_intraday.cotacao_fechamento_diario`
 - `GCP_PROJECT` → ID do projeto GCP
 
 ---

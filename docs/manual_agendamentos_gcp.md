@@ -1,15 +1,15 @@
 # Manual de agendamentos no GCP
 
-Este manual descreve os agendamentos necessários para manter o fluxo de ingestão, processamento e alerta do projeto **sisacao-8** operando de forma totalmente automatizada no Google Cloud Platform (GCP). Ele assume que você já implantou as funções disponíveis no repositório (`get_stock_data`, `google_finance_price` e `alerts`) e possui um dataset BigQuery com as tabelas `cotacao_intraday.cotacao_fechamento_diario`, `cotacao_intraday.cotacao_bovespa` e `signals_oscilacoes`.
+Este manual descreve os agendamentos necessários para manter o fluxo de ingestão, processamento e alerta do projeto **sisacao-8** operando de forma totalmente automatizada no Google Cloud Platform (GCP). Ele assume que você já implantou as funções disponíveis no repositório (`get_stock_data`, `google_finance_price` e `alerts`) e possui um dataset BigQuery com as tabelas `ingestaokraken.cotacao_intraday.cotacao_fechamento_diario`, `ingestaokraken.cotacao_intraday.cotacao_bovespa` e `ingestaokraken.cotacao_intraday.signals_oscilacoes`.
 
 ## 1. Visão geral dos agendamentos
 
 | Agendamento | Serviço GCP | Frequência sugerida | Objetivo | Recursos envolvidos |
 |-------------|-------------|---------------------|----------|----------------------|
-| Ingestão diária oficial | Cloud Scheduler → Cloud Functions | Todo dia útil às 20:00 (America/Sao_Paulo) | Invocar a função `get_stock_data` para baixar o arquivo oficial da B3 e gravar na tabela de fechamento diário. | Cloud Function `get_stock_data`, tabela `cotacao_intraday.cotacao_fechamento_diario` |
-| Complemento intraday opcional | Cloud Scheduler → Cloud Run | A cada 30 minutos entre 10:00 e 18:00 (America/Sao_Paulo) | Acionar o serviço `google_finance_price` para buscar preços recentes no Google Finance. | Serviço HTTP `google_finance_price`, tabela `cotacao_intraday.cotacao_bovespa` |
-| Geração de sinais | Scheduled Query BigQuery | Todo dia às 17:40 (America/Sao_Paulo) | Executar `infra/bq/signals_oscilacoes.sql` para popular `signals_oscilacoes`. | BigQuery, tabela `signals_oscilacoes` |
-| Notificações | Cloud Scheduler → Cloud Functions | Todo dia às 18:00 (America/Sao_Paulo) | Enviar requisição para a função `alerts` e publicar resumo no Telegram. | Cloud Function `alerts`, tabela `signals_oscilacoes` |
+| Ingestão diária oficial | Cloud Scheduler → Cloud Functions | Todo dia útil às 20:00 (America/Sao_Paulo) | Invocar a função `get_stock_data` para baixar o arquivo oficial da B3 e gravar na tabela de fechamento diário. | Cloud Function `get_stock_data`, tabela `ingestaokraken.cotacao_intraday.cotacao_fechamento_diario` |
+| Complemento intraday opcional | Cloud Scheduler → Cloud Run | A cada 30 minutos entre 10:00 e 18:00 (America/Sao_Paulo) | Acionar o serviço `google_finance_price` para buscar preços recentes no Google Finance. | Serviço HTTP `google_finance_price`, tabela `ingestaokraken.cotacao_intraday.cotacao_bovespa` |
+| Geração de sinais | Scheduled Query BigQuery | Todo dia às 17:40 (America/Sao_Paulo) | Executar `infra/bq/signals_oscilacoes.sql` para popular `signals_oscilacoes`. | BigQuery, tabela `ingestaokraken.cotacao_intraday.signals_oscilacoes` |
+| Notificações | Cloud Scheduler → Cloud Functions | Todo dia às 18:00 (America/Sao_Paulo) | Enviar requisição para a função `alerts` e publicar resumo no Telegram. | Cloud Function `alerts`, tabela `ingestaokraken.cotacao_intraday.signals_oscilacoes` |
 
 ## 2. Pré-requisitos gerais
 
@@ -32,7 +32,7 @@ Este manual descreve os agendamentos necessários para manter o fluxo de ingest�
    - **Frequency**: `0 20 * * 1-5` (dias úteis às 20:00);
    - **Time zone**: `America/Sao_Paulo`;
    - **Target type**: `HTTP`.
-3. Em **URL**, informe o endpoint da função (ex.: `https://REGION-PROJECT.cloudfunctions.net/get_stock_data`).
+3. Em **URL**, informe o endpoint da função (ex.: `https://us-central1-ingestaokraken.cloudfunctions.net/get_stock_data`).
 4. Em **HTTP method**, selecione `POST`.
 5. Em **Body**, adicione o payload JSON esperado pela função (por exemplo, `{ "tickers": ["PETR4", "VALE3"] }`).
 6. Em **Authentication**, selecione **Add OAuth token** e escolha a conta de serviço com permissão `Cloud Functions Invoker`.
@@ -46,22 +46,22 @@ Se preferir usar o Cloud SDK:
 gcloud scheduler jobs create http get-stock-data-diario \
     --schedule="0 20 * * 1-5" \
     --time-zone="America/Sao_Paulo" \
-    --uri="https://REGION-PROJECT.cloudfunctions.net/get_stock_data" \
+    --uri="https://us-central1-ingestaokraken.cloudfunctions.net/get_stock_data" \
     --http-method=POST \
     --headers="Content-Type=application/json" \
-    --oidc-service-account-email=agendamentos-sisacao@PROJECT_ID.iam.gserviceaccount.com \
-    --oidc-token-audience="https://REGION-PROJECT.cloudfunctions.net/get_stock_data" \
+    --oidc-service-account-email=agendamentos-sisacao@ingestaokraken.iam.gserviceaccount.com \
+    --oidc-token-audience="https://us-central1-ingestaokraken.cloudfunctions.net/get_stock_data" \
     --message-body='{"tickers": ["PETR4", "VALE3"]}'
 ```
 
-Substitua `PROJECT_ID` e `REGION` pelos valores reais. O parâmetro `--oidc-token-audience` garante que a função reconheça o token emitido pelo Cloud Scheduler.
+Os exemplos já estão configurados para o projeto `ingestaokraken` na região `us-central1`. Ajuste apenas se estiver operando em outro ambiente. O parâmetro `--oidc-token-audience` garante que a função reconheça o token emitido pelo Cloud Scheduler.
 
 ## 4. Agendamento do serviço `google_finance_price`
 
 1. Implante a função como serviço HTTP no Cloud Run (outra opção é mantê-la como Cloud Function HTTP).
 2. Crie um job no Cloud Scheduler com frequência `0,30 10-18 * * 1-5` para rodar de segunda a sexta a cada 30 minutos.
 3. Configure o método `POST` e o payload esperado (ex.: `{ "limit": 50 }`).
-4. Caso utilize Cloud Run, selecione **Add OIDC token** e aponte para o serviço (`--oidc-token-audience=https://google_finance_price-<hash>-<region>-a.run.app`).
+4. Caso utilize Cloud Run, selecione **Add OIDC token** e aponte para o serviço (`--oidc-token-audience=https://google_finance_price-<hash>-us-central1-a.run.app`).
 5. Verifique nos logs do Cloud Run se há retorno `200 OK` e registros novos na tabela `cotacao_bovespa`.
 
 ## 5. Scheduled Query do BigQuery
@@ -70,7 +70,7 @@ Substitua `PROJECT_ID` e `REGION` pelos valores reais. O parâmetro `--oidc-toke
 2. Defina:
    - **Name**: `signals_oscilacoes`;
    - **Schedule**: `Daily` às `17:40` em `America/Sao_Paulo`;
-   - **Destination**: `project.dataset.signals_oscilacoes`, opção **Write if empty** ou **Overwrite** na partição do dia.
+   - **Destination**: `ingestaokraken.cotacao_intraday.signals_oscilacoes`, opção **Write if empty** ou **Overwrite** na partição do dia.
 3. Cole o conteúdo de [`infra/bq/signals_oscilacoes.sql`](../infra/bq/signals_oscilacoes.sql) no editor de SQL.
 4. Em **Service account**, selecione a conta `agendamentos-sisacao` com função `BigQuery Job User`.
 5. Salve e execute uma vez para criar a tabela inicial. Monitore o histórico em **Scheduled Queries > Job History** para validar futuras execuções.
@@ -79,7 +79,7 @@ Substitua `PROJECT_ID` e `REGION` pelos valores reais. O parâmetro `--oidc-toke
 
 1. Garanta que os segredos `BOT_TOKEN` e `CHAT_ID` estejam disponíveis no Secret Manager e vinculados à função `alerts`.
 2. Crie um job no Cloud Scheduler com cron `0 18 * * 1-5` para enviar o resumo após o horário de pregão.
-3. Configure o endpoint `https://REGION-PROJECT.cloudfunctions.net/alerts` com método `POST` e corpo `{ "only_summary": true }` (ou conforme os parâmetros aceitos pela função).
+3. Configure o endpoint `https://us-central1-ingestaokraken.cloudfunctions.net/alerts` com método `POST` e corpo `{ "only_summary": true }` (ou conforme os parâmetros aceitos pela função).
 4. Associe a conta de serviço com permissão `Cloud Functions Invoker` e teste disparando manualmente.
 
 ## 7. Monitoramento e operação contínua
