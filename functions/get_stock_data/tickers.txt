@@ -1,0 +1,2 @@
+# Lista de tickers monitorados pela função get_stock_data
+YDUQ3

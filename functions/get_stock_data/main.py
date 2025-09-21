@@ -23,6 +23,10 @@ FONTE_FECHAMENTO = "b3_cotahist"
 # Timeout em segundos para requisições HTTP
 TIMEOUT = 120
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DEFAULT_TICKERS_FILE = os.path.join(BASE_DIR, "tickers.txt")
+TICKERS_FILE = os.environ.get("TICKERS_FILE", DEFAULT_TICKERS_FILE)
+
 client = bigquery.Client()
 
 
@@ -141,10 +145,47 @@ def append_dataframe_to_bigquery(df: pd.DataFrame) -> None:
         )
 
 
+def load_tickers_from_file(path: Optional[str] = None) -> List[str]:
+    """Return the list of tickers configured in the ``tickers.txt`` file."""
+
+    file_path = path or TICKERS_FILE
+    try:
+        with open(file_path, "r", encoding="utf-8") as file_obj:
+            tickers = [
+                line.strip()
+                for line in file_obj
+                if line.strip() and not line.lstrip().startswith("#")
+            ]
+    except FileNotFoundError:
+        logging.warning("Arquivo de tickers não encontrado: %s", file_path)
+        return []
+    except OSError as exc:  # noqa: BLE001
+        logging.warning(
+            "Erro ao ler o arquivo de tickers %s: %s",
+            file_path,
+            exc,
+            exc_info=True,
+        )
+        return []
+
+    logging.warning(
+        "Tickers carregados do arquivo %s (%s itens): %s",
+        file_path,
+        len(tickers),
+        tickers,
+    )
+    return tickers
+
+
 def get_stock_data(request):
     """Entry point for the Cloud Function that stores daily closing prices."""
-    tickers = ["YDUQ3"]
-    logging.warning("Processando ticker fixo: %s", tickers[0])
+    tickers = load_tickers_from_file()
+    if not tickers:
+        logging.warning(
+            "Nenhum ticker configurado. Verifique o arquivo %s.",
+            TICKERS_FILE,
+        )
+        return "No tickers configured"
 
     try:
         logging.warning("Iniciando download de %s tickers...", len(tickers))
