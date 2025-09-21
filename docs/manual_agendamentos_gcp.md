@@ -34,7 +34,8 @@ Este manual descreve os agendamentos necessários para manter o fluxo de ingest�
    - **Target type**: `HTTP`.
 3. Em **URL**, informe o endpoint da função (ex.: `https://REGION-PROJECT.cloudfunctions.net/get_stock_data`).
 4. Em **HTTP method**, selecione `POST`.
-5. Em **Body**, adicione o payload JSON esperado pela função (por exemplo, `{ "tickers": ["PETR4", "VALE3"] }`).
+5. Em **Body**, não é necessário enviar conteúdo. Os tickers monitorados são
+   lidos do arquivo `functions/get_stock_data/tickers.txt` no repositório.
 6. Em **Authentication**, selecione **Add OAuth token** e escolha a conta de serviço com permissão `Cloud Functions Invoker`.
 7. Salve o job e teste executando manualmente uma vez para validar logs e escrita no BigQuery.
 
@@ -50,8 +51,7 @@ gcloud scheduler jobs create http get-stock-data-diario \
     --http-method=POST \
     --headers="Content-Type=application/json" \
     --oidc-service-account-email=agendamentos-sisacao@PROJECT_ID.iam.gserviceaccount.com \
-    --oidc-token-audience="https://REGION-PROJECT.cloudfunctions.net/get_stock_data" \
-    --message-body='{"tickers": ["PETR4", "VALE3"]}'
+    --oidc-token-audience="https://REGION-PROJECT.cloudfunctions.net/get_stock_data"
 ```
 
 Substitua `PROJECT_ID` e `REGION` pelos valores reais. O parâmetro `--oidc-token-audience` garante que a função reconheça o token emitido pelo Cloud Scheduler.

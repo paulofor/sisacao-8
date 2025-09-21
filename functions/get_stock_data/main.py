@@ -3,6 +3,7 @@ import io
 import logging
 import os
 import zipfile
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import pandas as pd  # type: ignore[import-untyped]
@@ -24,6 +25,40 @@ FONTE_FECHAMENTO = "b3_cotahist"
 TIMEOUT = 120
 
 client = bigquery.Client()
+
+
+DEFAULT_TICKERS_FILE = Path(__file__).with_name("tickers.txt")
+_env_tickers_path = os.environ.get("TICKERS_FILE")
+TICKERS_FILE = Path(_env_tickers_path) if _env_tickers_path else DEFAULT_TICKERS_FILE
+
+
+def load_tickers_from_file(file_path: Optional[Path] = None) -> List[str]:
+    """Load ticker symbols from a text file."""
+
+    path = Path(file_path) if file_path else TICKERS_FILE
+    try:
+        with path.open("r", encoding="utf-8") as handle:
+            raw_tickers = [
+                line.strip().upper()
+                for line in handle
+                if line.strip() and not line.lstrip().startswith("#")
+            ]
+        tickers: List[str] = []
+        for ticker in raw_tickers:
+            if ticker not in tickers:
+                tickers.append(ticker)
+        logging.warning("Tickers carregados de %s: %s", path, tickers)
+        return tickers
+    except FileNotFoundError:
+        logging.warning("Arquivo de tickers não encontrado: %s", path)
+    except Exception as exc:  # noqa: BLE001
+        logging.warning(
+            "Erro ao ler arquivo de tickers %s: %s",
+            path,
+            exc,
+            exc_info=True,
+        )
+    return []
 
 
 def download_from_b3(
@@ -143,8 +178,14 @@ def append_dataframe_to_bigquery(df: pd.DataFrame) -> None:
 
 def get_stock_data(request):
     """Entry point for the Cloud Function that stores daily closing prices."""
-    tickers = ["YDUQ3"]
-    logging.warning("Processando ticker fixo: %s", tickers[0])
+    tickers = load_tickers_from_file()
+    if not tickers:
+        logging.warning("Nenhum ticker configurado para processamento.")
+        return "No tickers configured"
+
+    logging.warning(
+        "Iniciando processamento de %s tickers configurados no arquivo.", len(tickers)
+    )
 
     try:
         logging.warning("Iniciando download de %s tickers...", len(tickers))

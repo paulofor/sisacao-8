@@ -1,0 +1,4 @@
+# Lista de tickers monitorados pela função get_stock_data
+# Linhas iniciadas com # são ignoradas.
+YDUQ3
+PETR4
