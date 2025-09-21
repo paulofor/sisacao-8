@@ -14,7 +14,12 @@ Coleta cotações de ações e carrega no **BigQuery** usando **Google Cloud Fun
 
 2. Crie um arquivo `.env` baseado em `config/env.example`.
 
-3. Teste localmente a Cloud Function `get_stock_data`:
+3. Ajuste a lista de tickers em `functions/get_stock_data/tickers.txt`
+   (um ticker por linha, linhas iniciadas com `#` são ignoradas). A
+   função também aceita o caminho do arquivo via variável de ambiente
+   `TICKERS_FILE`.
+
+4. Teste localmente a Cloud Function `get_stock_data`:
 
    ```bash
    pip install functions-framework

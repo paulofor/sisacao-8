@@ -22,6 +22,11 @@ def test_get_stock_data_success(monkeypatch):
     )
     monkeypatch.setattr(
         module,
+        "load_tickers_from_file",
+        lambda file_path=None: ["YDUQ3"],
+    )
+    monkeypatch.setattr(
+        module,
         "append_dataframe_to_bigquery",
         lambda df: None,
     )

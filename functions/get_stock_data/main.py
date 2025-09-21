@@ -3,6 +3,7 @@ import io
 import logging
 import os
 import zipfile
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import pandas as pd  # type: ignore[import-untyped]
@@ -24,6 +25,43 @@ FONTE_FECHAMENTO = "b3_cotahist"
 TIMEOUT = 120
 
 client = bigquery.Client()
+
+
+def _resolve_tickers_path(file_path: Optional[str] = None) -> Path:
+    """Return the path containing the list of tickers to process."""
+
+    if file_path:
+        return Path(file_path)
+    env_path = os.environ.get("TICKERS_FILE")
+    if env_path:
+        return Path(env_path)
+    return Path(__file__).with_name("tickers.txt")
+
+
+def load_tickers_from_file(file_path: Optional[str] = None) -> List[str]:
+    """Load tickers from a text file.
+
+    The function supports optional comments (lines starting with ``#``)
+    and ignores blank lines. The resulting tickers are returned in
+    uppercase order of appearance.
+    """
+
+    path = _resolve_tickers_path(file_path)
+    logging.warning("Carregando tickers do arquivo: %s", path)
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except FileNotFoundError as exc:
+        raise FileNotFoundError(f"Tickers file not found: {path}") from exc
+
+    tickers = [
+        line.strip().upper()
+        for line in lines
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+    if not tickers:
+        raise ValueError(f"No tickers defined in {path}")
+    logging.warning("Tickers carregados (%s): %s", len(tickers), tickers)
+    return tickers
 
 
 def download_from_b3(
@@ -143,8 +181,12 @@ def append_dataframe_to_bigquery(df: pd.DataFrame) -> None:
 
 def get_stock_data(request):
     """Entry point for the Cloud Function that stores daily closing prices."""
-    tickers = ["YDUQ3"]
-    logging.warning("Processando ticker fixo: %s", tickers[0])
+
+    try:
+        tickers = load_tickers_from_file()
+    except Exception as exc:  # noqa: BLE001
+        logging.warning("Erro ao carregar tickers: %s", exc, exc_info=True)
+        return f"Erro ao carregar tickers: {exc}"
 
     try:
         logging.warning("Iniciando download de %s tickers...", len(tickers))
