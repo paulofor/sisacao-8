@@ -34,8 +34,11 @@ Este manual descreve os agendamentos necessários para manter o fluxo de ingest�
    - **Target type**: `HTTP`.
 3. Em **URL**, informe o endpoint da função (ex.: `https://us-central1-ingestaokraken.cloudfunctions.net/get_stock_data`).
 4. Em **HTTP method**, selecione `POST`.
-5. Em **Body**, não é necessário enviar conteúdo. Os tickers monitorados são
-   lidos do arquivo `functions/get_stock_data/tickers.txt` no repositório.
+5. Em **Body**, não é necessário enviar conteúdo. A função reaproveita os
+   tickers ativos da tabela `cotacao_intraday.acao_bovespa`, a mesma consumida
+   por `google_finance_price`. Para testes locais, é possível apontar a
+   variável `TICKERS_FILE` para `functions/get_stock_data/tickers.txt` ou outro
+   arquivo com a lista desejada.
 6. Em **Authentication**, selecione **Add OAuth token** e escolha a conta de serviço com permissão `Cloud Functions Invoker`.
 7. Salve o job e teste executando manualmente uma vez para validar logs e escrita no BigQuery.
 

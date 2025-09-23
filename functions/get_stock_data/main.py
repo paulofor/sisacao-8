@@ -3,6 +3,7 @@ import io
 import logging
 import os
 import zipfile
+from importlib import import_module
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -29,7 +30,12 @@ client = bigquery.Client()
 
 DEFAULT_TICKERS_FILE = Path(__file__).with_name("tickers.txt")
 _env_tickers_path = os.environ.get("TICKERS_FILE")
-TICKERS_FILE = Path(_env_tickers_path) if _env_tickers_path else DEFAULT_TICKERS_FILE
+if _env_tickers_path:
+    TICKERS_FILE = Path(_env_tickers_path)
+else:
+    TICKERS_FILE = DEFAULT_TICKERS_FILE
+
+GOOGLE_FINANCE_MODULE = "functions.google_finance_price.main"
 
 
 def load_tickers_from_file(file_path: Optional[Path] = None) -> List[str]:
@@ -47,7 +53,11 @@ def load_tickers_from_file(file_path: Optional[Path] = None) -> List[str]:
         for ticker in raw_tickers:
             if ticker not in tickers:
                 tickers.append(ticker)
-        logging.warning("Tickers carregados de %s: %s", path, tickers)
+        logging.warning(
+            "Tickers carregados de %s: %s",
+            path,
+            tickers,
+        )
         return tickers
     except FileNotFoundError:
         logging.warning("Arquivo de tickers não encontrado: %s", path)
@@ -59,6 +69,50 @@ def load_tickers_from_file(file_path: Optional[Path] = None) -> List[str]:
             exc_info=True,
         )
     return []
+
+
+def load_tickers_from_google_finance() -> List[str]:
+    """Load tickers using the google_finance_price helper."""
+
+    module = import_module(GOOGLE_FINANCE_MODULE)
+    fetch = getattr(module, "fetch_active_tickers", None)
+    if fetch is None:
+        raise AttributeError("fetch_active_tickers is not available")
+    raw_tickers = fetch()
+    tickers: List[str] = []
+    for raw in raw_tickers:
+        if not isinstance(raw, str):
+            continue
+        ticker = raw.strip().upper()
+        if not ticker:
+            continue
+        if ticker not in tickers:
+            tickers.append(ticker)
+    if not tickers:
+        raise ValueError("Nenhum ticker retornado por google_finance_price")
+    logging.warning(
+        "Tickers carregados via google_finance_price: %s",
+        tickers,
+    )
+    return tickers
+
+
+def load_configured_tickers(file_path: Optional[Path] = None) -> List[str]:
+    """Load tickers from google_finance_price or fallback to file."""
+
+    if file_path is not None:
+        return load_tickers_from_file(file_path)
+    if _env_tickers_path:
+        return load_tickers_from_file(Path(_env_tickers_path))
+    try:
+        return load_tickers_from_google_finance()
+    except Exception as exc:  # noqa: BLE001
+        logging.warning(
+            "Falha ao carregar tickers via google_finance_price: %s",
+            exc,
+            exc_info=True,
+        )
+    return load_tickers_from_file()
 
 
 def download_from_b3(
@@ -178,13 +232,14 @@ def append_dataframe_to_bigquery(df: pd.DataFrame) -> None:
 
 def get_stock_data(request):
     """Entry point for the Cloud Function that stores daily closing prices."""
-    tickers = load_tickers_from_file()
+    tickers = load_configured_tickers()
     if not tickers:
         logging.warning("Nenhum ticker configurado para processamento.")
         return "No tickers configured"
 
     logging.warning(
-        "Iniciando processamento de %s tickers configurados no arquivo.", len(tickers)
+        "Iniciando processamento de %s tickers configurados.",
+        len(tickers),
     )
 
     try:
@@ -239,7 +294,10 @@ def get_stock_data(request):
             "DataFrame final com %s linhas será enviado ao BigQuery.",
             len(df),
         )
-        logging.warning("Pré-visualização do DataFrame:\n%s", df.head())
+        logging.warning(
+            "Pré-visualização do DataFrame:\n%s",
+            df.head(),
+        )
         append_dataframe_to_bigquery(df)
 
         return "Success"
