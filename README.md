@@ -14,10 +14,12 @@ Coleta cotações de ações e carrega no **BigQuery** usando **Google Cloud Fun
 
 2. Crie um arquivo `.env` baseado em `config/env.example`.
 
-3. Ajuste a lista de tickers desejados em
-   `functions/get_stock_data/tickers.txt` (um símbolo por linha, linhas
-   iniciadas com `#` são ignoradas). A função lê esse arquivo durante a
-   execução, portanto não é necessário enviar payload com tickers.
+3. Garanta que os tickers desejados estejam marcados como ativos na tabela
+   `cotacao_intraday.acao_bovespa`, utilizada pela função
+   `google_finance_price`. A função `get_stock_data` reutiliza essa mesma
+   lista ao buscar os fechamentos diários. Se preferir testar com um arquivo
+   local, edite `functions/get_stock_data/tickers.txt` (um símbolo por linha)
+   e defina a variável de ambiente `TICKERS_FILE` apontando para ele.
 
 4. Teste localmente a Cloud Function `get_stock_data`:
 
