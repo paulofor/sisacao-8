@@ -12,3 +12,4 @@ google-cloud-storage
 pytz
 requests
 beautifulsoup4
+tensorflow-cpu>=2.12,<3
