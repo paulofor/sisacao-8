@@ -5,7 +5,7 @@ import sys
 import types
 from types import SimpleNamespace
 
-import pandas as pd
+import pandas as pd  # type: ignore[import-untyped]
 import pytest
 
 
