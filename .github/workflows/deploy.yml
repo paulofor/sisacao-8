@@ -19,17 +19,84 @@ jobs:
           project_id: 'ingestaokraken'
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
+      - name: Wait for pending Cloud Functions operations
+        run: |
+          REGION="us-central1"
+          MAX_ATTEMPTS=20
+          SLEEP_SECONDS=30
+          PENDING="pending"
+
+          for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
+            PENDING=$(gcloud functions operations list \
+              --region "$REGION" \
+              --filter="done=false" \
+              --format="value(name)")
+
+            if [ -z "$PENDING" ]; then
+              echo "No pending operations found before deployment."
+              break
+            fi
+
+            echo "Cloud Functions operations still running (attempt $attempt/$MAX_ATTEMPTS):"
+            echo "$PENDING"
+            echo "Waiting $SLEEP_SECONDS seconds before checking again..."
+            sleep "$SLEEP_SECONDS"
+          done
+
+          if [ -n "$PENDING" ]; then
+            echo "Timed out waiting for Cloud Functions operations to finish."
+            exit 1
+          fi
       - name: Deploy Functions
         run: |
-          gcloud functions deploy get_stock_data \
-            --runtime python311 \
-            --trigger-http \
-            --entry-point get_stock_data \
-            --source functions/get_stock_data \
-            --allow-unauthenticated \
-            --project ingestaokraken \
-            --region us-central1 \
-            --quiet
+          set +e
+
+          REGION="us-central1"
+          MAX_ATTEMPTS=5
+          RETRY_WAIT=90
+          EXIT_CODE=1
+
+          for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
+            echo "Starting deployment attempt $attempt/$MAX_ATTEMPTS for get_stock_data"
+            gcloud functions deploy get_stock_data \
+              --runtime python311 \
+              --trigger-http \
+              --entry-point get_stock_data \
+              --source functions/get_stock_data \
+              --allow-unauthenticated \
+              --project ingestaokraken \
+              --region "$REGION" \
+              --quiet
+            EXIT_CODE=$?
+
+            if [ "$EXIT_CODE" -eq 0 ]; then
+              echo "Deployment succeeded on attempt $attempt."
+              break
+            fi
+
+            if [ "$attempt" -lt "$MAX_ATTEMPTS" ]; then
+              echo "Deployment attempt $attempt failed with exit code $EXIT_CODE."
+              echo "Waiting $RETRY_WAIT seconds before retrying..."
+              sleep "$RETRY_WAIT"
+
+              echo "Checking for remaining Cloud Functions operations before retrying:"
+              PENDING=$(gcloud functions operations list \
+                --region "$REGION" \
+                --filter="done=false" \
+                --format="value(name)")
+              if [ -n "$PENDING" ]; then
+                echo "$PENDING"
+              else
+                echo "No pending operations detected."
+              fi
+            else
+              echo "Deployment failed after $MAX_ATTEMPTS attempts."
+            fi
+          done
+
+          if [ "$EXIT_CODE" -ne 0 ]; then
+            exit "$EXIT_CODE"
+          fi
       - name: Deploy Cloud Run function
         run: |
           gcloud run deploy google-finance-price \
