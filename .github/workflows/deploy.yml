@@ -26,11 +26,33 @@ jobs:
           SLEEP_SECONDS=30
           PENDING="pending"
 
-          for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
-            PENDING=$(gcloud functions operations list \
+          list_pending_operations() {
+            local output
+
+            if output=$(gcloud functions operations list \
               --region "$REGION" \
               --filter="done=false" \
-              --format="value(name)")
+              --format="value(name)" 2>/dev/null); then
+              printf '%s\n' "$output"
+              return 0
+            fi
+
+            if output=$(gcloud beta functions operations list \
+              --region "$REGION" \
+              --filter="done=false" \
+              --format="value(name)" 2>/dev/null); then
+              printf '%s\n' "$output"
+              return 0
+            fi
+
+            echo "Failed to list Cloud Functions operations using stable or beta commands." >&2
+            return 1
+          }
+
+          for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
+            if ! PENDING=$(list_pending_operations); then
+              exit 1
+            fi
 
             if [ -z "$PENDING" ]; then
               echo "No pending operations found before deployment."
@@ -56,6 +78,29 @@ jobs:
           RETRY_WAIT=90
           EXIT_CODE=1
 
+          list_pending_operations() {
+            local output
+
+            if output=$(gcloud functions operations list \
+              --region "$REGION" \
+              --filter="done=false" \
+              --format="value(name)" 2>/dev/null); then
+              printf '%s\n' "$output"
+              return 0
+            fi
+
+            if output=$(gcloud beta functions operations list \
+              --region "$REGION" \
+              --filter="done=false" \
+              --format="value(name)" 2>/dev/null); then
+              printf '%s\n' "$output"
+              return 0
+            fi
+
+            echo "Failed to list Cloud Functions operations using stable or beta commands." >&2
+            return 1
+          }
+
           for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
             echo "Starting deployment attempt $attempt/$MAX_ATTEMPTS for get_stock_data"
             gcloud functions deploy get_stock_data \
@@ -80,10 +125,9 @@ jobs:
               sleep "$RETRY_WAIT"
 
               echo "Checking for remaining Cloud Functions operations before retrying:"
-              PENDING=$(gcloud functions operations list \
-                --region "$REGION" \
-                --filter="done=false" \
-                --format="value(name)")
+              if ! PENDING=$(list_pending_operations); then
+                exit 1
+              fi
               if [ -n "$PENDING" ]; then
                 echo "$PENDING"
               else
