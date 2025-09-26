@@ -27,7 +27,7 @@ jobs:
           PENDING="pending"
 
           for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
-            PENDING=$(gcloud functions operations list \
+            PENDING=$(gcloud beta functions operations list \
               --region "$REGION" \
               --filter="done=false" \
               --format="value(name)")
@@ -80,7 +80,7 @@ jobs:
               sleep "$RETRY_WAIT"
 
               echo "Checking for remaining Cloud Functions operations before retrying:"
-              PENDING=$(gcloud functions operations list \
+              PENDING=$(gcloud beta functions operations list \
                 --region "$REGION" \
                 --filter="done=false" \
                 --format="value(name)")
