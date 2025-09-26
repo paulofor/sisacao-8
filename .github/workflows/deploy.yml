@@ -145,8 +145,8 @@ jobs:
         run: |
           gcloud run deploy google-finance-price \
             --source functions/google_finance_price \
-            --entry-point google_finance_price \
             --allow-unauthenticated \
             --project ingestaokraken \
             --region us-central1 \
+            --set-env-vars FUNCTION_TARGET=google_finance_price,FUNCTION_SIGNATURE_TYPE=http \
             --quiet
