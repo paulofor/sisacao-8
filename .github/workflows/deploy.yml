@@ -27,31 +27,47 @@ jobs:
           PENDING="pending"
 
           list_pending_operations() {
-            local output
+            local output status stable_error beta_error
 
-            if output=$(gcloud functions operations list \
+            output=$(gcloud functions operations list \
               --region "$REGION" \
               --filter="done=false" \
-              --format="value(name)" 2>/dev/null); then
+              --format="value(name)" 2>&1)
+            status=$?
+            if [ "$status" -eq 0 ]; then
               printf '%s\n' "$output"
               return 0
             fi
+            stable_error="$output"
 
-            if output=$(gcloud beta functions operations list \
+            output=$(gcloud beta functions operations list \
               --region "$REGION" \
               --filter="done=false" \
-              --format="value(name)" 2>/dev/null); then
+              --format="value(name)" 2>&1)
+            status=$?
+            if [ "$status" -eq 0 ]; then
               printf '%s\n' "$output"
               return 0
             fi
+            beta_error="$output"
 
-            echo "Failed to list Cloud Functions operations using stable or beta commands." >&2
-            return 1
+            echo "Warning: failed to list Cloud Functions operations using stable or beta commands." >&2
+            echo "Stable command output:" >&2
+            echo "$stable_error" >&2
+            echo "Beta command output:" >&2
+            echo "$beta_error" >&2
+            return 2
           }
 
           for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
-            if ! PENDING=$(list_pending_operations); then
-              exit 1
+            list_status=0
+            PENDING=$(list_pending_operations) || list_status=$?
+            if [ "$list_status" -eq 2 ]; then
+              echo "Skipping pending operations check due to insufficient permissions or command failure."
+              PENDING=""
+              break
+            elif [ "$list_status" -ne 0 ]; then
+              exit "$list_status"
             fi
 
             if [ -z "$PENDING" ]; then
@@ -79,26 +95,36 @@ jobs:
           EXIT_CODE=1
 
           list_pending_operations() {
-            local output
+            local output status stable_error beta_error
 
-            if output=$(gcloud functions operations list \
+            output=$(gcloud functions operations list \
               --region "$REGION" \
               --filter="done=false" \
-              --format="value(name)" 2>/dev/null); then
+              --format="value(name)" 2>&1)
+            status=$?
+            if [ "$status" -eq 0 ]; then
               printf '%s\n' "$output"
               return 0
             fi
+            stable_error="$output"
 
-            if output=$(gcloud beta functions operations list \
+            output=$(gcloud beta functions operations list \
               --region "$REGION" \
               --filter="done=false" \
-              --format="value(name)" 2>/dev/null); then
+              --format="value(name)" 2>&1)
+            status=$?
+            if [ "$status" -eq 0 ]; then
               printf '%s\n' "$output"
               return 0
             fi
+            beta_error="$output"
 
-            echo "Failed to list Cloud Functions operations using stable or beta commands." >&2
-            return 1
+            echo "Warning: failed to list Cloud Functions operations using stable or beta commands." >&2
+            echo "Stable command output:" >&2
+            echo "$stable_error" >&2
+            echo "Beta command output:" >&2
+            echo "$beta_error" >&2
+            return 2
           }
 
           for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
@@ -125,8 +151,13 @@ jobs:
               sleep "$RETRY_WAIT"
 
               echo "Checking for remaining Cloud Functions operations before retrying:"
-              if ! PENDING=$(list_pending_operations); then
-                exit 1
+              list_status=0
+              PENDING=$(list_pending_operations) || list_status=$?
+              if [ "$list_status" -eq 2 ]; then
+                echo "Skipping pending operations check due to insufficient permissions or command failure."
+                PENDING=""
+              elif [ "$list_status" -ne 0 ]; then
+                exit "$list_status"
               fi
               if [ -n "$PENDING" ]; then
                 echo "$PENDING"
