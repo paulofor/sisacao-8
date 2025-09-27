@@ -85,4 +85,14 @@ Este arquivo fornece contexto a agentes de IA (OpenAI Codex, ChatGPT, etc.) sob
 
 ---
 
+## Princípios de arquitetura da plataforma
+
+1. **Backend Java + BigQuery**: Um serviço REST (Spring Boot ou Quarkus) fornecerá APIs para consultar sinais, parâmetros e execuções de treinamento diretamente das tabelas no BigQuery, aplicando camadas de serviço/repositório para encapsular o acesso aos dados.
+2. **Frontend web moderno**: Uma aplicação single-page (React ou Vue) consumirá as APIs expostas pelo backend para construir dashboards ricos com controles de sinais, acompanhamento de jobs de treinamento e ajustes de parâmetros.
+3. **Integração desacoplada**: Comunicação exclusiva via HTTP/JSON (ou WebSockets quando necessário), com autenticação unificada (OAuth2/OpenID) e versionamento de endpoints para facilitar evoluções independentes entre frontend e backend.
+4. **Observabilidade e governança**: Logs estruturados, métricas e rastreamento distribuído devem ser configurados desde o início para acompanhar pipelines de dados, execuções de ML e interações dos usuários.
+5. **Infraestrutura GCP**: O projeto reutiliza as variáveis `GCP_PROJECT`, `BQ_TABLE` e `GCP_REGION`, além de service accounts dedicadas para executar consultas e jobs de BigQuery com mínimo privilégio.
+
+---
+
 > As funções serão adicionadas somente após a etapa de planejamento. Por enquanto, concentre‑se em configurar ambiente, CI e documentação.
