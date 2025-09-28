@@ -9,6 +9,13 @@ Este guia descreve as etapas para provisionar uma instância Amazon Lightsail, i
 3. Defina um plano de recursos compatível com a carga esperada (mínimo recomendado: 2 vCPUs, 4 GB RAM).
 4. Gere ou selecione uma chave SSH para acesso administrativo.
 5. Nomeie a instância (ex.: `sisacao-backend-prod`) e conclua a criação.
+6. Após a criação, faça o download da chave privada em formato `.pem`. Defina a permissão correta antes de usar:
+
+   ```bash
+   chmod 600 ~/Downloads/LightsailDefaultKey-*.pem
+   ```
+
+   Opcionalmente, mova a chave para `~/.ssh/sisacao-lightsail.pem` para facilitar o uso futuro.
 
 ## 2. Configuração de rede e firewall
 
@@ -19,9 +26,15 @@ Este guia descreve as etapas para provisionar uma instância Amazon Lightsail, i
    - `8080/tcp` apenas se o balanceador/application load balancer externo acessar diretamente o Spring Boot.
 3. Opcional: anexe um endereço IP estático para evitar mudança de endpoint após reinicializações.
 
-## 3. Preparação do sistema operacional
+## 3. Conexão via SSH e preparação do sistema operacional
 
-Conecte-se à instância via SSH e execute os comandos abaixo.
+Conecte-se à instância via SSH (substitua `IP_DA_INSTANCIA` pelo endereço público informado no console):
+
+```bash
+ssh -i ~/.ssh/sisacao-lightsail.pem ubuntu@IP_DA_INSTANCIA
+```
+
+Dentro da sessão SSH, execute os comandos abaixo para preparar o ambiente:
 
 ```bash
 # Atualizar pacotes de sistema
@@ -61,13 +74,20 @@ mvn -v  # opcional
 
 ## 5. Obtenção do código fonte
 
-Clone este repositório para a instância (ou faça deploy do artefato gerado pelo pipeline CI/CD):
+Clone este repositório para a instância (ou faça deploy do artefato gerado pelo pipeline CI/CD). Substitua `<sua-organizacao>` pelo owner correto:
 
 ```bash
 sudo -u sisacao -H bash -c '
   cd /opt/sisacao
   git clone https://github.com/<sua-organizacao>/sisacao-8.git repo
 '
+```
+
+Quando precisar atualizar manualmente o código, execute:
+
+```bash
+ssh -i ~/.ssh/sisacao-lightsail.pem ubuntu@IP_DA_INSTANCIA \
+  "sudo -u sisacao -H bash -c 'cd /opt/sisacao/repo && git fetch --all && git reset --hard origin/main'"
 ```
 
 Atualize o repositório com as credenciais adequadas (HTTPS com token ou SSH) conforme a política da equipe.
@@ -92,7 +112,17 @@ Compile o projeto com o wrapper Maven distribuído no repositório:
 ```bash
 cd /opt/sisacao/repo/backend/sisacao-backend
 sudo -u sisacao ./mvnw clean package -DskipTests
-cp target/sisacao-backend-0.0.1-SNAPSHOT.jar /opt/sisacao/app/sisacao-backend.jar
+sudo -u sisacao cp target/sisacao-backend-0.0.1-SNAPSHOT.jar /opt/sisacao/app/sisacao-backend.jar
+```
+
+Para publicar uma nova versão manualmente em uma máquina local, faça o build e copie o artefato via `scp`:
+
+```bash
+./mvnw clean package -DskipTests
+scp -i ~/.ssh/sisacao-lightsail.pem \
+  target/sisacao-backend-0.0.1-SNAPSHOT.jar \
+  ubuntu@IP_DA_INSTANCIA:/opt/sisacao/app/sisacao-backend.jar
+ssh -i ~/.ssh/sisacao-lightsail.pem ubuntu@IP_DA_INSTANCIA "sudo systemctl restart sisacao-backend.service"
 ```
 
 O artefato pronto para produção ficará em `/opt/sisacao/app/sisacao-backend.jar`.
@@ -130,11 +160,65 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now sisacao-backend.service
 ```
 
-## 9. Configuração HTTPS (opcional, recomendada)
+## 9. Deploy automatizado via GitHub Actions
 
-1. Anexe um certificado TLS à instância utilizando o **Lightsail Load Balancer** ou `certbot` (Let's Encrypt) diretamente na VM.
-2. Caso utilize `certbot`, configure um `nginx` reverse proxy escutando na porta 443 e redirecionando tráfego para `http://127.0.0.1:8080`.
-3. Atualize as regras do firewall para aceitar apenas tráfego HTTPS externo.
+Para automatizar a publicação do backend, utilize o pipeline no GitHub (`.github/workflows/deploy.yml`). A seguir está um exemplo de configuração que compila o artefato e envia o JAR para a instância via SSH. Ajuste os nomes de variáveis e caminhos conforme necessário:
+
+```yaml
+name: Deploy Backend
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Build do backend
+        working-directory: backend/sisacao-backend
+        run: ./mvnw clean package -DskipTests
+
+      - name: Enviar artefato para Lightsail
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.LIGHTSAIL_HOST }}
+          username: ubuntu
+          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          source: backend/sisacao-backend/target/sisacao-backend-0.0.1-SNAPSHOT.jar
+          target: /opt/sisacao/app/sisacao-backend.jar
+          overwrite: true
+
+      - name: Reiniciar serviço
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ secrets.LIGHTSAIL_HOST }}
+          username: ubuntu
+          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          script: |
+            sudo systemctl restart sisacao-backend.service
+            sudo systemctl status sisacao-backend.service --no-pager
+```
+
+Crie os seguintes **GitHub Secrets** no repositório:
+
+| Nome                 | Descrição                                                                 |
+|----------------------|---------------------------------------------------------------------------|
+| `LIGHTSAIL_HOST`     | IP público ou hostname da instância Lightsail.                             |
+| `LIGHTSAIL_SSH_KEY`  | Conteúdo da chave privada `.pem` usada para acessar a instância (formato PEM). |
+| `LIGHTSAIL_USER` (op) | Usuário SSH (ex.: `ubuntu`). Caso queira parametrizar, ajuste o workflow. |
+
+> O `appleboy/scp-action` substitui o arquivo de destino diretamente. O serviço systemd se encarregará de carregar o novo JAR após o restart.
 
 ## 10. Observabilidade e logs
 
@@ -144,14 +228,21 @@ sudo systemctl enable --now sisacao-backend.service
 
 ## 11. Estratégia de atualização
 
-1. Para publicar novas versões, execute `git pull` no diretório `/opt/sisacao/repo` ou distribua o JAR via pipeline.
-2. Reinicie o serviço após cada atualização:
+1. Para publicar novas versões manualmente, utilize o procedimento descrito na seção [Build e empacotamento](#7-build-e-empacotamento) ou execute `git pull` seguido do build local.
+2. Reinicie o serviço após cada atualização manual:
 
    ```bash
    sudo systemctl restart sisacao-backend.service
    ```
 
-3. Utilize implantações azuis/verdes ou instâncias secundárias para evitar indisponibilidade prolongada.
+3. Monitore o status do serviço para verificar o sucesso da atualização:
+
+   ```bash
+   sudo systemctl status sisacao-backend.service --no-pager
+   journalctl -u sisacao-backend -n 200 --no-pager
+   ```
+
+4. Utilize implantações azuis/verdes ou instâncias secundárias para evitar indisponibilidade prolongada em cenários críticos.
 
 ---
 
