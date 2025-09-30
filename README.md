@@ -12,7 +12,9 @@ Coleta cotações de ações e carrega no **BigQuery** usando **Google Cloud Fun
    pip install -r requirements.txt
    ```
 
-2. Crie um arquivo `.env` baseado em `config/env.example`.
+2. Crie um arquivo `.env` baseado em `config/env.example`. O arquivo inclui o
+   IP estático `AWS_STATIC_IP`, útil para liberar o acesso em integrações que
+   exigem *allowlist* de origem.
 
 3. Garanta que os tickers desejados estejam marcados como ativos na tabela
    `cotacao_intraday.acao_bovespa`, utilizada pela função
@@ -38,6 +40,13 @@ branch `master`. Também é possível acioná-lo manualmente via *workflow_dispa
 Configure o segredo `GCP_SA_KEY` (além do `BQ_TABLE` usado pela função) no
 repositório do GitHub. A função será publicada no projeto `ingestaokraken`,
 região `us-central1`.
+
+### IP estático para integrações externas
+
+Quando for necessário liberar o tráfego de saída para integrações hospedadas
+na AWS, utilize o IP estático `34.194.252.70`. Esse endereço deve ser adicionado
+às listas de permissões (*allowlists*) de serviços externos que exigem
+configuração explícita de IP.
 
 O comando executado é:
 
