@@ -10,6 +10,7 @@ Este guia descreve as etapas para provisionar uma instância Amazon Lightsail, i
 4. Gere ou selecione uma chave SSH para acesso administrativo.
 5. Nomeie a instância (ex.: `sisacao-backend-prod`) e conclua a criação.
 6. Anote o **Static IP** (ou configure um IP estático em **Networking → Attach static IP**) para usarmos nas automações de deploy.
+   No ambiente atual o IP atribuído é `34.194.252.70`.
 
 ## 2. Configuração de rede e firewall
 
