@@ -6,8 +6,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 @SpringBootApplication
 public class SisacaoBackendApplication {
 
-	public static void main(String[] args) {
-		SpringApplication.run(SisacaoBackendApplication.class, args);
-	}
-
+    public static void main(String[] args) {
+        SpringApplication.run(SisacaoBackendApplication.class, args);
+    }
 }

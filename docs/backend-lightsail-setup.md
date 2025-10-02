@@ -188,60 +188,15 @@ No repositório do GitHub, adicione os seguintes segredos em **Settings → Secr
 
 ### 10.3 Workflow de deploy automático
 
-Crie (ou adapte) um workflow em `.github/workflows/deploy-lightsail.yml` com o conteúdo base abaixo. Ele será responsável por compilar o backend, transferir o JAR para o servidor e reiniciar o serviço via `systemctl`.
+O workflow `Deploy backend to Lightsail` já está versionado no repositório em `.github/workflows/deploy-lightsail.yml`. Ele executa os seguintes passos sempre que houver push na branch `master` ou quando disparado manualmente via **workflow_dispatch**:
 
-```yaml
-name: Deploy backend to Lightsail
+1. Faz o checkout do código.
+2. Provisiona o Java 21 com o `actions/setup-java`.
+3. Compila o backend Spring Boot com `./mvnw clean package -DskipTests`.
+4. Envia o artefato `sisacao-backend-0.0.1-SNAPSHOT.jar` para `/opt/sisacao/app/sisacao-backend.jar` na instância Lightsail via `appleboy/scp-action`.
+5. Reinicia o serviço `sisacao-backend.service` utilizando `appleboy/ssh-action`, incluindo `daemon-reload` para capturar mudanças no unit file.
 
-on:
-  push:
-    branches:
-      - master
-  workflow_dispatch:
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '21'
-
-      - name: Build backend
-        working-directory: backend/sisacao-backend
-        run: ./mvnw clean package -DskipTests
-
-      - name: Upload artifact to Lightsail
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.LIGHTSAIL_HOST }}
-          username: ${{ secrets.LIGHTSAIL_USER }}
-          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
-          port: 22
-          source: backend/sisacao-backend/target/sisacao-backend-0.0.1-SNAPSHOT.jar
-          target: /opt/sisacao/app/sisacao-backend.jar
-          overwrite: true
-          strip_components: 2
-          timeout: 120s
-
-      - name: Restart service remotely
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.LIGHTSAIL_HOST }}
-          username: ${{ secrets.LIGHTSAIL_USER }}
-          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
-          port: 22
-          script: |
-            sudo systemctl daemon-reload
-            sudo systemctl restart sisacao-backend.service
-            sudo systemctl status sisacao-backend.service --no-pager
-        env:
-          SSH_KNOWN_HOSTS: ${{ secrets.LIGHTSAIL_KNOWN_HOSTS }}
-```
+Caso seja necessário personalizar o fluxo (ex.: alterar branch, nome do artefato ou passos de build), edite o arquivo `.github/workflows/deploy-lightsail.yml` e faça commit das alterações.
 
 > **Observação:** O workflow não configura HTTPS porque a aplicação será exposta inicialmente apenas via HTTP na porta 80. Ajustes com `nginx` e certificados TLS podem ser adicionados posteriormente.
 
