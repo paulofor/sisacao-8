@@ -158,8 +158,15 @@ Para evitar deploys manuais, configure uma esteira no GitHub Actions que constr�
 
    ```bash
    sudo -u sisacao ssh-keygen -t ed25519 -f /opt/sisacao/.ssh/id_ed25519 -N ""
+   ```
+
+   O comando `ssh-keygen` mostra apenas o caminho do arquivo gerado; para visualizar o conteúdo da chave pública (necessário para adicionar no `authorized_keys` ou copiar para o GitHub), utilize:
+
+   ```bash
    sudo -u sisacao cat /opt/sisacao/.ssh/id_ed25519.pub
    ```
+
+   Se preferir copiar diretamente para a área de transferência a partir de um terminal local, rode o `cat` acima e copie o texto começando em `ssh-ed25519`.
 
 2. Adicione o conteúdo do `.pub` ao arquivo `~/.ssh/authorized_keys` do usuário que fará o login (ex.: `ubuntu` ou outro usuário com permissão de `sudo`). Exemplo para o usuário `ubuntu`:
 
