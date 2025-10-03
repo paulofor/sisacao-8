@@ -168,13 +168,13 @@ Para evitar deploys manuais, configure uma esteira no GitHub Actions que constr�
 
    Se preferir copiar diretamente para a área de transferência a partir de um terminal local, rode o `cat` acima e copie o texto começando em `ssh-ed25519`.
 
-2. Adicione o conteúdo do `.pub` ao arquivo `~/.ssh/authorized_keys` do usuário que fará o login (ex.: `ubuntu` ou outro usuário com permissão de `sudo`). Exemplo para o usuário `ubuntu`:
+2. Adicione o conteúdo do `.pub` ao arquivo `~/.ssh/authorized_keys` do usuário que fará o login. O workflow `.github/workflows/deploy-lightsail.yml` utiliza o usuário `sisacao` (variável `LIGHTSAIL_USER`), portanto mantenha a chave no diretório desse usuário:
 
    ```bash
-   sudo -u ubuntu mkdir -p /home/ubuntu/.ssh
-   sudo bash -c 'cat /opt/sisacao/.ssh/id_ed25519.pub >> /home/ubuntu/.ssh/authorized_keys'
-   sudo chmod 700 /home/ubuntu/.ssh
-   sudo chmod 600 /home/ubuntu/.ssh/authorized_keys
+   sudo -u sisacao mkdir -p /opt/sisacao/.ssh
+   sudo bash -c 'cat /opt/sisacao/.ssh/id_ed25519.pub >> /opt/sisacao/.ssh/authorized_keys'
+   sudo chmod 700 /opt/sisacao/.ssh
+   sudo chmod 600 /opt/sisacao/.ssh/authorized_keys
    ```
 
 3. Liste o fingerprint do host para registrar no GitHub e evitar prompts de confirmação:
