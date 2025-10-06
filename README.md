@@ -41,6 +41,14 @@ Configure o segredo `GCP_SA_KEY` (além do `BQ_TABLE` usado pela função) no
 repositório do GitHub. A função será publicada no projeto `ingestaokraken`,
 região `us-central1`.
 
+### Troubleshooting do deploy Lightsail
+
+O repositório também possui um workflow opcional chamado
+`Deploy backend to Lightsail`. Se o passo `appleboy/scp-action` falhar com as
+mensagens `ssh: no key found` ou `dial tcp ...:22: i/o timeout`, siga o guia em
+[docs/troubleshooting_scp_action.md](docs/troubleshooting_scp_action.md) para
+configurar a chave SSH e liberar o acesso ao servidor corretamente.
+
 ### IP estático para integrações externas
 
 Quando for necessário liberar o tráfego de saída para integrações hospedadas
