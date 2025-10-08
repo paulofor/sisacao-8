@@ -11,6 +11,12 @@ Este diretório contém o script `preparar_vps.sh`, responsável por preparar a 
    chmod +x preparar_vps.sh
    sudo ./preparar_vps.sh
    ```
+   > 💡 **Importante para usuários Windows:** ao baixar o repositório em uma máquina com Git configurado para converter
+   > final de linha para CRLF (`core.autocrlf=true`), o script pode chegar à VPS com quebras de linha erradas e exibir o erro
+   > `/usr/bin/env: 'bash\r': No such file or directory`. Certifique-se de clonar com `core.autocrlf=input` ou converta o
+   > arquivo com `dos2unix preparar_vps.sh` antes de executá-lo na VPS. Executar o `dos2unix` diretamente de dentro do
+   > script não resolve o problema (ele precisa estar com quebras corretas **antes** de ser invocado) e muitas imagens
+   > minimais nem possuem o utilitário instalado por padrão, então prefira rodá-lo manualmente após copiar o arquivo.
 4. Caso deseje personalizar o usuário de deploy, porta ou chave pública, exporte as variáveis antes de executar:
    ```bash
    export DEPLOY_USER=deploy
