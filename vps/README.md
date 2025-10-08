@@ -39,6 +39,7 @@ Este diretório contém o script `preparar_vps.sh`, responsável por preparar a 
 
 - Ajuste o pipeline no GitHub Actions para utilizar o mesmo `DEPLOY_USER`, `SSH_PORT` e caminho de destino (`/opt/<empresa>/app/<artefato>.jar`).
 - Caso exista firewall externo (cloud provider, Security Groups, etc.), libere a porta 22 para os IPs utilizados pelo GitHub Actions.
+- Priorize o endereço **IPv4** da VPS ao preencher o secret `HOST` do pipeline, pois os runners hospedados do GitHub ainda não possuem suporte completo a IPv6; o script agora exibe os dois endereços para facilitar a escolha.
 - Teste manualmente a conexão antes de rodar o pipeline:
   ```bash
   ssh -i /caminho/para/sua_chave ${DEPLOY_USER}@<host> -p ${SSH_PORT}

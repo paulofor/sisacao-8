@@ -21,7 +21,8 @@ JAVA_PACKAGE="${JAVA_PACKAGE:-openjdk-21-jre-headless}"
 
 # Variáveis que serão preenchidas durante a execução para uso no resumo final.
 IP_LOCAL=""
-IP_PUBLICO=""
+IP_PUBLICO_IPV4=""
+IP_PUBLICO_IPV6=""
 
 # ============================
 # Funções auxiliares
@@ -125,11 +126,19 @@ verificar_porta_ssh() {
         log "ERRO" "Porta ${SSH_PORT} não respondeu localmente. Verifique o serviço SSH e o firewall." && exit 1
     fi
 
-    IP_PUBLICO=$(curl -fsS https://ifconfig.me || echo "N/D")
-    if [[ "${IP_PUBLICO}" == "N/D" ]]; then
-        log "AVISO" "Não foi possível detectar automaticamente o IP público."
+    IP_PUBLICO_IPV4=$(curl -4 -fsS https://ifconfig.me || \
+        dig +short myip.opendns.com @resolver1.opendns.com 2>/dev/null || echo "N/D")
+    if [[ "${IP_PUBLICO_IPV4}" == "N/D" ]]; then
+        log "AVISO" "Não foi possível detectar automaticamente o IP público IPv4."
     else
-        log "INFO" "IP público detectado: ${IP_PUBLICO}"
+        log "INFO" "IP público IPv4 detectado: ${IP_PUBLICO_IPV4}"
+    fi
+
+    IP_PUBLICO_IPV6=$(curl -6 -fsS https://ifconfig.me || echo "N/D")
+    if [[ "${IP_PUBLICO_IPV6}" == "N/D" ]]; then
+        log "AVISO" "Não foi possível detectar automaticamente o IP público IPv6."
+    else
+        log "INFO" "IP público IPv6 detectado: ${IP_PUBLICO_IPV6}"
     fi
 }
 
@@ -142,12 +151,13 @@ Resumo da preparação:
 - Porta SSH liberada: ${SSH_PORT}
 - Pacote Java instalado: ${JAVA_PACKAGE}
 - IP local (interface primária): ${IP_LOCAL}
-- IP público: ${IP_PUBLICO}
+- IP público IPv4: ${IP_PUBLICO_IPV4}
+- IP público IPv6: ${IP_PUBLICO_IPV6}
 
 Próximos passos sugeridos:
-1. Configure no GitHub Actions os secrets: HOST, USERNAME, KEY (privada) e ajuste o caminho TARGET para ${APP_DIR}/<nome>.jar.
-2. Garanta que o IP ${IP_PUBLICO} esteja liberado na origem (GitHub) caso exista firewall externo.
-3. Teste a conexão manualmente usando: ssh -i /caminho/para/sua_chave ${DEPLOY_USER}@<host> -p ${SSH_PORT}
+1. Configure no GitHub Actions os secrets: HOST (recomenda-se usar o IPv4), USERNAME, KEY (privada) e ajuste o caminho TARGET para ${APP_DIR}/<nome>.jar.
+2. Garanta que os IPs ${IP_PUBLICO_IPV4} e ${IP_PUBLICO_IPV6} estejam liberados na origem (GitHub) caso exista firewall externo.
+3. Teste a conexão manualmente usando: ssh -i /caminho/para/sua_chave ${DEPLOY_USER}@<host> -p ${SSH_PORT} (se necessário especifique o IPv4 com `ssh ... @${IP_PUBLICO_IPV4}`).
 
 RESUMO
 }
