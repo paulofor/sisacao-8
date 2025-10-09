@@ -21,11 +21,14 @@ error copy file to dest: dial tcp <HOST>:22: i/o timeout
 
 > O erro `ssh.ParsePrivateKey: ssh: no key found` indica que o segredo atual está vazio, truncado ou contém uma chave no formato errado.
 
-## 2. Confirme os demais segredos
+## 2. Confirme os parâmetros do workflow
 
-- `LIGHTSAIL_HOST`: endereço IP público ou DNS do servidor.
-- `LIGHTSAIL_USER`: usuário válido no servidor (por exemplo, `ubuntu`).
-- `LIGHTSAIL_KNOWN_HOSTS`: saída do comando `ssh-keyscan -p 22 <HOST>` para evitar prompts de confirmação.
+O workflow `.github/workflows/deploy-lightsail.yml` utiliza os valores embutidos abaixo:
+
+- Host: `172.26.8.107`
+- Usuário SSH: `ubuntu`
+
+Garanta que esses dados continuam válidos para a instância que receberá o deploy.
 
 ## 3. Teste o acesso SSH manualmente
 
