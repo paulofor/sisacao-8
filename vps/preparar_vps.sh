@@ -157,7 +157,7 @@ Resumo da preparação:
 Próximos passos sugeridos:
 1. Configure no GitHub Actions os secrets: HOST (recomenda-se usar o IPv4), USERNAME, KEY (privada) e ajuste o caminho TARGET para ${APP_DIR}/<nome>.jar.
 2. Garanta que os IPs ${IP_PUBLICO_IPV4} e ${IP_PUBLICO_IPV6} estejam liberados na origem (GitHub) caso exista firewall externo.
-3. Teste a conexão manualmente usando: ssh -i /caminho/para/sua_chave ${DEPLOY_USER}@<host> -p ${SSH_PORT} (se necessário especifique o IPv4 com `ssh ... @${IP_PUBLICO_IPV4}`).
+3. Teste a conexão manualmente usando: ssh -i /caminho/para/sua_chave ${DEPLOY_USER}@<host> -p ${SSH_PORT} (se necessário especifique o IPv4 com ssh -i /caminho/para/sua_chave ${DEPLOY_USER}@${IP_PUBLICO_IPV4} -p ${SSH_PORT}).
 
 RESUMO
 }
