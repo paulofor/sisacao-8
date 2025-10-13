@@ -29,6 +29,9 @@ JAVA_PACKAGE="${JAVA_PACKAGE:-openjdk-21-jre-headless}"
 IP_LOCAL=""
 IP_PUBLICO_IPV4=""
 IP_PUBLICO_IPV6=""
+CHAVE_PUBLICA_STATUS="nao_configurada"
+CHAVE_PRIVADA_GERADA=""
+CHAVE_PUBLICA_GERADA=""
 
 # ============================
 # Funções auxiliares
@@ -59,8 +62,8 @@ instalar_pacotes() {
     log "INFO" "Atualizando lista de pacotes..."
     apt-get update -y
 
-    log "INFO" "Instalando pacotes essenciais: ${JAVA_PACKAGE}, openssh-server, ufw, tar, netcat, curl..."
-    apt-get install -y "${JAVA_PACKAGE}" openssh-server ufw tar netcat-openbsd curl
+    log "INFO" "Instalando pacotes essenciais: ${JAVA_PACKAGE}, openssh-server, openssh-client, ufw, tar, netcat, curl..."
+    apt-get install -y "${JAVA_PACKAGE}" openssh-server openssh-client ufw tar netcat-openbsd curl
 }
 
 configurar_ssh() {
@@ -142,8 +145,14 @@ criar_usuario_deploy() {
         printf '%s\n' "${chave_resolvida}" > "${ssh_dir}/authorized_keys"
         chmod 600 "${ssh_dir}/authorized_keys"
         chown -R "${DEPLOY_USER}:${DEPLOY_USER}" "${ssh_dir}"
+        CHAVE_PUBLICA_STATUS="fornecida"
     else
-        log "AVISO" "Nenhuma chave pública registrada. Adicione manualmente em ${ssh_dir}/authorized_keys."
+        log "AVISO" "Nenhuma chave pública registrada automaticamente."
+        if gerar_chave_deploy "${ssh_dir}"; then
+            CHAVE_PUBLICA_STATUS="gerada"
+        else
+            log "AVISO" "Adicione manualmente em ${ssh_dir}/authorized_keys."
+        fi
     fi
 }
 
@@ -155,6 +164,38 @@ preparar_diretorios() {
     log "INFO" "Criando diretório temporário para uploads de artefatos..."
     mkdir -p "/opt/${EMPRESA_SLUG}/tmp"
     chown -R "${DEPLOY_USER}:${DEPLOY_USER}" "/opt/${EMPRESA_SLUG}/tmp"
+}
+
+gerar_chave_deploy() {
+    local ssh_dir="$1"
+    local chave_privada="${ssh_dir}/id_ed25519"
+    local chave_publica="${chave_privada}.pub"
+
+    if [[ -f "${chave_privada}" || -f "${chave_publica}" ]]; then
+        log "INFO" "Par de chaves existente detectado em ${ssh_dir}; reutilizando."
+    else
+        log "INFO" "Gerando par de chaves SSH (ed25519) para o usuário ${DEPLOY_USER}..."
+        ssh-keygen -q -t ed25519 -N "" -f "${chave_privada}" >/dev/null 2>&1 || {
+            log "ERRO" "Falha ao gerar chave SSH automaticamente."
+            return 1
+        }
+    fi
+
+    if [[ ! -f "${chave_publica}" ]]; then
+        log "ERRO" "Arquivo de chave pública ${chave_publica} não encontrado após a geração."
+        return 1
+    fi
+
+    log "INFO" "Registrando chave pública gerada automaticamente em authorized_keys..."
+    cat "${chave_publica}" > "${ssh_dir}/authorized_keys"
+    chmod 600 "${ssh_dir}/authorized_keys"
+    [[ -f "${chave_privada}" ]] && chmod 600 "${chave_privada}"
+    [[ -f "${chave_publica}" ]] && chmod 600 "${chave_publica}"
+    chown -R "${DEPLOY_USER}:${DEPLOY_USER}" "${ssh_dir}"
+
+    CHAVE_PRIVADA_GERADA="${chave_privada}"
+    CHAVE_PUBLICA_GERADA="${chave_publica}"
+    return 0
 }
 
 verificar_porta_ssh() {
@@ -200,11 +241,32 @@ Resumo da preparação:
 - IP local (interface primária): ${IP_LOCAL}
 - IP público IPv4: ${IP_PUBLICO_IPV4}
 - IP público IPv6: ${IP_PUBLICO_IPV6}
+- Status da chave SSH autorizada: $(
+    case "${CHAVE_PUBLICA_STATUS}" in
+        fornecida)
+            printf 'informada via variável de ambiente.'
+            ;;
+        gerada)
+            printf 'gerada automaticamente em %s (privada em %s).' "${CHAVE_PUBLICA_GERADA}" "${CHAVE_PRIVADA_GERADA}"
+            ;;
+        *)
+            printf 'não configurada; adicione manualmente em /home/%s/.ssh/authorized_keys.' "${DEPLOY_USER}"
+            ;;
+    esac)
 
 Próximos passos sugeridos:
 1. Configure no GitHub Actions os secrets: HOST (recomenda-se usar o IPv4), USERNAME, KEY (privada) e ajuste o caminho TARGET para ${APP_DIR}/<nome>.jar.
 2. Garanta que os IPs ${IP_PUBLICO_IPV4} e ${IP_PUBLICO_IPV6} estejam liberados na origem (GitHub) caso exista firewall externo.
 3. Teste a conexão manualmente usando: ssh -i /caminho/para/sua_chave ${DEPLOY_USER}@<host> -p ${SSH_PORT} (se necessário especifique o IPv4 com ssh -i /caminho/para/sua_chave ${DEPLOY_USER}@${IP_PUBLICO_IPV4} -p ${SSH_PORT}).
+$(
+    if [[ "${CHAVE_PUBLICA_STATUS}" == "gerada" ]]; then
+        cat <<PROXIMO
+4. Baixe com segurança o conteúdo da chave privada gerada e cadastre-a como secret (ex.: KEY) no GitHub Actions:
+   sudo cat ${CHAVE_PRIVADA_GERADA}
+   # Copie o conteúdo exibido e remova-o do servidor se desejar utilizar outro mecanismo seguro de armazenamento.
+PROXIMO
+    fi
+)
 
 RESUMO
 }
