@@ -14,8 +14,14 @@ EMPRESA_SLUG="${EMPRESA_SLUG:-empresa}"
 APP_DIR="/opt/${EMPRESA_SLUG}/app"
 # Porta SSH utilizada pelo pipeline (padrão 22).
 SSH_PORT="${SSH_PORT:-22}"
+# IP público IPv4 conhecido. Se informado, é utilizado diretamente no resumo.
+PUBLIC_IPV4_OVERRIDE="${PUBLIC_IPV4_OVERRIDE:-}"
 # Chave pública SSH autorizada para o usuário de deploy. Informe via variável de ambiente.
+# Conteúdo ou caminho da chave pública SSH autorizada para o usuário de deploy.
+# - Defina `SSH_PUBLIC_KEY` com o conteúdo completo (ex.: "ssh-ed25519 AAAA... maquina").
+# - Ou informe `SSH_PUBLIC_KEY_FILE`/`SSH_PUBLIC_KEY_PATH` apontando para o arquivo `.pub`.
 SSH_PUBLIC_KEY="${SSH_PUBLIC_KEY:-}"
+SSH_PUBLIC_KEY_FILE="${SSH_PUBLIC_KEY_FILE:-${SSH_PUBLIC_KEY_PATH:-}}"
 # Versão do Java a instalar. Pode ser alterada conforme necessidade.
 JAVA_PACKAGE="${JAVA_PACKAGE:-openjdk-21-jre-headless}"
 
@@ -83,6 +89,41 @@ configurar_firewall() {
     fi
 }
 
+resolver_chave_publica() {
+    local chave="${SSH_PUBLIC_KEY}"
+    local arquivo="${SSH_PUBLIC_KEY_FILE}"
+
+    if [[ -n "${arquivo}" ]]; then
+        if [[ -f "${arquivo}" ]]; then
+            chave=$(tr -d '\r' <"${arquivo}" | head -n 1)
+        else
+            log "ERRO" "Arquivo da chave pública informado (${arquivo}) não encontrado."
+            return 1
+        fi
+    elif [[ -n "${chave}" && -f "${chave}" ]]; then
+        if [[ -r "${chave}" ]]; then
+            chave=$(tr -d '\r' <"${chave}" | head -n 1)
+        else
+            log "ERRO" "Arquivo ${chave} informado em SSH_PUBLIC_KEY não possui permissão de leitura."
+            return 1
+        fi
+    fi
+
+    if [[ -z "${chave}" ]]; then
+        log "AVISO" "Nenhuma chave pública foi fornecida via variáveis SSH_PUBLIC_KEY ou SSH_PUBLIC_KEY_FILE."
+        return 1
+    fi
+
+    chave=$(printf '%s' "${chave}" | tr -d '\r' | head -n 1)
+
+    if [[ "${chave}" != ssh-* && "${chave}" != ecdsa-* && "${chave}" != sk-ssh-* ]]; then
+        log "AVISO" "O conteúdo fornecido não parece ser uma chave pública SSH válida (ssh-, ecdsa- ou sk-ssh-)."
+    fi
+
+    printf '%s' "${chave}"
+    return 0
+}
+
 criar_usuario_deploy() {
     if id "${DEPLOY_USER}" >/dev/null 2>&1; then
         log "INFO" "Usuário ${DEPLOY_USER} já existe; prosseguindo."
@@ -95,13 +136,14 @@ criar_usuario_deploy() {
     mkdir -p "${ssh_dir}"
     chmod 700 "${ssh_dir}"
 
-    if [[ -n "${SSH_PUBLIC_KEY}" ]]; then
+    local chave_resolvida
+    if chave_resolvida=$(resolver_chave_publica); then
         log "INFO" "Registrando chave pública em authorized_keys..."
-        printf '%s\n' "${SSH_PUBLIC_KEY}" > "${ssh_dir}/authorized_keys"
+        printf '%s\n' "${chave_resolvida}" > "${ssh_dir}/authorized_keys"
         chmod 600 "${ssh_dir}/authorized_keys"
         chown -R "${DEPLOY_USER}:${DEPLOY_USER}" "${ssh_dir}"
     else
-        log "AVISO" "Variável SSH_PUBLIC_KEY não definida. Adicione a chave manualmente em ${ssh_dir}/authorized_keys."
+        log "AVISO" "Nenhuma chave pública registrada. Adicione manualmente em ${ssh_dir}/authorized_keys."
     fi
 }
 
@@ -126,12 +168,17 @@ verificar_porta_ssh() {
         log "ERRO" "Porta ${SSH_PORT} não respondeu localmente. Verifique o serviço SSH e o firewall." && exit 1
     fi
 
-    IP_PUBLICO_IPV4=$(curl -4 -fsS https://ifconfig.me || \
-        dig +short myip.opendns.com @resolver1.opendns.com 2>/dev/null || echo "N/D")
-    if [[ "${IP_PUBLICO_IPV4}" == "N/D" ]]; then
-        log "AVISO" "Não foi possível detectar automaticamente o IP público IPv4."
+    if [[ -n "${PUBLIC_IPV4_OVERRIDE}" ]]; then
+        IP_PUBLICO_IPV4="${PUBLIC_IPV4_OVERRIDE}"
+        log "INFO" "Utilizando IP público IPv4 informado manualmente: ${IP_PUBLICO_IPV4}"
     else
-        log "INFO" "IP público IPv4 detectado: ${IP_PUBLICO_IPV4}"
+        IP_PUBLICO_IPV4=$(curl -4 -fsS https://ifconfig.me || \
+            dig +short myip.opendns.com @resolver1.opendns.com 2>/dev/null || echo "N/D")
+        if [[ "${IP_PUBLICO_IPV4}" == "N/D" ]]; then
+            log "AVISO" "Não foi possível detectar automaticamente o IP público IPv4."
+        else
+            log "INFO" "IP público IPv4 detectado: ${IP_PUBLICO_IPV4}"
+        fi
     fi
 
     IP_PUBLICO_IPV6=$(curl -6 -fsS https://ifconfig.me || echo "N/D")
