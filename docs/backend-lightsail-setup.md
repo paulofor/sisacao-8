@@ -157,30 +157,30 @@ Para evitar deploys manuais, configure uma esteira no GitHub Actions que constr�
 1. Gere uma chave SSH exclusiva para o deploy (rodando na instância):
 
    ```bash
-   sudo -u ubuntu ssh-keygen -t ed25519 -f /home/ubuntu/.ssh/id_ed25519 -N ""
+   sudo -u deploy ssh-keygen -t ed25519 -f /home/deploy/.ssh/id_ed25519 -N ""
    ```
 
    O comando `ssh-keygen` mostra apenas o caminho do arquivo gerado; para visualizar o conteúdo da chave pública (necessário para adicionar no `authorized_keys` ou copiar para o GitHub), utilize:
 
    ```bash
-   sudo -u ubuntu cat /home/ubuntu/.ssh/id_ed25519.pub
+   sudo -u deploy cat /home/deploy/.ssh/id_ed25519.pub
    ```
 
    Se preferir copiar diretamente para a área de transferência a partir de um terminal local, rode o `cat` acima e copie o texto começando em `ssh-ed25519`.
 
-2. Adicione o conteúdo do `.pub` ao arquivo `~/.ssh/authorized_keys` do usuário que fará o login. O workflow `.github/workflows/deploy-lightsail.yml` agora usa o usuário padrão `ubuntu`, portanto mantenha a chave no diretório desse usuário:
+2. Adicione o conteúdo do `.pub` ao arquivo `~/.ssh/authorized_keys` do usuário que fará o login. O workflow `.github/workflows/deploy-lightsail.yml` usa o usuário `deploy`, portanto mantenha a chave no diretório desse usuário:
 
    ```bash
-   sudo -u ubuntu mkdir -p /home/ubuntu/.ssh
-   sudo bash -c 'cat /home/ubuntu/.ssh/id_ed25519.pub >> /home/ubuntu/.ssh/authorized_keys'
-   sudo chmod 700 /home/ubuntu/.ssh
-   sudo chmod 600 /home/ubuntu/.ssh/authorized_keys
+   sudo -u deploy mkdir -p /home/deploy/.ssh
+   sudo bash -c 'cat /home/deploy/.ssh/id_ed25519.pub >> /home/deploy/.ssh/authorized_keys'
+   sudo chmod 700 /home/deploy/.ssh
+   sudo chmod 600 /home/deploy/.ssh/authorized_keys
    ```
 
 3. Opcionalmente, faça o `ssh-keyscan` para validar o fingerprint antes de autorizar a conexão a partir da sua máquina local:
 
    ```bash
-   ssh-keyscan 172.26.8.107 | tee /tmp/lightsail_known_hosts
+   ssh-keyscan 34.194.252.70 | tee /tmp/lightsail_known_hosts
    cat /tmp/lightsail_known_hosts
    ```
 
@@ -188,9 +188,9 @@ Para evitar deploys manuais, configure uma esteira no GitHub Actions que constr�
 
 No repositório do GitHub, mantenha apenas o segredo abaixo em **Settings → Secrets and variables → Actions**:
 
-- `LIGHTSAIL_SSH_KEY`: Conteúdo do `/home/ubuntu/.ssh/id_ed25519` gerado acima.
+- `KEY`: Conteúdo do `/home/deploy/.ssh/id_ed25519` gerado acima.
 
-O endereço IP (`172.26.8.107`) e o usuário SSH (`ubuntu`) já estão versionados no workflow.
+O endereço IP (`34.194.252.70`) e o usuário SSH (`deploy`) já estão versionados no workflow.
 
 ### 10.3 Workflow de deploy automático
 
@@ -199,7 +199,7 @@ O workflow `Deploy backend to Lightsail` já está versionado no repositório em
 1. Faz o checkout do código.
 2. Provisiona o Java 21 com o `actions/setup-java`.
 3. Compila o backend Spring Boot com `./mvnw clean package -DskipTests`.
-4. Envia o artefato `sisacao-backend-0.0.1-SNAPSHOT.jar` para `/opt/sisacao/app/sisacao-backend.jar` na instância Lightsail via `appleboy/scp-action`, conectando-se ao host `172.26.8.107` com o usuário `ubuntu` e a chave privada configurada como segredo.
+4. Envia o artefato `sisacao-backend-0.0.1-SNAPSHOT.jar` para `/opt/sisacao/app/sisacao-backend.jar` na instância Lightsail via `appleboy/scp-action`, conectando-se ao host `34.194.252.70` com o usuário `deploy` e a chave privada configurada como segredo.
 5. Reinicia o serviço `sisacao-backend.service` utilizando `appleboy/ssh-action`, incluindo `daemon-reload` para capturar mudanças no unit file.
 
 Caso seja necessário personalizar o fluxo (ex.: alterar branch, nome do artefato ou passos de build), edite o arquivo `.github/workflows/deploy-lightsail.yml` e faça commit das alterações.
@@ -211,7 +211,7 @@ Caso seja necessário personalizar o fluxo (ex.: alterar branch, nome do artefat
 Caso o pipeline esteja indisponível, é possível atualizar manualmente realizando `git pull` no diretório `/opt/sisacao/repo` ou enviando o novo JAR via `scp`, seguido do reinício do serviço:
 
 ```bash
-ssh -i ~/.ssh/minha-chave-lightsail.pem ubuntu@172.26.8.107
+ssh -i ~/.ssh/minha-chave-lightsail.pem deploy@34.194.252.70
 sudo systemctl restart sisacao-backend.service
 sudo systemctl status sisacao-backend.service --no-pager
 ```
