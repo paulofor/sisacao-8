@@ -14,9 +14,9 @@ jobs:
       - name: Testar conexão SSH com Lightsail
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: 172.26.8.107
-          username: ubuntu
-          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          host: 34.194.252.70
+          username: deploy
+          key: ${{ secrets.KEY }}
           port: 22
           script: |
             uname -a
@@ -40,9 +40,9 @@ jobs:
       - name: Upload artifact to Lightsail
         uses: appleboy/scp-action@v0.1.7
         with:
-          host: 172.26.8.107
-          username: ubuntu
-          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          host: 34.194.252.70
+          username: deploy
+          key: ${{ secrets.KEY }}
           port: 22
           source: backend/sisacao-backend/target/sisacao-backend-0.0.1-SNAPSHOT.jar
           target: /opt/sisacao/app/sisacao-backend.jar
@@ -54,9 +54,9 @@ jobs:
       - name: Restart service remotely
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: 172.26.8.107
-          username: ubuntu
-          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          host: 34.194.252.70
+          username: deploy
+          key: ${{ secrets.KEY }}
           port: 22
           script: |
             sudo systemctl daemon-reload

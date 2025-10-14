@@ -8,14 +8,14 @@ ssh.ParsePrivateKey: ssh: no key found
 error copy file to dest: dial tcp <HOST>:22: i/o timeout
 ```
 
-## 1. Verifique o segredo `LIGHTSAIL_SSH_KEY`
+## 1. Verifique o segredo `KEY`
 
 1. Gere (ou recupere) uma chave SSH sem frase de acesso (`passphrase`):
    ```bash
    ssh-keygen -t ed25519 -C "github-actions" -f ~/.ssh/lightsail_deploy
    ```
 2. Adicione a **chave pública** (`lightsail_deploy.pub`) ao arquivo `~/.ssh/authorized_keys` do servidor Lightsail.
-3. Copie o conteúdo completo da **chave privada** (`lightsail_deploy`) e grave em um segredo do GitHub chamado `LIGHTSAIL_SSH_KEY` (Settings → Secrets → Actions).
+3. Copie o conteúdo completo da **chave privada** (`lightsail_deploy`) e grave em um segredo do GitHub chamado `KEY` (Settings → Secrets → Actions).
    - Cole exatamente como está, incluindo o bloco `-----BEGIN OPENSSH PRIVATE KEY-----` e as quebras de linha.
    - Não deixe o segredo em branco e nem substitua por uma chave pública.
 
@@ -25,8 +25,8 @@ error copy file to dest: dial tcp <HOST>:22: i/o timeout
 
 O workflow `.github/workflows/deploy-lightsail.yml` utiliza os valores embutidos abaixo:
 
-- Host: `172.26.8.107`
-- Usuário SSH: `ubuntu`
+- Host: `34.194.252.70`
+- Usuário SSH: `deploy`
 
 Garanta que esses dados continuam válidos para a instância que receberá o deploy.
 
