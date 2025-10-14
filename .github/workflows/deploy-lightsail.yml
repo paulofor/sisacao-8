@@ -45,7 +45,7 @@ jobs:
           key: ${{ secrets.KEY }}
           port: 22
           source: backend/sisacao-backend/target/sisacao-backend-0.0.1-SNAPSHOT.jar
-          target: /opt/sisacao/app/
+          target: /home/deploy/sisacao/app/
           overwrite: true
           strip_components: 3
           timeout: 120s
@@ -59,7 +59,8 @@ jobs:
           key: ${{ secrets.KEY }}
           port: 22
           script: |
-            sudo mv /opt/sisacao/app/sisacao-backend-0.0.1-SNAPSHOT.jar /opt/sisacao/app/sisacao-backend.jar
+            sudo install -d /opt/sisacao/app/
+            sudo mv /home/deploy/sisacao/app/sisacao-backend-0.0.1-SNAPSHOT.jar /opt/sisacao/app/sisacao-backend.jar
             sudo systemctl daemon-reload
             sudo systemctl restart sisacao-backend.service
             sudo systemctl status sisacao-backend.service --no-pager
