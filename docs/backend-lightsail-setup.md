@@ -154,7 +154,10 @@ Para evitar deploys manuais, configure uma esteira no GitHub Actions que constr�
 
 ### 10.1 Preparação na instância
 
-1. Gere uma chave SSH exclusiva para o deploy (rodando na instância):
+1. Gere uma chave SSH exclusiva para o deploy (rodando na instância). Caso já
+   tenha executado o script [`vps/preparar_vps.sh`](../vps/preparar_vps.sh) sem
+   customizações, o usuário `deploy` e o diretório `/opt/sisacao` já estarão
+   criados com as permissões corretas:
 
    ```bash
    sudo -u deploy ssh-keygen -t ed25519 -f /home/deploy/.ssh/id_ed25519 -N ""

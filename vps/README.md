@@ -17,7 +17,7 @@ Este diretório contém o script `preparar_vps.sh`, responsável por preparar a 
    > arquivo com `dos2unix preparar_vps.sh` antes de executá-lo na VPS. Executar o `dos2unix` diretamente de dentro do
    > script não resolve o problema (ele precisa estar com quebras corretas **antes** de ser invocado) e muitas imagens
    > minimais nem possuem o utilitário instalado por padrão, então prefira rodá-lo manualmente após copiar o arquivo.
-4. Caso deseje personalizar o usuário de deploy, porta, IP público ou chave pública, exporte as variáveis antes de executar:
+4. Caso deseje personalizar o usuário de deploy, porta, IP público ou chave pública, exporte as variáveis antes de executar (por padrão o script usa `DEPLOY_USER=deploy` e `EMPRESA_SLUG=sisacao`, o que gera as pastas `/opt/sisacao/...` compatíveis com o workflow de deploy):
    ```bash
    export DEPLOY_USER=deploy
    export EMPRESA_SLUG=nome-da-empresa
