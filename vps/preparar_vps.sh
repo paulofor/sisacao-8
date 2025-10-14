@@ -32,6 +32,7 @@ IP_PUBLICO_IPV6=""
 CHAVE_PUBLICA_STATUS="nao_configurada"
 CHAVE_PRIVADA_GERADA=""
 CHAVE_PUBLICA_GERADA=""
+SUDO_SEM_SENHA_ARQUIVO=""
 
 # ============================
 # Funções auxiliares
@@ -156,6 +157,29 @@ criar_usuario_deploy() {
     fi
 }
 
+configurar_sudo_sem_senha() {
+    local sudoers_file="/etc/sudoers.d/${DEPLOY_USER}"
+    local entry="${DEPLOY_USER} ALL=(ALL) NOPASSWD: /usr/bin/install, /usr/bin/mv, /bin/systemctl"
+
+    log "INFO" "Configurando sudo sem senha para o usuário ${DEPLOY_USER}..."
+
+    printf '%s\n' "${entry}" >"${sudoers_file}"
+    chmod 440 "${sudoers_file}"
+
+    if command -v visudo >/dev/null 2>&1; then
+        if visudo -cf "${sudoers_file}" >/dev/null 2>&1; then
+            log "INFO" "Arquivo ${sudoers_file} validado com sucesso pelo visudo."
+        else
+            rm -f "${sudoers_file}"
+            die "Falha ao validar ${sudoers_file} com visudo. Nenhuma alteração permanente foi aplicada."
+        fi
+    else
+        log "AVISO" "visudo não encontrado; valide manualmente o arquivo ${sudoers_file} se necessário."
+    fi
+
+    SUDO_SEM_SENHA_ARQUIVO="${sudoers_file}"
+}
+
 preparar_diretorios() {
     log "INFO" "Criando diretório de aplicação em ${APP_DIR}..."
     mkdir -p "${APP_DIR}"
@@ -238,6 +262,7 @@ Resumo da preparação:
 - Diretório da aplicação: ${APP_DIR}
 - Porta SSH liberada: ${SSH_PORT}
 - Pacote Java instalado: ${JAVA_PACKAGE}
+- sudo sem senha configurado: ${SUDO_SEM_SENHA_ARQUIVO:-nao_configurado}
 - IP local (interface primária): ${IP_LOCAL}
 - IP público IPv4: ${IP_PUBLICO_IPV4}
 - IP público IPv6: ${IP_PUBLICO_IPV6}
@@ -278,6 +303,7 @@ main() {
     configurar_ssh
     configurar_firewall
     criar_usuario_deploy
+    configurar_sudo_sem_senha
     preparar_diretorios
     verificar_porta_ssh
     exibir_resumo
