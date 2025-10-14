@@ -12,7 +12,8 @@ suportadas para que eles funcionem:
 1. **`sudo` sem senha para o usuário `deploy`**
    Execute o script [`vps/preparar_vps.sh`](../vps/preparar_vps.sh) com privilégio
    de `root`. Ele cria o arquivo `/etc/sudoers.d/deploy` permitindo que o usuário
-   `deploy` rode `install`, `mv` e `systemctl` sem senha, solução recomendada
+   `deploy` rode `install`, `mv` e `systemctl` sem senha (detectando
+   automaticamente o caminho real do binário), solução recomendada
    quando não for possível armazenar a senha no GitHub Secrets (por exemplo,
    quando o valor contém caracteres especiais ou a política da organização
    proíbe o compartilhamento da senha). O script valida o arquivo com `visudo`
@@ -23,9 +24,10 @@ suportadas para que eles funcionem:
 
    ```bash
    # Conecte via SSH com um usuário que tenha permissão de `sudo`
-   sudo tee /etc/sudoers.d/deploy <<'EOF'
-   deploy ALL=(ALL) NOPASSWD: /usr/bin/install, /usr/bin/mv, /bin/systemctl
-   EOF
+   SYSTEMCTL_BIN="$(command -v systemctl)"
+   sudo tee /etc/sudoers.d/deploy <<EOF
+deploy ALL=(ALL) NOPASSWD: /usr/bin/install, /usr/bin/mv, ${SYSTEMCTL_BIN}
+EOF
    sudo chmod 440 /etc/sudoers.d/deploy
    sudo visudo -cf /etc/sudoers.d/deploy
    ```
@@ -51,3 +53,8 @@ suportadas para que eles funcionem:
 - [ ] Uma das opções acima configurada para permitir o uso de `sudo`.
 - [ ] (Opcional) `journalctl -u sisacao-backend.service -f` disponível para
       depuração em deploys futuros.
+
+> 💡 O script [`vps/preparar_vps.sh`](../vps/preparar_vps.sh) já utiliza o
+> `EMPRESA_SLUG=sisacao` por padrão, criando as pastas `/opt/sisacao/...`
+> esperadas pelo workflow. Ajuste a variável apenas se realmente precisar de
+> outro diretório e não se esqueça de atualizar o pipeline em conjunto.

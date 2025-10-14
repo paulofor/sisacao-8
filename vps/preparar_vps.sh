@@ -10,7 +10,7 @@ set -euo pipefail
 # Nome do usuário que receberá os deploys. Caso já exista, será reaproveitado.
 DEPLOY_USER="${DEPLOY_USER:-deploy}"
 # Caminho base onde o artefato .jar será publicado.
-EMPRESA_SLUG="${EMPRESA_SLUG:-empresa}"
+EMPRESA_SLUG="${EMPRESA_SLUG:-sisacao}"
 APP_DIR="/opt/${EMPRESA_SLUG}/app"
 # Porta SSH utilizada pelo pipeline (padrão 22).
 SSH_PORT="${SSH_PORT:-22}"
@@ -159,7 +159,9 @@ criar_usuario_deploy() {
 
 configurar_sudo_sem_senha() {
     local sudoers_file="/etc/sudoers.d/${DEPLOY_USER}"
-    local entry="${DEPLOY_USER} ALL=(ALL) NOPASSWD: /usr/bin/install, /usr/bin/mv, /bin/systemctl"
+    local systemctl_bin
+    systemctl_bin="$(command -v systemctl 2>/dev/null || echo /usr/bin/systemctl)"
+    local entry="${DEPLOY_USER} ALL=(ALL) NOPASSWD: /usr/bin/install, /usr/bin/mv, ${systemctl_bin}"
 
     log "INFO" "Configurando sudo sem senha para o usuário ${DEPLOY_USER}..."
 

@@ -69,12 +69,21 @@ jobs:
             run_sudo() {
               if [ -n "${LIGHTSAIL_SUDO_PASSWORD:-}" ]; then
                 echo "$LIGHTSAIL_SUDO_PASSWORD" | sudo -S -p '' "$@"
-              else
-                if ! sudo -n "$@"; then
-                  echo "sudo password required: configure passwordless sudo for deploy or set LIGHTSAIL_SUDO_PASSWORD secret" >&2
-                  return 1
-                fi
+                return
               fi
+
+              if sudo -n "$@"; then
+                return
+              fi
+
+              status=$?
+              if sudo -n true >/dev/null 2>&1; then
+                echo "sudo command failed with status ${status}: $*" >&2
+                return ${status}
+              fi
+
+              echo "sudo password required: configure passwordless sudo for deploy or set LIGHTSAIL_SUDO_PASSWORD secret" >&2
+              return 1
             }
 
             run_sudo install -d /opt/sisacao/app/
