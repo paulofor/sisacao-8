@@ -52,18 +52,36 @@ jobs:
           disable_strict_host_key_checking: true
 
       - name: Restart service remotely
+        # Consulte docs/lightsail-deploy.md para saber quando configurar o segredo
+        # LIGHTSAIL_SUDO_PASSWORD ou como habilitar sudo sem senha.
         uses: appleboy/ssh-action@v1.0.3
+        env:
+          LIGHTSAIL_SUDO_PASSWORD: ${{ secrets.LIGHTSAIL_SUDO_PASSWORD }}
         with:
           host: 34.194.252.70
           username: deploy
           key: ${{ secrets.KEY }}
           port: 22
+          envs: LIGHTSAIL_SUDO_PASSWORD
           script: |
-            sudo install -d /opt/sisacao/app/
-            sudo mv /home/deploy/sisacao/app/sisacao-backend-0.0.1-SNAPSHOT.jar /opt/sisacao/app/sisacao-backend.jar
-            sudo systemctl daemon-reload
-            sudo systemctl restart sisacao-backend.service
-            sudo systemctl status sisacao-backend.service --no-pager
+            set -euo pipefail
+
+            run_sudo() {
+              if [ -n "${LIGHTSAIL_SUDO_PASSWORD:-}" ]; then
+                echo "$LIGHTSAIL_SUDO_PASSWORD" | sudo -S -p '' "$@"
+              else
+                if ! sudo -n "$@"; then
+                  echo "sudo password required: configure passwordless sudo for deploy or set LIGHTSAIL_SUDO_PASSWORD secret" >&2
+                  return 1
+                fi
+              fi
+            }
+
+            run_sudo install -d /opt/sisacao/app/
+            run_sudo mv /home/deploy/sisacao/app/sisacao-backend-0.0.1-SNAPSHOT.jar /opt/sisacao/app/sisacao-backend.jar
+            run_sudo systemctl daemon-reload
+            run_sudo systemctl restart sisacao-backend.service
+            run_sudo systemctl status sisacao-backend.service --no-pager
           timeout: 60s
           command_timeout: 30m
           disable_strict_host_key_checking: true
