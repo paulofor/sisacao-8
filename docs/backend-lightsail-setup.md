@@ -199,7 +199,7 @@ O workflow `Deploy backend to Lightsail` já está versionado no repositório em
 1. Faz o checkout do código.
 2. Provisiona o Java 21 com o `actions/setup-java`.
 3. Compila o backend Spring Boot com `./mvnw clean package -DskipTests`.
-4. Envia o artefato `sisacao-backend-0.0.1-SNAPSHOT.jar` para `/opt/sisacao/app/sisacao-backend.jar` na instância Lightsail via `appleboy/scp-action`, conectando-se ao host `34.194.252.70` com o usuário `deploy` e a chave privada configurada como segredo.
+4. Envia o artefato `sisacao-backend-0.0.1-SNAPSHOT.jar` para o diretório `/opt/sisacao/app/` na instância Lightsail via `appleboy/scp-action`, conectando-se ao host `34.194.252.70` com o usuário `deploy` e a chave privada configurada como segredo. O passo seguinte renomeia o arquivo para `sisacao-backend.jar` antes de reiniciar o serviço.
 5. Reinicia o serviço `sisacao-backend.service` utilizando `appleboy/ssh-action`, incluindo `daemon-reload` para capturar mudanças no unit file.
 
 Caso seja necessário personalizar o fluxo (ex.: alterar branch, nome do artefato ou passos de build), edite o arquivo `.github/workflows/deploy-lightsail.yml` e faça commit das alterações.
