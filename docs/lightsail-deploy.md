@@ -9,11 +9,30 @@ systemd remoto.
 O passo final de deploy executa alguns comandos com `sudo`. Existem duas maneiras
 suportadas para que eles funcionem:
 
-1. **`sudo` sem senha para o usuário `deploy`**  
-   Configure a instância para permitir que o usuário `deploy` execute os comandos
-   necessários (`install`, `mv`, `systemctl`) sem senha, por exemplo adicionando
-   uma entrada específica em `/etc/sudoers.d/`. Quando essa opção está ativa,
-o workflow usa `sudo -n` e não precisa de nenhum segredo adicional.
+1. **`sudo` sem senha para o usuário `deploy`**
+   Execute o script [`vps/preparar_vps.sh`](../vps/preparar_vps.sh) com privilégio
+   de `root`. Ele cria o arquivo `/etc/sudoers.d/deploy` permitindo que o usuário
+   `deploy` rode `install`, `mv` e `systemctl` sem senha, solução recomendada
+   quando não for possível armazenar a senha no GitHub Secrets (por exemplo,
+   quando o valor contém caracteres especiais ou a política da organização
+   proíbe o compartilhamento da senha). O script valida o arquivo com `visudo`
+   automaticamente.
+
+   Caso prefira executar manualmente, replique o conteúdo abaixo e ajuste o
+   usuário conforme necessário:
+
+   ```bash
+   # Conecte via SSH com um usuário que tenha permissão de `sudo`
+   sudo tee /etc/sudoers.d/deploy <<'EOF'
+   deploy ALL=(ALL) NOPASSWD: /usr/bin/install, /usr/bin/mv, /bin/systemctl
+   EOF
+   sudo chmod 440 /etc/sudoers.d/deploy
+   sudo visudo -cf /etc/sudoers.d/deploy
+   ```
+
+   Depois disso, teste manualmente com `sudo -n systemctl status
+   sisacao-backend.service`. Se o comando funcionar sem solicitar senha, o
+   workflow poderá executar os passos de deploy sem depender de nenhum segredo.
 
 2. **Senha armazenada no GitHub Secrets**  
    Caso a instância exija senha para `sudo`, crie o segredo
