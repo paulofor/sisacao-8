@@ -2,7 +2,10 @@
 
 Este repositório usa o workflow [`deploy-lightsail.yml`](../.github/workflows/deploy-lightsail.yml) para
 compilar o backend Java, enviar o artefato para a instância e reiniciar o serviço
-systemd remoto.
+systemd remoto. Quando o log do GitHub Actions exibir a mensagem
+`sudo password required: configure passwordless sudo for deploy or set LIGHTSAIL_SUDO_PASSWORD secret`,
+significa que nenhuma das opções abaixo foi concluída: configure o acesso `sudo`
+para o usuário `deploy` antes de relançar o workflow.
 
 ## Segredo `LIGHTSAIL_SUDO_PASSWORD`
 
