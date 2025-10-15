@@ -6,6 +6,7 @@ from .data import (
     prepare_training_data,
     split_time_series,
 )
+from .intraday import format_intraday_prices
 from .model import (
     ModelConfig,
     build_mlp_model,
@@ -18,6 +19,7 @@ __all__ = [
     "WindowConfig",
     "prepare_training_data",
     "split_time_series",
+    "format_intraday_prices",
     "ModelConfig",
     "build_mlp_model",
     "train_model",
