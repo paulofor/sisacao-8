@@ -47,7 +47,13 @@ O repositório também possui um workflow opcional chamado
 `Deploy backend to Lightsail`. Se o passo `appleboy/scp-action` falhar com as
 mensagens `ssh: no key found` ou `dial tcp ...:22: i/o timeout`, siga o guia em
 [docs/troubleshooting_scp_action.md](docs/troubleshooting_scp_action.md) para
-configurar a chave SSH e liberar o acesso ao servidor corretamente.
+configurar a chave SSH e liberar o acesso ao servidor corretamente. Já se o
+log mostrar `sudo password required: configure passwordless sudo for deploy or
+set LIGHTSAIL_SUDO_PASSWORD secret` — acompanhado de erros ao executar
+`systemctl` — é necessário concluir a configuração descrita em
+[docs/lightsail-deploy.md](docs/lightsail-deploy.md) para que o usuário
+`deploy` tenha permissão de `sudo` (sem senha ou fornecendo a senha via
+`LIGHTSAIL_SUDO_PASSWORD`).
 
 ### IP estático para integrações externas
 
