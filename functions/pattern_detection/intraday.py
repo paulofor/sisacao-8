@@ -54,7 +54,11 @@ def format_intraday_prices(
     """
 
     required_columns: Iterable[str] = (date_column, time_column, price_column)
-    missing = [column for column in required_columns if column not in data.columns]
+    missing = [
+        column
+        for column in required_columns
+        if column not in data.columns
+    ]
     if missing:
         missing_str = ", ".join(missing)
         msg = f"Missing required columns: {missing_str}"
