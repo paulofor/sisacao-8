@@ -31,11 +31,12 @@ Este diretório contém o script `preparar_vps.sh`, responsável por preparar a 
 
 ## O que o script faz
 
-- Atualiza os pacotes do sistema e instala dependências básicas (`openjdk`, `openssh-server`, `ufw`, `tar`, `netcat-openbsd`).
+- Atualiza os pacotes do sistema e instala dependências básicas (`openjdk`, `nginx`, `openssh-server`, `ufw`, `tar`, `netcat-openbsd`).
 - Garante que o serviço SSH está ativo na porta informada e libera o tráfego no firewall (UFW).
 - Cria o usuário de deploy (caso ainda não exista) e registra a chave pública fornecida em `authorized_keys`.
 - Aceita o conteúdo da chave pública via `SSH_PUBLIC_KEY` **ou** lê diretamente de um arquivo informado por `SSH_PUBLIC_KEY_FILE`/`SSH_PUBLIC_KEY_PATH`.
 - Cria os diretórios `/opt/<empresa>/app` e `/opt/<empresa>/tmp` com a devida permissão para o usuário de deploy.
+- Publica um virtual host do **nginx** que serve `/opt/<empresa>/app/frontend` na porta 80 e faz proxy opcional de `/api/` para `http://127.0.0.1:8080`.
 - Valida localmente se a porta SSH está respondendo, ajudando a evitar timeouts durante o `scp`.
 - Exibe um resumo com próximos passos para finalizar a configuração do pipeline.
 
@@ -48,5 +49,6 @@ Este diretório contém o script `preparar_vps.sh`, responsável por preparar a 
   ```bash
   ssh -i /caminho/para/sua_chave ${DEPLOY_USER}@<host> -p ${SSH_PORT}
   ```
+- Valide se o nginx está servindo o frontend acessando `http://<host>/` (o diretório `/opt/<empresa>/app/frontend` receberá os arquivos estáticos após o deploy).
 
 Com essas etapas, o erro de timeout (`dial tcp <host>:22: i/o timeout`) tende a desaparecer, pois o serviço SSH estará operacional, a porta liberada e o usuário de deploy devidamente autorizado.

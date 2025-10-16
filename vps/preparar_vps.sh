@@ -24,6 +24,8 @@ SSH_PUBLIC_KEY="${SSH_PUBLIC_KEY:-}"
 SSH_PUBLIC_KEY_FILE="${SSH_PUBLIC_KEY_FILE:-${SSH_PUBLIC_KEY_PATH:-}}"
 # Versão do Java a instalar. Pode ser alterada conforme necessidade.
 JAVA_PACKAGE="${JAVA_PACKAGE:-openjdk-21-jre-headless}"
+# Define se o nginx foi configurado e qual arquivo de site foi gerado.
+NGINX_SITE_ARQUIVO=""
 
 # Variáveis que serão preenchidas durante a execução para uso no resumo final.
 IP_LOCAL=""
@@ -63,8 +65,8 @@ instalar_pacotes() {
     log "INFO" "Atualizando lista de pacotes..."
     apt-get update -y
 
-    log "INFO" "Instalando pacotes essenciais: ${JAVA_PACKAGE}, openssh-server, openssh-client, ufw, tar, netcat, curl..."
-    apt-get install -y "${JAVA_PACKAGE}" openssh-server openssh-client ufw tar netcat-openbsd curl
+    log "INFO" "Instalando pacotes essenciais: ${JAVA_PACKAGE}, nginx, openssh-server, openssh-client, ufw, tar, netcat, curl..."
+    apt-get install -y "${JAVA_PACKAGE}" nginx openssh-server openssh-client ufw tar netcat-openbsd curl
 }
 
 configurar_ssh() {
@@ -90,6 +92,71 @@ configurar_firewall() {
         yes | ufw enable || true
     else
         log "AVISO" "UFW não disponível; configure o firewall manualmente se necessário."
+    fi
+}
+
+configurar_nginx() {
+    if ! command -v nginx >/dev/null 2>&1; then
+        log "AVISO" "nginx não encontrado; pule a configuração do frontend."
+        return
+    fi
+
+    local nginx_available="/etc/nginx/sites-available"
+    local nginx_enabled="/etc/nginx/sites-enabled"
+    local site_config="${nginx_available}/sisacao-frontend"
+    local log_dir="/var/log/nginx"
+
+    log "INFO" "Configurando nginx para servir ${APP_DIR}/frontend..."
+
+    install -d -m 755 "${APP_DIR}/frontend"
+    chown -R "${DEPLOY_USER}:${DEPLOY_USER}" "${APP_DIR}/frontend"
+
+    install -d -m 755 "${log_dir}"
+
+    cat <<EOF >"${site_config}"
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    server_name _;
+
+    root ${APP_DIR}/frontend;
+    index index.html;
+
+    access_log /var/log/nginx/sisacao-frontend.access.log;
+    error_log /var/log/nginx/sisacao-frontend.error.log;
+
+    location / {
+        try_files \$uri \$uri/ /index.html;
+    }
+
+    location /api/ {
+        proxy_pass http://127.0.0.1:8080/;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+}
+EOF
+
+    rm -f "${nginx_enabled}/default"
+    ln -sf "${site_config}" "${nginx_enabled}/sisacao-frontend"
+
+    if ! nginx -t >/dev/null 2>&1; then
+        log "ERRO" "nginx reportou erro ao validar ${site_config}; ajuste o arquivo manualmente antes de recarregar o serviço."
+        return
+    fi
+
+    if systemctl enable nginx >/dev/null 2>&1; then
+        log "INFO" "nginx habilitado para iniciar junto com o sistema."
+    fi
+
+    if systemctl reload nginx >/dev/null 2>&1 || systemctl restart nginx >/dev/null 2>&1; then
+        log "INFO" "nginx recarregado com sucesso."
+        NGINX_SITE_ARQUIVO="${site_config}"
+    else
+        log "AVISO" "Falha ao recarregar o nginx automaticamente. Verifique manualmente com 'systemctl status nginx'."
     fi
 }
 
@@ -265,6 +332,7 @@ Resumo da preparação:
 - Porta SSH liberada: ${SSH_PORT}
 - Pacote Java instalado: ${JAVA_PACKAGE}
 - sudo sem senha configurado: ${SUDO_SEM_SENHA_ARQUIVO:-nao_configurado}
+- nginx configurado: ${NGINX_SITE_ARQUIVO:-nao_configurado}
 - IP local (interface primária): ${IP_LOCAL}
 - IP público IPv4: ${IP_PUBLICO_IPV4}
 - IP público IPv6: ${IP_PUBLICO_IPV6}
@@ -307,6 +375,7 @@ main() {
     criar_usuario_deploy
     configurar_sudo_sem_senha
     preparar_diretorios
+    configurar_nginx
     verificar_porta_ssh
     exibir_resumo
     log "SUCESSO" "Ambiente pronto para receber deploys via SCP."
