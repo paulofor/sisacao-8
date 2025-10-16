@@ -43,17 +43,32 @@ região `us-central1`.
 
 ### Troubleshooting do deploy Lightsail
 
-O repositório também possui um workflow opcional chamado
-`Deploy backend to Lightsail`. Se o passo `appleboy/scp-action` falhar com as
-mensagens `ssh: no key found` ou `dial tcp ...:22: i/o timeout`, siga o guia em
+O repositório também possui workflows opcionais para publicar backend e
+frontend na mesma VPS. Se o passo `appleboy/scp-action` falhar com as mensagens
+`ssh: no key found` ou `dial tcp ...:22: i/o timeout`, siga o guia em
 [docs/troubleshooting_scp_action.md](docs/troubleshooting_scp_action.md) para
-configurar a chave SSH e liberar o acesso ao servidor corretamente. Já se o
-log mostrar `sudo password required: configure passwordless sudo for deploy or
-set LIGHTSAIL_SUDO_PASSWORD secret` — acompanhado de erros ao executar
-`systemctl` — é necessário concluir a configuração descrita em
+configurar a chave SSH e liberar o acesso ao servidor corretamente. Já se o log
+mostrar `sudo password required: configure passwordless sudo for deploy or set
+LIGHTSAIL_SUDO_PASSWORD secret` — acompanhado de erros ao executar `systemctl`
+— é necessário concluir a configuração descrita em
 [docs/lightsail-deploy.md](docs/lightsail-deploy.md) para que o usuário
 `deploy` tenha permissão de `sudo` (sem senha ou fornecendo a senha via
 `LIGHTSAIL_SUDO_PASSWORD`).
+
+#### Publicação automática do backend
+
+O workflow `Deploy backend to Lightsail` compila o artefato Java com Maven e o
+envia para `/opt/sisacao/app/sisacao-backend.jar`, reiniciando o serviço
+`sisacao-backend.service` em seguida.
+
+#### Publicação automática do frontend
+
+O workflow `Deploy frontend to Lightsail` reutiliza a mesma estrutura: instala
+as dependências do Vite/React, gera a build de produção (`npm run build`) e
+publica o conteúdo estático em `/opt/sisacao/app/frontend`. Antes de mover a
+nova versão para o diretório definitivo, o job cria um backup temporário em
+`/opt/sisacao/tmp`, garantindo que o conteúdo antigo possa ser descartado com
+segurança.
 
 ### IP estático para integrações externas
 
