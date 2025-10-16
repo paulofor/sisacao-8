@@ -6,7 +6,10 @@ import pandas as pd  # type: ignore[import-untyped]
 import pytest
 
 from functions.pattern_detection import format_intraday_prices
-from functions.pattern_detection.data import WindowConfig, prepare_training_data
+from functions.pattern_detection.data import (
+    WindowConfig,
+    prepare_training_data,
+)
 
 
 @pytest.fixture()
@@ -33,14 +36,20 @@ def intraday_frame() -> pd.DataFrame:
     )
 
 
-def test_format_intraday_prices_sorts_and_localizes(intraday_frame: pd.DataFrame) -> None:
+def test_format_intraday_prices_sorts_and_localizes(
+    intraday_frame: pd.DataFrame,
+) -> None:
     formatted = format_intraday_prices(intraday_frame)
 
     assert list(formatted.index) == sorted(list(formatted.index))
     assert formatted.index.tz is not None
     # duplicated timestamp resolved by keeping last entry
-    duplicated_timestamp = pd.Timestamp("2024-05-02 10:00:00", tz="America/Sao_Paulo")
-    assert formatted.loc[duplicated_timestamp, "valor"] == pytest.approx(10.2)
+    duplicated_timestamp = pd.Timestamp(
+        "2024-05-02 10:00:00",
+        tz="America/Sao_Paulo",
+    )
+    result_price = formatted.loc[duplicated_timestamp, "valor"]
+    assert result_price == pytest.approx(10.2)
     assert formatted["valor"].dtype.kind == "f"
 
 
