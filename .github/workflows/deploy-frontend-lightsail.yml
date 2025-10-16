@@ -1,0 +1,88 @@
+name: Deploy frontend to Lightsail
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Testar conexão SSH com Lightsail
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: 34.194.252.70
+          username: deploy
+          key: ${{ secrets.KEY }}
+          port: 22
+          script: |
+            uname -a
+            whoami
+          timeout: 60s
+          command_timeout: 30m
+
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/app/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend/app
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: frontend/app
+        run: npm run build
+
+      - name: Upload dist to Lightsail
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: 34.194.252.70
+          username: deploy
+          key: ${{ secrets.KEY }}
+          port: 22
+          source: frontend/app/dist/**
+          target: /home/deploy/sisacao/frontend
+          strip_components: 2
+          overwrite: true
+          timeout: 120s
+
+      - name: Publish static bundle
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: 34.194.252.70
+          username: deploy
+          key: ${{ secrets.KEY }}
+          port: 22
+          script: |
+            set -euo pipefail
+
+            sudo install -d -o deploy -g deploy /opt/sisacao/app
+            sudo install -d -o deploy -g deploy /opt/sisacao/tmp
+
+            if [ ! -d /home/deploy/sisacao/frontend/dist ]; then
+              echo "Artefato do frontend não encontrado em /home/deploy/sisacao/frontend/dist" >&2
+              exit 1
+            fi
+
+            rm -rf /home/deploy/sisacao/frontend_new || true
+            mv /home/deploy/sisacao/frontend/dist /home/deploy/sisacao/frontend_new
+
+            timestamp=$(date +%Y%m%d%H%M%S)
+            if [ -d /opt/sisacao/app/frontend ]; then
+              sudo mv /opt/sisacao/app/frontend "/opt/sisacao/tmp/frontend_${timestamp}"
+            fi
+
+            sudo mv /home/deploy/sisacao/frontend_new /opt/sisacao/app/frontend
+
+            rm -rf /home/deploy/sisacao/frontend || true
+            rm -rf /opt/sisacao/tmp/frontend_${timestamp} || true
+          timeout: 60s
+          command_timeout: 30m
