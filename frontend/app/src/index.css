@@ -1,0 +1,14 @@
+:root {
+  color-scheme: light;
+}
+
+body {
+  margin: 0;
+  font-family: 'Inter', 'Roboto', 'Helvetica', 'Arial', sans-serif;
+  background-color: #f5f7fb;
+}
+
+#root {
+  min-height: 100vh;
+}
+
