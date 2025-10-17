@@ -85,6 +85,12 @@ Este arquivo fornece contexto a agentes de IA (OpenAI Codex, ChatGPT, etc.) sob
 
 ---
 
+## Serviços em execução
+
+- **Backend web** e **frontend web** estão publicados na VPS em execução no endereço: <http://34.194.252.70/>.
+
+---
+
 ## Princípios de arquitetura da plataforma
 
 1. **Backend Java + BigQuery**: Um serviço REST (Spring Boot ou Quarkus) fornecerá APIs para consultar sinais, parâmetros e execuções de treinamento diretamente das tabelas no BigQuery, aplicando camadas de serviço/repositório para encapsular o acesso aos dados.
