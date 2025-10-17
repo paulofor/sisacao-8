@@ -23,6 +23,8 @@ frontend/
    ```
 
    Ajuste `VITE_API_BASE_URL` para o endpoint do backend que expõe as mensagens da coleta (por padrão `http://localhost:8080`).
+   Em produção, o valor padrão passa a ser `"/api"`, pois o nginx configurado via `vps/preparar_vps.sh`
+   cria um proxy reverso para o backend.
 
 2. Instale as dependências:
 
@@ -50,4 +52,15 @@ frontend/
 - Integrar com os endpoints reais do backend (Spring Boot) que consultarão o BigQuery.
 - Acrescentar autenticação, paginação e exportação de relatórios.
 - Evoluir o design system e documentar componentes compartilháveis.
+
+## Deploy automático (Lightsail)
+
+- Execute o script [`vps/preparar_vps.sh`](../vps/preparar_vps.sh) na VPS para provisionar nginx,
+  criar o usuário `deploy` e preparar os diretórios `/opt/sisacao/app/frontend` e
+  `/home/deploy/sisacao/frontend` utilizados durante o deploy.
+- A _workflow_ [`deploy-frontend-lightsail.yml`](../.github/workflows/deploy-frontend-lightsail.yml)
+  é disparada em pushes para a branch `master` que alterem arquivos dentro de `frontend/` (ou quando
+  acionada manualmente) e realiza o _build_ com `npm run build`.
+- O artefato gerado é publicado via `scp` para a VPS e movido para `/opt/sisacao/app/frontend`,
+  ficando imediatamente disponível através do nginx em `http://<IP-da-VPS>/`.
 

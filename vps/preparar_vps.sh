@@ -257,6 +257,10 @@ preparar_diretorios() {
     log "INFO" "Criando diretório temporário para uploads de artefatos..."
     mkdir -p "/opt/${EMPRESA_SLUG}/tmp"
     chown -R "${DEPLOY_USER}:${DEPLOY_USER}" "/opt/${EMPRESA_SLUG}/tmp"
+
+    local staging_dir="/home/${DEPLOY_USER}/${EMPRESA_SLUG}/frontend"
+    log "INFO" "Criando diretório de staging do frontend em ${staging_dir}..."
+    install -d -m 755 -o "${DEPLOY_USER}" -g "${DEPLOY_USER}" "${staging_dir}"
 }
 
 gerar_chave_deploy() {
