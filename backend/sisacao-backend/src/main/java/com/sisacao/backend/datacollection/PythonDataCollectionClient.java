@@ -16,11 +16,15 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 @Component
 public class PythonDataCollectionClient {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(PythonDataCollectionClient.class);
 
     private final ObjectMapper objectMapper;
     private final String pythonExecutable;
@@ -41,36 +45,55 @@ public class PythonDataCollectionClient {
 
     public List<PythonMessage> fetchMessages() {
         if (!Files.exists(scriptPath)) {
-            throw new IllegalStateException(
-                    "Python script not found at " + scriptPath.toAbsolutePath());
+            IllegalStateException exception =
+                    new IllegalStateException("Python script not found at " + scriptPath.toAbsolutePath());
+            LOGGER.error("Unable to execute data collection script: {}", scriptPath, exception);
+            throw exception;
         }
 
         ProcessBuilder processBuilder =
                 new ProcessBuilder(pythonExecutable, scriptPath.toString()).redirectErrorStream(true);
         try {
+            LOGGER.debug(
+                    "Executing data collection script using '{}' at '{}'", pythonExecutable, scriptPath);
             Process process = processBuilder.start();
             String output = readOutput(process.getInputStream());
             boolean finished = process.waitFor(timeout.toMillis(), TimeUnit.MILLISECONDS);
             if (!finished) {
                 process.destroyForcibly();
-                throw new IllegalStateException("Python script execution timed out after " + timeout);
+                IllegalStateException exception =
+                        new IllegalStateException("Python script execution timed out after " + timeout);
+                LOGGER.error("Python data collection script timed out after {}", timeout, exception);
+                throw exception;
             }
 
             int exitCode = process.exitValue();
             if (exitCode != 0) {
-                throw new IllegalStateException(
-                        "Python script exited with status " + exitCode + " and output: " + output);
+                IllegalStateException exception =
+                        new IllegalStateException(
+                                "Python script exited with status " + exitCode + " and output: " + output);
+                LOGGER.error(
+                        "Python data collection script exited abnormally with status {} and output: {}",
+                        exitCode,
+                        output);
+                throw exception;
             }
 
             if (output.isBlank()) {
+                LOGGER.debug("Python data collection script returned no messages.");
                 return Collections.emptyList();
             }
 
-            return objectMapper.readValue(output, new TypeReference<List<PythonMessage>>() {});
+            List<PythonMessage> messages =
+                    objectMapper.readValue(output, new TypeReference<List<PythonMessage>>() {});
+            LOGGER.debug("Python data collection script returned {} messages", messages.size());
+            return messages;
         } catch (IOException ex) {
+            LOGGER.error("I/O failure while executing python data collection script", ex);
             throw new IllegalStateException("Failed to execute python script", ex);
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
+            LOGGER.error("Python data collection execution was interrupted", ex);
             throw new IllegalStateException("Failed to execute python script", ex);
         }
     }
