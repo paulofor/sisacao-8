@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - master
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/deploy-frontend-lightsail.yml'
   workflow_dispatch:
 
 jobs:
@@ -24,6 +27,19 @@ jobs:
           timeout: 60s
           command_timeout: 30m
 
+      - name: Preparar diretórios no servidor
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: 34.194.252.70
+          username: deploy
+          key: ${{ secrets.KEY }}
+          port: 22
+          script: |
+            set -euo pipefail
+            mkdir -p /home/deploy/sisacao/frontend
+          timeout: 60s
+          command_timeout: 30m
+
       - uses: actions/checkout@v4
 
       - name: Set up Node.js
@@ -39,6 +55,8 @@ jobs:
 
       - name: Build frontend
         working-directory: frontend/app
+        env:
+          VITE_API_BASE_URL: /api
         run: npm run build
 
       - name: Upload dist to Lightsail
