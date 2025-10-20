@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/data-collections/messages")
+@RequestMapping("/api/data-collections/messages")
 public class DataCollectionMessageController {
 
     private final DataCollectionMessageService service;

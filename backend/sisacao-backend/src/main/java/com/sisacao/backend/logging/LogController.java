@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping(path = "/logs", produces = MediaType.TEXT_PLAIN_VALUE)
+@RequestMapping(path = "/api/logs", produces = MediaType.TEXT_PLAIN_VALUE)
 public class LogController {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(LogController.class);
