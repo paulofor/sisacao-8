@@ -16,7 +16,7 @@ O endpoint padrão ficará disponível em `http://localhost:8080/`.
 
 ### Logs via Actuator
 
-Com a aplicação em execução é possível baixar os logs recentes acessando `http://localhost:8080/actuator/logfile`. O arquivo exposto é o mesmo configurado em `logging.file.name` (por padrão `logs/sisacao-backend.log`). Defina a variável de ambiente `APP_LOG_FILE` para sobrescrever o caminho tanto do arquivo quanto do endpoint.
+Com a aplicação em execução é possível baixar os logs recentes acessando `http://localhost:8080/actuator/logfile`. O arquivo exposto é o mesmo configurado em `logging.file.name`, apontando para `/opt/sisacao/app/logs/sisacao-backend.log`, diretório compartilhado pelo backend em produção.
 
 ## Guia de preparação do ambiente
 
