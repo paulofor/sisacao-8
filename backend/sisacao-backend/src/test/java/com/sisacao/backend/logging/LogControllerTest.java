@@ -48,7 +48,7 @@ class LogControllerTest {
 
     @Test
     void shouldReturnRequestedNumberOfLines() throws Exception {
-        mockMvc.perform(get("/logs/backend").param("lines", "2"))
+        mockMvc.perform(get("/api/logs/backend").param("lines", "2"))
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("line2")))
                 .andExpect(content().string(containsString("line3")))
@@ -57,14 +57,14 @@ class LogControllerTest {
 
     @Test
     void shouldReturnBadRequestWhenLinesIsInvalid() throws Exception {
-        mockMvc.perform(get("/logs/backend").param("lines", "0"))
+        mockMvc.perform(get("/api/logs/backend").param("lines", "0"))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().string(containsString("greater than zero")));
     }
 
     @Test
     void shouldReturnDefaultLinesWhenLinesParameterIsMissing() throws Exception {
-        String response = mockMvc.perform(get("/logs/backend"))
+        String response = mockMvc.perform(get("/api/logs/backend"))
                 .andExpect(status().isOk())
                 .andReturn()
                 .getResponse()
