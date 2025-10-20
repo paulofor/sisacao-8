@@ -26,7 +26,10 @@ def _ensure_fake_bigquery() -> None:
 
     import types
 
-    google_module = sys.modules.setdefault("google", types.ModuleType("google"))
+    google_module = sys.modules.setdefault(
+        "google",
+        types.ModuleType("google"),
+    )
     cloud_module = getattr(google_module, "cloud", None)
     if cloud_module is None:
         cloud_module = types.ModuleType("cloud")
@@ -44,7 +47,12 @@ def _ensure_fake_bigquery() -> None:
     sys.modules["google.cloud.bigquery"] = bigquery_module
 
 
-def _error_message(collector: str, dataset: str, summary: str, error: BaseException) -> Dict[str, Any]:
+def _error_message(
+    collector: str,
+    dataset: str,
+    summary: str,
+    error: BaseException,
+) -> Dict[str, Any]:
     """Return an error message payload."""
 
     return {
@@ -61,7 +69,11 @@ def _error_message(collector: str, dataset: str, summary: str, error: BaseExcept
 def _load_tickers(get_stock_module: Any) -> List[str]:
     """Load configured tickers using the helper from ``get_stock_data``."""
 
-    tickers_path = Path(__file__).resolve().parents[1] / "get_stock_data" / "tickers.txt"
+    tickers_path = (
+        Path(__file__).resolve().parents[1]
+        / "get_stock_data"
+        / "tickers.txt"
+    )
     tickers = get_stock_module.load_tickers_from_file(tickers_path)
     return tickers or ["YDUQ3", "PETR4"]
 
@@ -70,7 +82,9 @@ def _collect_b3_message() -> Dict[str, Any]:
     """Collect closing prices using ``get_stock_data`` helpers."""
 
     _ensure_fake_bigquery()
-    from functions.get_stock_data import main as get_stock_module  # noqa: WPS433
+    from functions.get_stock_data import (  # noqa: WPS433
+        main as get_stock_module,
+    )
 
     tickers = _load_tickers(get_stock_module)
     tickers = tickers[:10]
@@ -104,7 +118,10 @@ def _collect_b3_message() -> Dict[str, Any]:
                 f"Cotações de fechamento obtidas para {len(data)} tickers "
                 f"(arquivo {target_date.isoformat()})."
             )
-            dataset = f"{get_stock_module.DATASET_ID}.{get_stock_module.FECHAMENTO_TABLE_ID}"
+            dataset = (
+                f"{get_stock_module.DATASET_ID}."
+                f"{get_stock_module.FECHAMENTO_TABLE_ID}"
+            )
             return {
                 "id": f"get-stock-data-{int(time.time() * 1000)}",
                 "collector": "get_stock_data",
@@ -116,8 +133,13 @@ def _collect_b3_message() -> Dict[str, Any]:
             }
         attempts.append((target_date.isoformat(), "sem dados"))
 
-    dataset = f"{get_stock_module.DATASET_ID}.{get_stock_module.FECHAMENTO_TABLE_ID}"
-    error = RuntimeError(f"Nenhum dado retornado pelas últimas tentativas: {attempts}")
+    dataset = (
+        f"{get_stock_module.DATASET_ID}."
+        f"{get_stock_module.FECHAMENTO_TABLE_ID}"
+    )
+    error = RuntimeError(
+        f"Nenhum dado retornado pelas últimas tentativas: {attempts}"
+    )
     return _error_message(
         "get_stock_data",
         dataset,
@@ -131,8 +153,12 @@ def _collect_google_message() -> Dict[str, Any]:
 
     _ensure_fake_bigquery()
 
-    from functions.get_stock_data import main as get_stock_module  # noqa: WPS433
-    from functions.google_finance_price import main as google_module  # noqa: WPS433
+    from functions.get_stock_data import (  # noqa: WPS433
+        main as get_stock_module,
+    )
+    from functions.google_finance_price import (  # noqa: WPS433
+        main as google_module,
+    )
     from functions.google_finance_price.google_scraper import (  # noqa: WPS433
         fetch_google_finance_price,
     )
