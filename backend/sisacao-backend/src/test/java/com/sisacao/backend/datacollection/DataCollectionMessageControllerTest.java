@@ -39,7 +39,7 @@ class DataCollectionMessageControllerTest {
 
     @Test
     void shouldReturnAllMessages() throws Exception {
-        mockMvc.perform(get("/api/data-collections/messages"))
+        mockMvc.perform(get("/data-collections/messages"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(5)))
                 .andExpect(jsonPath("$[0].id", is("evt-001")))
@@ -48,7 +48,7 @@ class DataCollectionMessageControllerTest {
 
     @Test
     void shouldFilterMessagesBySeverityAndCollector() throws Exception {
-        mockMvc.perform(get("/api/data-collections/messages")
+        mockMvc.perform(get("/data-collections/messages")
                         .param("severity", "warning")
                         .param("collector", "ingestao-crypto"))
                 .andExpect(status().isOk())
@@ -60,7 +60,7 @@ class DataCollectionMessageControllerTest {
 
     @Test
     void shouldRespectLimitParameter() throws Exception {
-        mockMvc.perform(get("/api/data-collections/messages").param("limit", "2"))
+        mockMvc.perform(get("/data-collections/messages").param("limit", "2"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(2)))
                 .andExpect(jsonPath("$[0].id", is("evt-001")))
@@ -69,14 +69,14 @@ class DataCollectionMessageControllerTest {
 
     @Test
     void shouldAllowFrontendOriginViaCors() throws Exception {
-        mockMvc.perform(get("/api/data-collections/messages").header("Origin", "http://localhost:5173"))
+        mockMvc.perform(get("/data-collections/messages").header("Origin", "http://localhost:5173"))
                 .andExpect(status().isOk())
                 .andExpect(header().string("Access-Control-Allow-Origin", "http://localhost:5173"));
     }
 
     @Test
     void shouldAllowPreflightRequests() throws Exception {
-        mockMvc.perform(options("/api/data-collections/messages")
+        mockMvc.perform(options("/data-collections/messages")
                         .header("Origin", "http://localhost:5173")
                         .header("Access-Control-Request-Method", "GET"))
                 .andExpect(status().isOk())
