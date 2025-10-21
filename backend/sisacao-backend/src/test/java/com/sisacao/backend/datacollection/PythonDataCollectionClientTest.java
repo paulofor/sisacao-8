@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -53,5 +54,52 @@ class PythonDataCollectionClientTest {
         assertEquals(OffsetDateTime.parse("2024-01-01T10:00:00Z"), message.createdAt());
         assertNotNull(message.metadata());
         assertEquals(2, ((Number) message.metadata().get("count")).intValue());
+    }
+    @Test
+    void shouldResolveScriptPathUsingParentTraversalFallback() throws IOException {
+        Path appDir = tempDir.resolve("app");
+        Path scriptDir = appDir.resolve("functions/monitoring");
+        Files.createDirectories(scriptDir);
+        Path script = scriptDir.resolve("export_collection_messages.py");
+        String payload =
+                "{" +
+                        "\"id\": \"evt-200\", " +
+                        "\"collector\": \"fallback-collector\", " +
+                        "\"severity\": \"INFO\", " +
+                        "\"summary\": \"fallback\", " +
+                        "\"dataset\": \"fallback.dataset\", " +
+                        "\"createdAt\": \"2024-01-02T11:30:00Z\", " +
+                        "\"metadata\": {\"count\": 1}}";
+        String content =
+                String.join(
+                        "\n",
+                        "import json",
+                        "import sys",
+                        "json.dump([" + payload + "], sys.stdout)");
+        Files.writeString(script, content);
+
+        String originalUserDir = System.getProperty("user.dir");
+        System.setProperty("user.dir", appDir.toString());
+        try {
+            PythonDataCollectionClient client =
+                    new PythonDataCollectionClient(
+                            new ObjectMapper(),
+                            "python3",
+                            "../../functions/monitoring/export_collection_messages.py",
+                            Duration.ofSeconds(5));
+
+            Field scriptField = PythonDataCollectionClient.class.getDeclaredField("scriptPath");
+            scriptField.setAccessible(true);
+            Path resolved = (Path) scriptField.get(client);
+            assertEquals(script.toAbsolutePath().normalize(), resolved);
+        } catch (NoSuchFieldException | IllegalAccessException ex) {
+            throw new AssertionError("Unable to inspect resolved script path", ex);
+        } finally {
+            if (originalUserDir == null) {
+                System.clearProperty("user.dir");
+            } else {
+                System.setProperty("user.dir", originalUserDir);
+            }
+        }
     }
 }
