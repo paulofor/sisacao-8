@@ -13,8 +13,10 @@ import java.nio.file.Paths;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,7 +41,7 @@ public class PythonDataCollectionClient {
             @Value("${sisacao.data-collection.python-timeout:PT30S}") Duration timeout) {
         this.objectMapper = mapper.copy().findAndRegisterModules();
         this.pythonExecutable = pythonExecutable;
-        this.scriptPath = Paths.get(scriptPath).toAbsolutePath().normalize();
+        this.scriptPath = resolveScriptPath(scriptPath);
         this.timeout = timeout;
     }
 
@@ -96,6 +98,68 @@ public class PythonDataCollectionClient {
             LOGGER.error("Python data collection execution was interrupted", ex);
             throw new IllegalStateException("Failed to execute python script", ex);
         }
+    }
+
+    private Path resolveScriptPath(String configuredPath) {
+        Path requestedPath = Paths.get(configuredPath);
+        LinkedHashSet<Path> candidates = new LinkedHashSet<>();
+
+        String sanitized = stripLeadingParentTraversal(configuredPath);
+        if (!sanitized.equals(configuredPath) && !sanitized.isBlank()) {
+            Path sanitizedPath = Paths.get(sanitized);
+            collectRelativeCandidates(sanitizedPath, candidates);
+            candidates.add(Paths.get("/opt/sisacao/app").resolve(sanitizedPath).normalize());
+        }
+
+        if (requestedPath.isAbsolute()) {
+            candidates.add(requestedPath.normalize());
+        } else {
+            collectRelativeCandidates(requestedPath, candidates);
+            candidates.add(Paths.get("/opt/sisacao/app").resolve(requestedPath).normalize());
+        }
+
+        for (Path candidate : candidates) {
+            if (Files.exists(candidate)) {
+                Path absoluteCandidate = candidate.toAbsolutePath().normalize();
+                LOGGER.debug(
+                        "Resolved python data collection script '{}' to '{}'",
+                        configuredPath,
+                        absoluteCandidate);
+                return absoluteCandidate;
+            }
+        }
+
+        Path fallback = requestedPath.toAbsolutePath().normalize();
+        LOGGER.debug(
+                "Unable to locate python data collection script '{}' in fallback locations. Using '{}'",
+                configuredPath,
+                fallback);
+        return fallback;
+    }
+
+    private void collectRelativeCandidates(Path relative, Set<Path> candidates) {
+        LinkedHashSet<Path> baseDirectories = new LinkedHashSet<>();
+        String userDirProperty = System.getProperty("user.dir");
+        if (userDirProperty != null && !userDirProperty.isBlank()) {
+            baseDirectories.add(Paths.get(userDirProperty).toAbsolutePath());
+        }
+        baseDirectories.add(Paths.get("").toAbsolutePath());
+
+        for (Path base : baseDirectories) {
+            Path current = base;
+            while (current != null) {
+                candidates.add(current.resolve(relative).normalize());
+                current = current.getParent();
+            }
+        }
+    }
+
+    private String stripLeadingParentTraversal(String path) {
+        String sanitized = path;
+        while (sanitized.startsWith("../") || sanitized.startsWith("..\\")) {
+            sanitized = sanitized.substring(3);
+        }
+        return sanitized;
     }
 
     private String readOutput(InputStream stream) throws IOException {
