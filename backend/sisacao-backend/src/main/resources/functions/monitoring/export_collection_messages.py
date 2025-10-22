@@ -5,12 +5,42 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import os
 import sys
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Set, Tuple
 
-ROOT_DIR = Path(__file__).resolve().parents[2]
+
+def _resolve_project_root() -> Path:
+    """Best effort attempt to locate the project root directory."""
+
+    candidates = []
+
+    env_root = os.environ.get("SISACAO_APP_ROOT") or os.environ.get("SISACAO_PROJECT_ROOT")
+    if env_root:
+        candidates.append(Path(env_root).expanduser())
+
+    script_path = Path(__file__).resolve()
+    candidates.extend([script_path.parent, *script_path.parents])
+    candidates.append(Path.cwd())
+
+    checked: Set[Path] = set()
+    for candidate in candidates:
+        try:
+            resolved = candidate.resolve()
+        except OSError:
+            continue
+        if resolved in checked:
+            continue
+        checked.add(resolved)
+        if (resolved / "functions").is_dir():
+            return resolved
+
+    return script_path.parent
+
+
+ROOT_DIR = _resolve_project_root()
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
@@ -69,11 +99,7 @@ def _error_message(
 def _load_tickers(get_stock_module: Any) -> List[str]:
     """Load configured tickers using the helper from ``get_stock_data``."""
 
-    tickers_path = (
-        Path(__file__).resolve().parents[1]
-        / "get_stock_data"
-        / "tickers.txt"
-    )
+    tickers_path = ROOT_DIR / "functions" / "get_stock_data" / "tickers.txt"
     tickers = get_stock_module.load_tickers_from_file(tickers_path)
     return tickers or ["YDUQ3", "PETR4"]
 
