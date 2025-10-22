@@ -10,6 +10,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.Collections;
@@ -41,7 +42,8 @@ public class PythonDataCollectionClient {
             @Value("${sisacao.data-collection.python-timeout:PT30S}") Duration timeout) {
         this.objectMapper = mapper.copy().findAndRegisterModules();
         this.pythonExecutable = pythonExecutable;
-        this.scriptPath = resolveScriptPath(scriptPath);
+        Path resolvedPath = resolveScriptPath(scriptPath);
+        this.scriptPath = ensureScriptAvailability(scriptPath, resolvedPath);
         this.timeout = timeout;
     }
 
@@ -135,6 +137,56 @@ public class PythonDataCollectionClient {
                 configuredPath,
                 fallback);
         return fallback;
+    }
+
+    private Path ensureScriptAvailability(String configuredPath, Path resolvedPath) {
+        if (Files.exists(resolvedPath)) {
+            return resolvedPath.toAbsolutePath().normalize();
+        }
+
+        String resourcePath = sanitizeResourcePath(configuredPath);
+        if (resourcePath != null) {
+            try (InputStream stream = getClass().getClassLoader().getResourceAsStream(resourcePath)) {
+                if (stream != null) {
+                    Path tempFile = Files.createTempFile("sisacao-data-collection-", ".py");
+                    Files.copy(stream, tempFile, StandardCopyOption.REPLACE_EXISTING);
+                    tempFile.toFile().deleteOnExit();
+                    Path absolute = tempFile.toAbsolutePath().normalize();
+                    LOGGER.info(
+                            "Extracted python data collection script '{}' from classpath to '{}'",
+                            resourcePath,
+                            absolute);
+                    return absolute;
+                }
+            } catch (IOException ex) {
+                LOGGER.error(
+                        "Failed to extract python data collection script '{}' from classpath",
+                        resourcePath,
+                        ex);
+            }
+        }
+
+        return resolvedPath.toAbsolutePath().normalize();
+    }
+
+    private String sanitizeResourcePath(String configuredPath) {
+        if (configuredPath == null || configuredPath.isBlank()) {
+            return null;
+        }
+
+        String sanitized = stripLeadingParentTraversal(configuredPath.replace('\\', '/'));
+        if (sanitized.startsWith("classpath:")) {
+            sanitized = sanitized.substring("classpath:".length());
+        }
+        while (sanitized.startsWith("/")) {
+            sanitized = sanitized.substring(1);
+        }
+
+        if (sanitized.isBlank()) {
+            return null;
+        }
+
+        return sanitized;
     }
 
     private void collectRelativeCandidates(Path relative, Set<Path> candidates) {

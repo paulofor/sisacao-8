@@ -2,6 +2,7 @@ package com.sisacao.backend.datacollection;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
@@ -55,6 +56,24 @@ class PythonDataCollectionClientTest {
         assertNotNull(message.metadata());
         assertEquals(2, ((Number) message.metadata().get("count")).intValue());
     }
+
+    @Test
+    void shouldExtractScriptFromClasspathWhenConfigured() throws Exception {
+        PythonDataCollectionClient client =
+                new PythonDataCollectionClient(
+                        new ObjectMapper(),
+                        "python3",
+                        "classpath:test-scripts/simple_messages.py",
+                        Duration.ofSeconds(5));
+
+        Field scriptField = PythonDataCollectionClient.class.getDeclaredField("scriptPath");
+        scriptField.setAccessible(true);
+        Path resolved = (Path) scriptField.get(client);
+
+        assertTrue(Files.exists(resolved), "extracted script should exist on disk");
+        assertTrue(resolved.getFileName().toString().endsWith(".py"));
+    }
+
     @Test
     void shouldResolveScriptPathUsingParentTraversalFallback() throws IOException {
         Path appDir = tempDir.resolve("app");
