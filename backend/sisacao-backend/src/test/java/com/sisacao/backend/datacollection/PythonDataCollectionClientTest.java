@@ -13,6 +13,7 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.springframework.core.io.DefaultResourceLoader;
 
 class PythonDataCollectionClientTest {
 
@@ -23,14 +24,14 @@ class PythonDataCollectionClientTest {
     void shouldParseMessagesFromPythonScript() throws IOException {
         Path script = tempDir.resolve("messages.py");
         String payload =
-                "{"
-                        + "\"id\": \"evt-100\", "
-                        + "\"collector\": \"test-collector\", "
-                        + "\"severity\": \"SUCCESS\", "
-                        + "\"summary\": \"ok\", "
-                        + "\"dataset\": \"test.dataset\", "
-                        + "\"createdAt\": \"2024-01-01T10:00:00Z\", "
-                        + "\"metadata\": {\"count\": 2}}";
+                "{" +
+                        "\"id\": \"evt-100\", " +
+                        "\"collector\": \"test-collector\", " +
+                        "\"severity\": \"SUCCESS\", " +
+                        "\"summary\": \"ok\", " +
+                        "\"dataset\": \"test.dataset\", " +
+                        "\"createdAt\": \"2024-01-01T10:00:00Z\", " +
+                        "\"metadata\": {\"count\": 2}}";
         String content =
                 String.join(
                         "\n",
@@ -41,7 +42,11 @@ class PythonDataCollectionClientTest {
 
         PythonDataCollectionClient client =
                 new PythonDataCollectionClient(
-                        new ObjectMapper(), "python3", script.toString(), Duration.ofSeconds(5));
+                        new ObjectMapper(),
+                        new DefaultResourceLoader(),
+                        "python3",
+                        script.toString(),
+                        Duration.ofSeconds(5));
 
         List<PythonDataCollectionClient.PythonMessage> messages = client.fetchMessages();
         assertEquals(1, messages.size());
@@ -55,6 +60,7 @@ class PythonDataCollectionClientTest {
         assertNotNull(message.metadata());
         assertEquals(2, ((Number) message.metadata().get("count")).intValue());
     }
+
     @Test
     void shouldResolveScriptPathUsingParentTraversalFallback() throws IOException {
         Path appDir = tempDir.resolve("app");
@@ -84,6 +90,7 @@ class PythonDataCollectionClientTest {
             PythonDataCollectionClient client =
                     new PythonDataCollectionClient(
                             new ObjectMapper(),
+                            new DefaultResourceLoader(),
                             "python3",
                             "../../functions/monitoring/export_collection_messages.py",
                             Duration.ofSeconds(5));

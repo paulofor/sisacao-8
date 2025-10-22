@@ -10,6 +10,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.Collections;
@@ -21,6 +22,8 @@ import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.ResourceLoader;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -29,17 +32,21 @@ public class PythonDataCollectionClient {
     private static final Logger LOGGER = LoggerFactory.getLogger(PythonDataCollectionClient.class);
 
     private final ObjectMapper objectMapper;
+    private final ResourceLoader resourceLoader;
     private final String pythonExecutable;
     private final Path scriptPath;
     private final Duration timeout;
 
     public PythonDataCollectionClient(
             ObjectMapper mapper,
+            ResourceLoader resourceLoader,
             @Value("${sisacao.data-collection.python-executable:python3}") String pythonExecutable,
-            @Value("${sisacao.data-collection.python-script:../../functions/monitoring/export_collection_messages.py}")
+            @Value(
+                            "${sisacao.data-collection.python-script:classpath:/python/export_collection_messages.py}")
                     String scriptPath,
             @Value("${sisacao.data-collection.python-timeout:PT30S}") Duration timeout) {
         this.objectMapper = mapper.copy().findAndRegisterModules();
+        this.resourceLoader = resourceLoader;
         this.pythonExecutable = pythonExecutable;
         this.scriptPath = resolveScriptPath(scriptPath);
         this.timeout = timeout;
@@ -101,6 +108,15 @@ public class PythonDataCollectionClient {
     }
 
     private Path resolveScriptPath(String configuredPath) {
+        Path classpathCandidate = tryExtractClasspathResource(configuredPath);
+        if (classpathCandidate != null) {
+            LOGGER.debug(
+                    "Resolved python data collection script '{}' from classpath to '{}'",
+                    configuredPath,
+                    classpathCandidate);
+            return classpathCandidate;
+        }
+
         Path requestedPath = Paths.get(configuredPath);
         LinkedHashSet<Path> candidates = new LinkedHashSet<>();
 
@@ -129,12 +145,47 @@ public class PythonDataCollectionClient {
             }
         }
 
+        if (!sanitized.isBlank()) {
+            Path classpathFallback = tryExtractClasspathResource("classpath:/" + sanitized);
+            if (classpathFallback != null) {
+                LOGGER.debug(
+                        "Resolved python data collection script '{}' from classpath fallback to '{}'",
+                        configuredPath,
+                        classpathFallback);
+                return classpathFallback;
+            }
+        }
+
         Path fallback = requestedPath.toAbsolutePath().normalize();
         LOGGER.debug(
                 "Unable to locate python data collection script '{}' in fallback locations. Using '{}'",
                 configuredPath,
                 fallback);
         return fallback;
+    }
+
+    private Path tryExtractClasspathResource(String configuredPath) {
+        if (!configuredPath.startsWith("classpath:")) {
+            return null;
+        }
+        return extractClasspathResource(configuredPath);
+    }
+
+    private Path extractClasspathResource(String resourceLocation) {
+        Resource resource = resourceLoader.getResource(resourceLocation);
+        if (!resource.exists()) {
+            return null;
+        }
+        try (InputStream inputStream = resource.getInputStream()) {
+            Path tempFile = Files.createTempFile("sisacao-data-collection-", ".py");
+            Files.copy(inputStream, tempFile, StandardCopyOption.REPLACE_EXISTING);
+            tempFile.toFile().setExecutable(true);
+            tempFile.toFile().deleteOnExit();
+            return tempFile.toAbsolutePath().normalize();
+        } catch (IOException ex) {
+            throw new IllegalStateException(
+                    "Failed to load python script from resource '" + resourceLocation + "'", ex);
+        }
     }
 
     private void collectRelativeCandidates(Path relative, Set<Path> candidates) {
