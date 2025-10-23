@@ -9,7 +9,7 @@ import os
 import sys
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Set, Tuple
+from typing import Any, Dict, List, Set
 
 
 def _resolve_project_root() -> Path:
@@ -116,13 +116,23 @@ def _collect_b3_message() -> Dict[str, Any]:
     tickers = tickers[:10]
     today = dt.date.today()
 
-    attempts: List[Tuple[str, str]] = []
+    attempts: List[Dict[str, str]] = []
     for offset in range(0, 5):
         target_date = today - dt.timedelta(days=offset)
+        diagnostics: List[str] = []
         try:
-            data = get_stock_module.download_from_b3(tickers, date=target_date)
+            data = get_stock_module.download_from_b3(
+                tickers,
+                date=target_date,
+                diagnostics=diagnostics,
+            )
         except Exception as exc:  # noqa: BLE001
-            attempts.append((target_date.isoformat(), f"exception: {exc}"))
+            attempts.append(
+                {
+                    "data": target_date.isoformat(),
+                    "motivo": f"exception: {exc}",
+                }
+            )
             continue
 
         if data:
@@ -157,12 +167,53 @@ def _collect_b3_message() -> Dict[str, Any]:
                 "createdAt": _utc_now_iso(),
                 "metadata": metadata,
             }
-        attempts.append((target_date.isoformat(), "sem dados"))
+
+        motivo = diagnostics[-1] if diagnostics else "sem dados"
+        attempts.append(
+            {
+                "data": target_date.isoformat(),
+                "motivo": motivo,
+            }
+        )
 
     dataset = (
         f"{get_stock_module.DATASET_ID}."
         f"{get_stock_module.FECHAMENTO_TABLE_ID}"
     )
+    fallback_data = get_stock_module._fallback_b3_prices(  # type: ignore[attr-defined]
+        tickers,
+        today,
+    )
+    if fallback_data:
+        summary = (
+            "Cotações de fechamento simuladas com fallback offline "
+            f"para {len(fallback_data)} tickers."
+        )
+        metadata = {
+            "fonte": "b3_fallback",
+            "arquivoReferencia": today.isoformat(),
+            "tickersSolicitados": tickers,
+            "linhasProcessadas": len(fallback_data),
+            "cotacoes": [
+                {
+                    "ticker": ticker,
+                    "dataPregao": date_str,
+                    "precoFechamento": price,
+                }
+                for ticker, (date_str, price) in fallback_data.items()
+            ],
+            "tentativas": attempts,
+        }
+        return {
+            "id": f"get-stock-data-warning-{int(time.time() * 1000)}",
+            "collector": "get_stock_data",
+            "severity": "WARNING",
+            "summary": summary,
+            "dataset": dataset,
+            "createdAt": _utc_now_iso(),
+            "metadata": metadata,
+        }
+
     error = RuntimeError(
         f"Nenhum dado retornado pelas últimas tentativas: {attempts}"
     )

@@ -4,6 +4,7 @@ import io
 import sys
 import zipfile
 from pathlib import Path
+from typing import List
 
 import requests  # type: ignore[import-untyped]
 
@@ -65,3 +66,25 @@ def test_download_from_b3_empty_zip(monkeypatch):
 
     result = download_from_b3(["YDUQ3"], date=datetime.date(2025, 1, 1))
     assert result == {}
+
+
+def test_download_from_b3_records_diagnostics_on_error(monkeypatch):
+    """Record proxy errors in diagnostics list."""
+
+    monkeypatch.setattr("google.cloud.bigquery.Client", lambda: None)
+    main = importlib.import_module("functions.get_stock_data.main")
+    download_from_b3 = main.download_from_b3
+
+    def mock_get(*args, **kwargs):  # noqa: ANN001, ANN002 - match requests.get
+        raise requests.exceptions.ProxyError("proxy failed")
+
+    monkeypatch.setattr(requests, "get", mock_get)
+
+    diagnostics: List[str] = []
+    result = download_from_b3(
+        ["YDUQ3"],
+        date=datetime.date(2025, 1, 1),
+        diagnostics=diagnostics,
+    )
+    assert result == {}
+    assert any("proxy failed" in item for item in diagnostics)
