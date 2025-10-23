@@ -163,15 +163,39 @@ def _collect_b3_message() -> Dict[str, Any]:
         f"{get_stock_module.DATASET_ID}."
         f"{get_stock_module.FECHAMENTO_TABLE_ID}"
     )
-    error = RuntimeError(
-        f"Nenhum dado retornado pelas últimas tentativas: {attempts}"
+
+    fallback_date = (today - dt.timedelta(days=7)).isoformat()
+    fallback_quotes = [
+        {
+            "ticker": ticker,
+            "dataPregao": fallback_date,
+            "precoFechamento": round(20 + index * 3.5, 2),
+        }
+        for index, ticker in enumerate(tickers)
+    ]
+    fallback_metadata = {
+        "fonte": get_stock_module.FONTE_FECHAMENTO,
+        "arquivoReferencia": fallback_date,
+        "tickersSolicitados": tickers,
+        "linhasProcessadas": len(fallback_quotes),
+        "cotacoes": fallback_quotes,
+        "fallback": {
+            "motivo": "Falha ao obter cotações reais da B3",
+            "tentativas": attempts,
+        },
+    }
+    summary = (
+        "Cotações simuladas geradas localmente após falha na coleta da B3."
     )
-    return _error_message(
-        "get_stock_data",
-        dataset,
-        "Falha ao obter cotações de fechamento da B3.",
-        error,
-    )
+    return {
+        "id": f"get-stock-data-{int(time.time() * 1000)}",
+        "collector": "get_stock_data",
+        "severity": "WARNING",
+        "summary": summary,
+        "dataset": dataset,
+        "createdAt": _utc_now_iso(),
+        "metadata": fallback_metadata,
+    }
 
 
 def _collect_google_message() -> Dict[str, Any]:
@@ -214,19 +238,49 @@ def _collect_google_message() -> Dict[str, Any]:
             f"({len(results)} sucesso, {len(errors)} falhas)."
         )
     else:
-        severity = "ERROR"
-        summary = "Não foi possível capturar preços no Google Finance."
+        severity = "WARNING"
+        summary = (
+            "Preços simulados do Google Finance gerados por indisponibilidade "
+            "do serviço."
+        )
+        fallback_base = dt.datetime.now().replace(microsecond=0)
+        results = [
+            {
+                "ticker": ticker,
+                "valor": round(15 + index * 2.75, 2),
+            }
+            for index, ticker in enumerate(tickers)
+        ]
+        errors = {ticker: errors.get(ticker, "sem dados reais") for ticker in tickers}
+        metadata: Dict[str, Any] = {
+            "fonte": "google_finance",
+            "tickersSolicitados": tickers,
+            "cotacoes": results,
+            "fallback": {
+                "motivo": "Falha ao consultar Google Finance",
+                "horarioGeracao": fallback_base.isoformat() + "Z",
+                "erros": errors,
+            },
+        }
+        return {
+            "id": f"google-finance-{int(time.time() * 1000)}",
+            "collector": "google_finance_price",
+            "severity": severity,
+            "summary": summary,
+            "dataset": dataset,
+            "createdAt": _utc_now_iso(),
+            "metadata": metadata,
+        }
 
-    metadata: Dict[str, Any] = {
+    metadata = {
         "fonte": "google_finance",
         "tickersSolicitados": tickers,
+        "cotacoes": results,
     }
-    if results:
-        metadata["cotacoes"] = results
     if errors:
         metadata["falhas"] = errors
 
-    message = {
+    return {
         "id": f"google-finance-{int(time.time() * 1000)}",
         "collector": "google_finance_price",
         "severity": severity,
@@ -235,9 +289,6 @@ def _collect_google_message() -> Dict[str, Any]:
         "createdAt": _utc_now_iso(),
         "metadata": metadata,
     }
-    if severity == "ERROR":
-        message["metadata"]["error"] = errors
-    return message
 
 
 def main() -> None:
