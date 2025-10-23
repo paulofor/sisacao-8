@@ -181,7 +181,10 @@ def download_from_b3(
                 msg_erro = "Nenhum arquivo .txt encontrado em %s"
                 logging.warning(msg_erro, nome_arquivo_zip)
                 if diagnostics is not None:
-                    diagnostics.append(_format_diagnostic(msg_erro % nome_arquivo_zip))
+                    formatted_message = _format_diagnostic(
+                        msg_erro % nome_arquivo_zip
+                    )
+                    diagnostics.append(formatted_message)
                 return result
             nome_arquivo = arquivos_txt[0]
             logging.warning("Arquivo dentro do ZIP: %s", nome_arquivo)
@@ -210,17 +213,33 @@ def download_from_b3(
                         logging.warning(message)
                         if diagnostics is not None:
                             diagnostics.append(_format_diagnostic(message))
-                        logging.debug("Detalhes do erro", exc_info=True)
+                        logging.debug(
+                            "Detalhes do erro: %s",
+                            exc,
+                            exc_info=True,
+                        )
     except requests.exceptions.RequestException as exc:
-        logging.warning("Erro ao baixar arquivo da B3: %s", exc, exc_info=True)
+        logging.warning(
+            "Erro ao baixar arquivo da B3: %s",
+            exc,
+            exc_info=True,
+        )
         if diagnostics is not None:
             diagnostics.append(_format_diagnostic(str(exc)))
     except zipfile.BadZipFile as exc:
-        logging.warning("Arquivo ZIP inválido recebido da B3: %s", exc, exc_info=True)
+        logging.warning(
+            "Arquivo ZIP inválido recebido da B3: %s",
+            exc,
+            exc_info=True,
+        )
         if diagnostics is not None:
             diagnostics.append(_format_diagnostic(str(exc)))
     except Exception as exc:  # noqa: BLE001
-        logging.warning("Erro inesperado ao processar arquivo da B3: %s", exc, exc_info=True)
+        logging.warning(
+            "Erro inesperado ao processar arquivo da B3: %s",
+            exc,
+            exc_info=True,
+        )
         if diagnostics is not None:
             diagnostics.append(_format_diagnostic(str(exc)))
 
