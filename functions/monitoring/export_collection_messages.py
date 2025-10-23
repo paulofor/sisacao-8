@@ -9,7 +9,7 @@ import os
 import sys
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Set
+from typing import Any, Callable, Dict, List, Set
 
 
 def _resolve_project_root() -> Path:
@@ -17,7 +17,10 @@ def _resolve_project_root() -> Path:
 
     candidates = []
 
-    env_root = os.environ.get("SISACAO_APP_ROOT") or os.environ.get("SISACAO_PROJECT_ROOT")
+    env_root = (
+        os.environ.get("SISACAO_APP_ROOT")
+        or os.environ.get("SISACAO_PROJECT_ROOT")
+    )
     if env_root:
         candidates.append(Path(env_root).expanduser())
 
@@ -180,7 +183,12 @@ def _collect_b3_message() -> Dict[str, Any]:
         f"{get_stock_module.DATASET_ID}."
         f"{get_stock_module.FECHAMENTO_TABLE_ID}"
     )
-    fallback_data = get_stock_module._fallback_b3_prices(  # type: ignore[attr-defined]
+    # Access internal helper for deterministic fallback data.
+    fallback_loader: Callable[[List[str], dt.date], Dict[str, Any]] = getattr(
+        get_stock_module,
+        "_fallback_b3_prices",
+    )
+    fallback_data = fallback_loader(
         tickers,
         today,
     )
