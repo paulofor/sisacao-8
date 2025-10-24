@@ -10,7 +10,12 @@ import pandas as pd  # type: ignore[import-untyped]
 from google.cloud import bigquery  # type: ignore[import-untyped]
 from pytz import timezone  # type: ignore[import-untyped]
 
-from .google_scraper import fetch_google_finance_price
+try:
+    from .google_scraper import fetch_google_finance_price
+except ImportError:  # pragma: no cover - fallback when executed as script
+    from functions.google_finance_price.google_scraper import (  # type: ignore[import-not-found]
+        fetch_google_finance_price,
+    )
 
 logger = logging.getLogger(__name__)
 
