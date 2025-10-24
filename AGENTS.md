@@ -67,6 +67,8 @@ Este arquivo fornece contexto a agentes de IA (OpenAI Codex, ChatGPT, etc.) sob
 
 ## 4. Variáveis de ambiente essenciais (pré‑definidas)
 - `BQ_TABLE` → `ingestaokraken.cotacao_intraday.cotacao_fechamento_diario`
+- Tabela intraday utilizada pelas funções `google_finance_price` e monitoramentos derivados:
+  `ingestaokraken.cotacao_intraday.cotacao_bovespa`
 - `GCP_PROJECT` → `ingestaokraken`
 - `GCP_REGION` → `us-central1`
 
