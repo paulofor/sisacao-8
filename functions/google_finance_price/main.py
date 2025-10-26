@@ -13,9 +13,12 @@ from pytz import timezone  # type: ignore[import-untyped]
 try:
     from .google_scraper import fetch_google_finance_price
 except ImportError:  # pragma: no cover - fallback when executed as script
-    from functions.google_finance_price.google_scraper import (  # type: ignore[import-not-found]
-        fetch_google_finance_price,
+    from importlib import import_module
+
+    google_scraper = import_module(
+        "functions.google_finance_price.google_scraper"
     )
+    fetch_google_finance_price = google_scraper.fetch_google_finance_price
 
 logger = logging.getLogger(__name__)
 

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import importlib
 import datetime as dt
 import json
 import os
@@ -350,9 +351,10 @@ def _collect_google_message() -> Dict[str, Any]:
     )
 
     try:
-        from functions.google_finance_price.google_scraper import (  # noqa: WPS433
-            fetch_google_finance_price,
+        google_scraper = importlib.import_module(
+            "functions.google_finance_price.google_scraper"
         )
+        fetch_google_finance_price = google_scraper.fetch_google_finance_price
     except Exception as exc:  # noqa: BLE001
         summary = "Falha ao carregar scraper do Google Finance"
         return _build_intraday_failure_message(
