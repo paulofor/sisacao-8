@@ -9,7 +9,10 @@ import os
 import sys
 import time
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Set
+from typing import Any, Callable, Dict, Iterable, List, Set
+
+DEFAULT_INTRADAY_DATASET = "cotacao_intraday.cotacao_bovespa"
+DEFAULT_INTRADAY_TICKERS = ["PETR4", "VALE3", "IBOV"]
 
 
 def _resolve_project_root() -> Path:
@@ -105,6 +108,77 @@ def _load_tickers(get_stock_module: Any) -> List[str]:
     tickers_path = ROOT_DIR / "functions" / "get_stock_data" / "tickers.txt"
     tickers = get_stock_module.load_tickers_from_file(tickers_path)
     return tickers or ["YDUQ3", "PETR4"]
+
+
+def _read_tickers_from_file(path: Path) -> List[str]:
+    """Return tickers defined in ``path`` without importing helper modules."""
+
+    tickers: List[str] = []
+    try:
+        with path.open("r", encoding="utf-8") as handle:
+            for raw in handle:
+                normalized = raw.strip().upper()
+                if not normalized or normalized.startswith("#"):
+                    continue
+                if normalized not in tickers:
+                    tickers.append(normalized)
+    except OSError:
+        return []
+    return tickers
+
+
+def _normalize_tickers(values: Iterable[str]) -> List[str]:
+    """Normalize ticker collection into a unique, ordered list."""
+
+    tickers: List[str] = []
+    for raw in values:
+        normalized = str(raw).strip().upper()
+        if not normalized:
+            continue
+        if normalized not in tickers:
+            tickers.append(normalized)
+    return tickers
+
+
+def _fallback_intraday_tickers() -> List[str]:
+    """Return a deterministic list of tickers for intraday failures."""
+
+    tickers_path = ROOT_DIR / "functions" / "get_stock_data" / "tickers.txt"
+    configured = _read_tickers_from_file(tickers_path)
+    if configured:
+        return _normalize_tickers(configured)[:5]
+    return DEFAULT_INTRADAY_TICKERS[:5]
+
+
+def _build_intraday_failure_message(
+    *,
+    dataset: str,
+    tickers: Iterable[str],
+    summary: str,
+    error: BaseException,
+) -> Dict[str, Any]:
+    """Generate a failure payload for intraday collections."""
+
+    normalized_tickers = _normalize_tickers(tickers)
+    if not normalized_tickers:
+        normalized_tickers = DEFAULT_INTRADAY_TICKERS[:5]
+    reason = f"{summary}: {error}"
+    failures = {ticker: str(error) for ticker in normalized_tickers}
+    metadata: Dict[str, Any] = {
+        "fonte": "google_finance",
+        "tickersSolicitados": normalized_tickers,
+        "falhas": failures,
+        "error": str(error),
+    }
+    return {
+        "id": f"google-finance-error-{int(time.time() * 1000)}",
+        "collector": "google_finance_price",
+        "severity": "ERROR",
+        "summary": reason,
+        "dataset": dataset or DEFAULT_INTRADAY_DATASET,
+        "createdAt": _utc_now_iso(),
+        "metadata": metadata,
+    }
 
 
 def _collect_b3_message() -> Dict[str, Any]:
@@ -238,18 +312,55 @@ def _collect_google_message() -> Dict[str, Any]:
 
     _ensure_fake_bigquery()
 
-    from functions.get_stock_data import (  # noqa: WPS433
-        main as get_stock_module,
-    )
-    from functions.google_finance_price import (  # noqa: WPS433
-        main as google_module,
-    )
-    from functions.google_finance_price.google_scraper import (  # noqa: WPS433
-        fetch_google_finance_price,
-    )
+    dataset = DEFAULT_INTRADAY_DATASET
+
+    try:
+        from functions.get_stock_data import (  # noqa: WPS433
+            main as get_stock_module,
+        )
+    except Exception as exc:  # noqa: BLE001
+        tickers = _fallback_intraday_tickers()
+        summary = "Falha ao carregar módulo get_stock_data"
+        return _build_intraday_failure_message(
+            dataset=dataset,
+            tickers=tickers,
+            summary=summary,
+            error=exc,
+        )
 
     tickers = _load_tickers(get_stock_module)
     tickers = tickers[:5]
+
+    try:
+        from functions.google_finance_price import (  # noqa: WPS433
+            main as google_module,
+        )
+    except Exception as exc:  # noqa: BLE001
+        summary = "Falha ao carregar módulo google_finance_price"
+        return _build_intraday_failure_message(
+            dataset=dataset,
+            tickers=tickers,
+            summary=summary,
+            error=exc,
+        )
+
+    dataset = (
+        f"{getattr(google_module, 'DATASET_ID', 'cotacao_intraday')}"
+        f".{getattr(google_module, 'TABELA_ID', 'cotacao_bovespa')}"
+    )
+
+    try:
+        from functions.google_finance_price.google_scraper import (  # noqa: WPS433
+            fetch_google_finance_price,
+        )
+    except Exception as exc:  # noqa: BLE001
+        summary = "Falha ao carregar scraper do Google Finance"
+        return _build_intraday_failure_message(
+            dataset=dataset,
+            tickers=tickers,
+            summary=summary,
+            error=exc,
+        )
 
     results: List[Dict[str, Any]] = []
     errors: Dict[str, str] = {}
@@ -260,8 +371,6 @@ def _collect_google_message() -> Dict[str, Any]:
             errors[ticker] = str(exc)
             continue
         results.append({"ticker": ticker, "valor": round(float(price), 2)})
-
-    dataset = f"{google_module.DATASET_ID}.{google_module.TABELA_ID}"
 
     if results and not errors:
         severity = "SUCCESS"
@@ -295,7 +404,7 @@ def _collect_google_message() -> Dict[str, Any]:
         "metadata": metadata,
     }
     if severity == "ERROR":
-        message["metadata"]["error"] = errors
+        message["metadata"]["error"] = errors or summary
     return message
 
 
