@@ -27,6 +27,21 @@ export interface DataCollectionMessagesFilters {
   limit?: number
 }
 
+export interface IntradayTickerSummary {
+  ticker: string
+  price?: number | null
+  success: boolean
+  error?: string | null
+}
+
+export interface IntradaySummary {
+  updatedAt?: string | null
+  totalTickers: number
+  successfulTickers: number
+  failedTickers: number
+  tickers: IntradayTickerSummary[]
+}
+
 type RawMessage = Record<string, unknown>
 
 const toIsoString = (value: unknown): string => {
@@ -159,5 +174,25 @@ export const fetchDataCollectionMessages = async (
       metadata: (item.metadata as Record<string, unknown> | undefined) ?? undefined,
     }))
     .sort((a, b) => dayjs(b.createdAt).valueOf() - dayjs(a.createdAt).valueOf())
+}
+
+export const fetchIntradaySummary = async (): Promise<IntradaySummary> => {
+  const response = await apiClient.get<IntradaySummary>('/data-collections/intraday-summary')
+  const summary = response.data
+
+  return {
+    updatedAt: summary.updatedAt ?? null,
+    totalTickers: summary.totalTickers ?? 0,
+    successfulTickers: summary.successfulTickers ?? 0,
+    failedTickers: summary.failedTickers ?? 0,
+    tickers: Array.isArray(summary.tickers)
+      ? summary.tickers.map((ticker) => ({
+          ticker: ticker.ticker,
+          price: typeof ticker.price === 'number' ? ticker.price : null,
+          success: Boolean(ticker.success),
+          error: ticker.error ?? null,
+        }))
+      : [],
+  }
 }
 

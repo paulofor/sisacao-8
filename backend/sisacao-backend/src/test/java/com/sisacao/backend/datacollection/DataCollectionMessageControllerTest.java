@@ -68,6 +68,22 @@ class DataCollectionMessageControllerTest {
     }
 
     @Test
+    void shouldReturnIntradaySummary() throws Exception {
+        mockMvc.perform(get("/data-collections/intraday-summary"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalTickers", is(3)))
+                .andExpect(jsonPath("$.successfulTickers", is(2)))
+                .andExpect(jsonPath("$.failedTickers", is(1)))
+                .andExpect(jsonPath("$.tickers", hasSize(3)))
+                .andExpect(jsonPath("$.tickers[0].ticker", is("PETR4")))
+                .andExpect(jsonPath("$.tickers[0].price", is(32.1)))
+                .andExpect(jsonPath("$.tickers[0].success", is(true)))
+                .andExpect(jsonPath("$.tickers[2].ticker", is("BBAS3")))
+                .andExpect(jsonPath("$.tickers[2].success", is(false)))
+                .andExpect(jsonPath("$.tickers[2].error", containsString("Timeout")));
+    }
+
+    @Test
     void shouldAllowFrontendOriginViaCors() throws Exception {
         mockMvc.perform(get("/data-collections/messages").header("Origin", "http://localhost:5173"))
                 .andExpect(status().isOk())
@@ -89,12 +105,20 @@ class DataCollectionMessageControllerTest {
         return List.of(
                 new PythonDataCollectionClient.PythonMessage(
                         "evt-001",
-                        "ingestao-b3",
+                        "google_finance_price",
                         "SUCCESS",
-                        "Carga diária concluída com sucesso.",
-                        "bronze.cotacoes_b3",
+                        "Preços intraday capturados para 2 tickers.",
+                        "cotacao_intraday.cotacao_bovespa",
                         now,
-                        Map.of("linhasProcessadas", 1250, "duracaoSegundos", 42)),
+                        Map.of(
+                                "tickersSolicitados",
+                                List.of("PETR4", "VALE3", "BBAS3"),
+                                "cotacoes",
+                                List.of(
+                                        Map.of("ticker", "PETR4", "valor", 32.1),
+                                        Map.of("ticker", "VALE3", "valor", 71.5)),
+                                "falhas",
+                                Map.of("BBAS3", "Timeout ao consultar fonte"))),
                 new PythonDataCollectionClient.PythonMessage(
                         "evt-002",
                         "ingestao-crypto",
