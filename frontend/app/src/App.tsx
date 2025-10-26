@@ -20,7 +20,9 @@ import { useMemo, useState } from 'react'
 
 import type { DataCollectionMessage, DataCollectionMessageSeverity } from './api/dataCollections'
 import DataCollectionMessagesTable from './components/DataCollectionMessagesTable'
+import IntradaySummaryCard from './components/IntradaySummaryCard'
 import { useDataCollectionMessages } from './hooks/useDataCollectionMessages'
+import { useIntradaySummary } from './hooks/useIntradaySummary'
 
 const severityOptions: Array<'all' | DataCollectionMessageSeverity> = [
   'all',
@@ -51,6 +53,14 @@ function App() {
     severity: selectedSeverity === 'all' ? undefined : selectedSeverity,
   })
 
+  const {
+    data: intradaySummary,
+    isLoading: isSummaryLoading,
+    isFetching: isSummaryFetching,
+    refetch: refetchIntradaySummary,
+    error: intradaySummaryError,
+  } = useIntradaySummary()
+
   const messages = data ?? []
 
   const filteredMessages = useMemo(
@@ -61,6 +71,13 @@ function App() {
   const lastUpdatedLabel = dataUpdatedAt
     ? `Atualizado às ${dayjs(dataUpdatedAt).format('HH:mm:ss')}`
     : 'Aguardando atualização'
+
+  const isRefreshing = isFetching || isSummaryFetching
+  const isPageLoading = isLoading || isFetching || isSummaryLoading || isSummaryFetching
+
+  const handleRefresh = () => {
+    void Promise.all([refetch(), refetchIntradaySummary()])
+  }
 
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
@@ -76,15 +93,13 @@ function App() {
             variant="contained"
             color="primary"
             startIcon={<RefreshIcon />}
-            onClick={() => {
-              void refetch()
-            }}
-            disabled={isFetching}
+            onClick={handleRefresh}
+            disabled={isRefreshing}
           >
             Atualizar
           </Button>
         </Toolbar>
-        {isLoading || isFetching ? <LinearProgress color="primary" /> : null}
+        {isPageLoading ? <LinearProgress color="primary" /> : null}
       </AppBar>
 
       <Container maxWidth="lg" sx={{ py: 4 }}>
@@ -98,6 +113,12 @@ function App() {
               encontrar rapidamente coletas específicas ou investigar eventuais falhas.
             </Typography>
           </Box>
+
+          <IntradaySummaryCard
+            summary={intradaySummary}
+            isLoading={isSummaryLoading && !intradaySummary}
+            error={intradaySummaryError}
+          />
 
           <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems={{ xs: 'stretch', md: 'center' }}>
             <FormControl sx={{ minWidth: { xs: '100%', md: 200 } }} size="small">

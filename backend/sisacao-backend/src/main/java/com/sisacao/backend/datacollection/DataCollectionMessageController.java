@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/data-collections/messages")
+@RequestMapping("/data-collections")
 public class DataCollectionMessageController {
 
     private final DataCollectionMessageService service;
@@ -16,11 +16,16 @@ public class DataCollectionMessageController {
         this.service = service;
     }
 
-    @GetMapping
+    @GetMapping("/messages")
     public List<DataCollectionMessage> listMessages(
             @RequestParam(name = "severity", required = false) String severity,
             @RequestParam(name = "collector", required = false) String collector,
             @RequestParam(name = "limit", required = false) Integer limit) {
         return service.findMessages(severity, collector, limit);
+    }
+
+    @GetMapping("/intraday-summary")
+    public IntradaySummary getIntradaySummary() {
+        return service.buildIntradaySummary();
     }
 }
