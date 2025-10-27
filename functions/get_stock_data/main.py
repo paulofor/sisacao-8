@@ -13,7 +13,16 @@ except ModuleNotFoundError:  # pragma: no cover - optional dependency
     pd = None  # type: ignore[assignment]
 import requests  # type: ignore[import-untyped]
 from google.cloud import bigquery  # type: ignore[import-untyped]
-from pytz import timezone  # type: ignore[import-untyped]
+
+try:
+    from pytz import timezone  # type: ignore[import-untyped]
+except ModuleNotFoundError:  # pragma: no cover - fallback when pytz is absent
+    from zoneinfo import ZoneInfo
+
+    def timezone(name: str):
+        """Return ``ZoneInfo`` instance mimicking :func:`pytz.timezone`."""
+
+        return ZoneInfo(name)
 
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "WARNING").upper()
 logging.basicConfig(

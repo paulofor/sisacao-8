@@ -11,7 +11,16 @@ try:
 except ModuleNotFoundError:  # pragma: no cover - optional dependency
     pd = None  # type: ignore[assignment]
 from google.cloud import bigquery  # type: ignore[import-untyped]
-from pytz import timezone  # type: ignore[import-untyped]
+
+try:
+    from pytz import timezone  # type: ignore[import-untyped]
+except ModuleNotFoundError:  # pragma: no cover - fallback when pytz is absent
+    from zoneinfo import ZoneInfo
+
+    def timezone(name: str) -> ZoneInfo:  # type: ignore[misc]
+        """Return ``ZoneInfo`` instance mimicking :func:`pytz.timezone`."""
+
+        return ZoneInfo(name)
 
 try:
     from .google_scraper import fetch_google_finance_price
