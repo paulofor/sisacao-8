@@ -10,12 +10,20 @@ def import_get_stock_module(monkeypatch):
     fake_bigquery.Client = lambda *a, **k: None
 
     class DummyJobConfig:
-        def __init__(self, schema=None, write_disposition=None):  # noqa: D401, ANN001
+        def __init__(
+            self,
+            schema=None,
+            write_disposition=None,
+        ):  # noqa: D401, ANN001
             self.schema = schema
             self.write_disposition = write_disposition
 
     class DummySchemaField:
-        def __init__(self, name, field_type):  # noqa: D401, ANN001
+        def __init__(
+            self,
+            name,
+            field_type,
+        ):  # noqa: D401, ANN001
             self.name = name
             self.field_type = field_type
 
@@ -157,4 +165,5 @@ def test_append_dataframe_to_bigquery_without_pandas(monkeypatch):
         f"{module.DATASET_ID}.{module.FECHAMENTO_TABLE_ID}"
     )
     assert captured["rows"][0]["data_pregao"] == "2024-01-03"
-    assert captured["rows"][0]["data_captura"].startswith("2024-01-03T15:45:00")
+    row = captured["rows"][0]
+    assert row["data_captura"].startswith("2024-01-03T15:45:00")
