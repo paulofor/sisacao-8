@@ -6,3 +6,4 @@ google-cloud-bigquery>=3.12
 db-dtypes
 pyarrow
 pytz
+backports.zoneinfo; python_version < "3.9"

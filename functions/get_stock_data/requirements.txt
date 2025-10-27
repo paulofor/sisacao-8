@@ -4,3 +4,4 @@ google-cloud-storage
 pyarrow
 pytz
 requests
+backports.zoneinfo; python_version < "3.9"
