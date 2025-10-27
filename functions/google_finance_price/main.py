@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime
 import logging
+from sys import version_info
 from typing import Any, Dict, Iterable, List, Tuple
 
 try:
@@ -12,10 +13,14 @@ except ModuleNotFoundError:  # pragma: no cover - optional dependency
     pd = None  # type: ignore[assignment]
 from google.cloud import bigquery  # type: ignore[import-untyped]
 
+if version_info >= (3, 9):  # pragma: no branch - runtime dependent import
+    from zoneinfo import ZoneInfo
+else:  # pragma: no branch - runtime dependent import
+    from backports.zoneinfo import ZoneInfo  # type: ignore[import-untyped]
+
 try:
     from pytz import timezone  # type: ignore[import-untyped]
 except ModuleNotFoundError:  # pragma: no cover - fallback when pytz is absent
-    from zoneinfo import ZoneInfo
 
     def timezone(name: str) -> ZoneInfo:  # type: ignore[misc]
         """Return ``ZoneInfo`` instance mimicking :func:`pytz.timezone`."""
