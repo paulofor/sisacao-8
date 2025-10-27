@@ -121,19 +121,35 @@ def test_append_dataframe_without_pandas(monkeypatch):
     class ImportClient:
         project = "import"
 
-        def __init__(self, *args, **kwargs):  # noqa: D401, ANN001
+        def __init__(
+            self,
+            *args,
+            **kwargs,
+        ):  # noqa: D401, ANN001
             return None
 
-        def load_table_from_dataframe(self, *args, **kwargs):  # noqa: D401, ANN001
+        def load_table_from_dataframe(
+            self,
+            *args,
+            **kwargs,
+        ):  # noqa: D401, ANN001
             return SimpleNamespace(result=lambda: None)
 
     class DummyJobConfig:
-        def __init__(self, schema=None, write_disposition=None):  # noqa: D401, ANN001
+        def __init__(
+            self,
+            schema=None,
+            write_disposition=None,
+        ):  # noqa: D401, ANN001
             self.schema = schema
             self.write_disposition = write_disposition
 
     class DummySchemaField:
-        def __init__(self, name, field_type):  # noqa: D401, ANN001
+        def __init__(
+            self,
+            name,
+            field_type,
+        ):  # noqa: D401, ANN001
             self.name = name
             self.field_type = field_type
 
@@ -195,5 +211,6 @@ def test_append_dataframe_without_pandas(monkeypatch):
     )
     assert captured["rows"][0]["data"] == "2024-01-02"
     assert captured["rows"][0]["hora"] == "12:34:00"
-    assert captured["rows"][0]["hora_atual"] == "12:34:00"
-    assert captured["rows"][0]["data_hora_atual"].startswith("2024-01-02T12:34:00")
+    row = captured["rows"][0]
+    assert row["hora_atual"] == "12:34:00"
+    assert row["data_hora_atual"].startswith("2024-01-02T12:34:00")
