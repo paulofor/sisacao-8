@@ -5,9 +5,12 @@ import os
 import zipfile
 from importlib import import_module
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-import pandas as pd  # type: ignore[import-untyped]
+try:
+    import pandas as pd  # type: ignore[import-untyped]
+except ModuleNotFoundError:  # pragma: no cover - optional dependency
+    pd = None  # type: ignore[assignment]
 import requests  # type: ignore[import-untyped]
 from google.cloud import bigquery  # type: ignore[import-untyped]
 from pytz import timezone  # type: ignore[import-untyped]
@@ -248,19 +251,28 @@ def download_from_b3(
     return result
 
 
-def append_dataframe_to_bigquery(df: pd.DataFrame) -> None:
-    """Append daily closing prices to the dedicated BigQuery table."""
-    try:
-        logging.warning(
-            "DataFrame recebido com %s linhas e colunas %s",
-            len(df),
-            list(df.columns),
-        )
-        if "data_pregao" in df.columns:
-            df["data_pregao"] = pd.to_datetime(df["data_pregao"]).dt.date
-        if "data_captura" in df.columns:
-            df["data_captura"] = pd.to_datetime(df["data_captura"])
+def _normalize_rows(rows: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Normalize payload rows for BigQuery JSON ingestion."""
 
+    normalized: List[Dict[str, Any]] = []
+    for row in rows:
+        record = dict(row)
+        data_value = record.get("data_pregao")
+        if isinstance(data_value, datetime.datetime):
+            record["data_pregao"] = data_value.date().isoformat()
+        elif isinstance(data_value, datetime.date):
+            record["data_pregao"] = data_value.isoformat()
+        captura_value = record.get("data_captura")
+        if isinstance(captura_value, datetime.datetime):
+            record["data_captura"] = captura_value.isoformat()
+        normalized.append(record)
+    return normalized
+
+
+def append_dataframe_to_bigquery(data: Any) -> None:
+    """Append closing prices to BigQuery accepting DataFrame or JSON rows."""
+
+    try:
         tabela_id = f"{client.project}.{DATASET_ID}.{FECHAMENTO_TABLE_ID}"
         logging.warning("Tabela de destino: %s", tabela_id)
         job_config = bigquery.LoadJobConfig(
@@ -274,15 +286,42 @@ def append_dataframe_to_bigquery(df: pd.DataFrame) -> None:
             write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
         )
 
-        job = client.load_table_from_dataframe(
-            df,
-            tabela_id,
-            job_config=job_config,
-        )
+        inserted_rows: int
+        if pd is not None and isinstance(data, pd.DataFrame):
+            df = data.copy()
+            logging.warning(
+                "DataFrame recebido com %s linhas e colunas %s",
+                len(df),
+                list(df.columns),
+            )
+            if "data_pregao" in df.columns:
+                df["data_pregao"] = pd.to_datetime(df["data_pregao"]).dt.date
+            if "data_captura" in df.columns:
+                df["data_captura"] = pd.to_datetime(df["data_captura"])
+
+            job = client.load_table_from_dataframe(
+                df,
+                tabela_id,
+                job_config=job_config,
+            )
+            inserted_rows = len(df)
+        else:
+            rows = list(data) if not isinstance(data, list) else data
+            logging.warning(
+                "Recebidas %s linhas sem suporte a pandas instalado.",
+                len(rows),
+            )
+            normalized_rows = _normalize_rows(rows)
+            job = client.load_table_from_json(
+                normalized_rows,
+                tabela_id,
+                job_config=job_config,
+            )
+            inserted_rows = len(rows)
         job.result()
         logging.warning(
-            "DataFrame com %s linhas inserido com sucesso no BigQuery.",
-            len(df),
+            "Dados inseridos com sucesso no BigQuery (%s linhas).",
+            inserted_rows,
         )
     except Exception as exc:  # noqa: BLE001
         logging.warning(
@@ -351,16 +390,23 @@ def get_stock_data(request):
             )
             return "No data loaded"
 
-        df = pd.DataFrame(rows)
-        logging.warning(
-            "DataFrame final com %s linhas será enviado ao BigQuery.",
-            len(df),
-        )
-        logging.warning(
-            "Pré-visualização do DataFrame:\n%s",
-            df.head(),
-        )
-        append_dataframe_to_bigquery(df)
+        if pd is not None:
+            df = pd.DataFrame(rows)
+            logging.warning(
+                "DataFrame final com %s linhas será enviado ao BigQuery.",
+                len(df),
+            )
+            logging.warning(
+                "Pré-visualização do DataFrame:\n%s",
+                df.head(),
+            )
+            append_dataframe_to_bigquery(df)
+        else:
+            logging.warning(
+                "Pandas não está instalado. Enviando %s linhas como JSON.",
+                len(rows),
+            )
+            append_dataframe_to_bigquery(rows)
 
         return "Success"
 

@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import datetime
 import logging
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, Iterable, List, Tuple
 
-import pandas as pd  # type: ignore[import-untyped]
+try:
+    import pandas as pd  # type: ignore[import-untyped]
+except ModuleNotFoundError:  # pragma: no cover - optional dependency
+    pd = None  # type: ignore[assignment]
 from google.cloud import bigquery  # type: ignore[import-untyped]
 from pytz import timezone  # type: ignore[import-untyped]
 
@@ -28,27 +31,45 @@ TABELA_ID = "cotacao_bovespa"
 client = bigquery.Client()
 
 
-def append_dataframe_to_bigquery(df: pd.DataFrame) -> None:
-    """Append a DataFrame to the BigQuery table."""
-    try:
-        logger.warning(
-            "DataFrame received with %s rows and columns %s",
-            len(df),
-            list(df.columns),
-        )
-        if "data" in df.columns:
-            df["data"] = pd.to_datetime(df["data"]).dt.date
-        if "hora" in df.columns:
-            df["hora"] = pd.to_datetime(df["hora"], format="%H:%M").dt.time
-        if "hora_atual" in df.columns:
-            hora_atual_col = pd.to_datetime(
-                df["hora_atual"],
-                format="%H:%M",
-            )
-            df["hora_atual"] = hora_atual_col.dt.time
-        if "data_hora_atual" in df.columns:
-            df["data_hora_atual"] = pd.to_datetime(df["data_hora_atual"])
+def _normalize_time_value(raw_value: Any) -> str:
+    """Return a BigQuery compatible ``TIME`` value."""
 
+    if isinstance(raw_value, datetime.time):
+        return raw_value.strftime("%H:%M:%S")
+    value = str(raw_value)
+    if len(value) == 5:
+        return f"{value}:00"
+    if len(value) == 8:
+        return value
+    return value
+
+
+def _normalize_rows(rows: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Convert iterable of rows into BigQuery friendly dictionaries."""
+
+    normalized: List[Dict[str, Any]] = []
+    for row in rows:
+        record = dict(row)
+        data_value = record.get("data")
+        if isinstance(data_value, datetime.date):
+            record["data"] = data_value.isoformat()
+        hora_value = record.get("hora")
+        if hora_value is not None:
+            record["hora"] = _normalize_time_value(hora_value)
+        hora_atual_value = record.get("hora_atual")
+        if hora_atual_value is not None:
+            record["hora_atual"] = _normalize_time_value(hora_atual_value)
+        data_hora_value = record.get("data_hora_atual")
+        if isinstance(data_hora_value, datetime.datetime):
+            record["data_hora_atual"] = data_hora_value.isoformat()
+        normalized.append(record)
+    return normalized
+
+
+def append_dataframe_to_bigquery(data: Any) -> None:
+    """Append data to the BigQuery table accepting DataFrame or JSON rows."""
+
+    try:
         tabela_id = f"{client.project}.{DATASET_ID}.{TABELA_ID}"
         logger.warning("Destination table: %s", tabela_id)
         job_config = bigquery.LoadJobConfig(
@@ -63,15 +84,49 @@ def append_dataframe_to_bigquery(df: pd.DataFrame) -> None:
             write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
         )
 
-        job = client.load_table_from_dataframe(
-            df,
-            tabela_id,
-            job_config=job_config,
-        )
+        inserted_rows: int
+        if pd is not None and isinstance(data, pd.DataFrame):
+            df = data.copy()
+            logger.warning(
+                "DataFrame received with %s rows and columns %s",
+                len(df),
+                list(df.columns),
+            )
+            if "data" in df.columns:
+                df["data"] = pd.to_datetime(df["data"]).dt.date
+            if "hora" in df.columns:
+                df["hora"] = pd.to_datetime(df["hora"], format="%H:%M").dt.time
+            if "hora_atual" in df.columns:
+                hora_atual_col = pd.to_datetime(
+                    df["hora_atual"],
+                    format="%H:%M",
+                )
+                df["hora_atual"] = hora_atual_col.dt.time
+            if "data_hora_atual" in df.columns:
+                df["data_hora_atual"] = pd.to_datetime(df["data_hora_atual"])
+
+            job = client.load_table_from_dataframe(
+                df,
+                tabela_id,
+                job_config=job_config,
+            )
+            inserted_rows = len(df)
+        else:
+            rows = list(data) if not isinstance(data, list) else data
+            logger.warning(
+                "Received %s rows without pandas installed", len(rows)
+            )
+            normalized_rows = _normalize_rows(rows)
+            job = client.load_table_from_json(
+                normalized_rows,
+                tabela_id,
+                job_config=job_config,
+            )
+            inserted_rows = len(rows)
         job.result()
         logger.warning(
-            "DataFrame with %s rows inserted successfully into BigQuery.",
-            len(df),
+            "Data inserted successfully into BigQuery (%s rows).",
+            inserted_rows,
         )
     except Exception as exc:  # noqa: BLE001
         logger.warning(
@@ -86,8 +141,12 @@ def fetch_active_tickers() -> List[str]:
     table_id = f"{client.project}.{DATASET_ID}.acao_bovespa"
     query = f"SELECT ticker FROM `{table_id}` WHERE ativo = TRUE"
     try:
-        df = client.query(query).to_dataframe()
-        return df["ticker"].astype(str).tolist()
+        query_job = client.query(query)
+        if pd is not None:
+            df = query_job.to_dataframe()
+            return df["ticker"].astype(str).tolist()
+        results = query_job.result()
+        return [str(row["ticker"]) for row in results]
     except Exception as exc:  # noqa: BLE001
         logger.warning(
             "Failed to fetch active tickers: %s",
@@ -137,8 +196,15 @@ def google_finance_price(request: Any) -> Tuple[Dict[str, Any], int]:
             errors.append(str(exc))
 
     if rows:
-        df = pd.DataFrame(rows)
-        append_dataframe_to_bigquery(df)
+        if pd is not None:
+            df = pd.DataFrame(rows)
+            append_dataframe_to_bigquery(df)
+        else:
+            logger.warning(
+                "Pandas is not installed. Loading %s rows using JSON payload.",
+                len(rows),
+            )
+            append_dataframe_to_bigquery(rows)
 
     if rows:
         return {"tickers": tickers, "processed": len(rows)}, 200
