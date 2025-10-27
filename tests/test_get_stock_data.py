@@ -1,3 +1,4 @@
+import datetime
 import importlib
 import os
 import sys
@@ -7,6 +8,23 @@ import types
 def import_get_stock_module(monkeypatch):
     fake_bigquery = types.ModuleType("bigquery")
     fake_bigquery.Client = lambda *a, **k: None
+
+    class DummyJobConfig:
+        def __init__(self, schema=None, write_disposition=None):  # noqa: D401, ANN001
+            self.schema = schema
+            self.write_disposition = write_disposition
+
+    class DummySchemaField:
+        def __init__(self, name, field_type):  # noqa: D401, ANN001
+            self.name = name
+            self.field_type = field_type
+
+    class DummyWriteDisposition:
+        WRITE_APPEND = "WRITE_APPEND"
+
+    fake_bigquery.LoadJobConfig = DummyJobConfig
+    fake_bigquery.SchemaField = DummySchemaField
+    fake_bigquery.WriteDisposition = DummyWriteDisposition
     fake_cloud = types.ModuleType("cloud")
     fake_cloud.bigquery = fake_bigquery
     fake_google = types.ModuleType("google")
@@ -98,3 +116,45 @@ def test_load_configured_tickers_fallbacks_to_file(monkeypatch):
     )
     tickers = module.load_configured_tickers()
     assert tickers == ["YDUQ3"]
+
+
+def test_append_dataframe_to_bigquery_without_pandas(monkeypatch):
+    module = import_get_stock_module(monkeypatch)
+    monkeypatch.setattr(module, "pd", None, raising=False)
+
+    captured = {}
+
+    class FakeJob:
+        def result(self):  # noqa: D401
+            return None
+
+    class FakeClient:
+        project = "test-project"
+
+        def load_table_from_json(  # noqa: D401
+            self, rows, table_id, job_config
+        ):
+            captured["rows"] = rows
+            captured["table_id"] = table_id
+            captured["schema"] = job_config.schema
+            return FakeJob()
+
+    monkeypatch.setattr(module, "client", FakeClient(), raising=False)
+
+    rows = [
+        {
+            "ticker": "YDUQ3",
+            "data_pregao": datetime.date(2024, 1, 3),
+            "preco_fechamento": 12.34,
+            "data_captura": datetime.datetime(2024, 1, 3, 15, 45),
+            "fonte": module.FONTE_FECHAMENTO,
+        }
+    ]
+
+    module.append_dataframe_to_bigquery(rows)
+
+    assert captured["table_id"].endswith(
+        f"{module.DATASET_ID}.{module.FECHAMENTO_TABLE_ID}"
+    )
+    assert captured["rows"][0]["data_pregao"] == "2024-01-03"
+    assert captured["rows"][0]["data_captura"].startswith("2024-01-03T15:45:00")
