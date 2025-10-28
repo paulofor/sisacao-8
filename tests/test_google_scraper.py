@@ -19,6 +19,13 @@ def test_extract_price_from_html_wrong_class():
         gf_scraper.extract_price_from_html(html)
 
 
+def test_extract_price_from_html_without_bs4(monkeypatch):
+    monkeypatch.setattr(gf_scraper, "BeautifulSoup", None)
+    with pytest.raises(ModuleNotFoundError) as excinfo:
+        gf_scraper.extract_price_from_html("<div></div>")
+    assert "beautifulsoup4" in str(excinfo.value)
+
+
 def test_fetch_google_finance_price_ibov(monkeypatch):
     captured = {}
 
