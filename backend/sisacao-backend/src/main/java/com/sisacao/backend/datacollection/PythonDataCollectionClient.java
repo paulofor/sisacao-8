@@ -20,6 +20,8 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -63,8 +65,7 @@ public class PythonDataCollectionClient {
             throw exception;
         }
 
-        ProcessBuilder processBuilder =
-                new ProcessBuilder(pythonExecutable, scriptPath.toString()).redirectErrorStream(true);
+        ProcessBuilder processBuilder = new ProcessBuilder(pythonExecutable, scriptPath.toString());
         if (pythonRoot != null) {
             Map<String, String> environment = processBuilder.environment();
             prependPath(environment, "PYTHONPATH", pythonRoot.toString());
@@ -75,21 +76,32 @@ public class PythonDataCollectionClient {
             LOGGER.debug(
                     "Executing data collection script using '{}' at '{}'", pythonExecutable, scriptPath);
             Process process = processBuilder.start();
-            String output = readOutput(process.getInputStream());
+            CompletableFuture<String> stdoutFuture = readStreamAsync(process.getInputStream());
+            CompletableFuture<String> stderrFuture = readStreamAsync(process.getErrorStream());
             boolean finished = process.waitFor(timeout.toMillis(), TimeUnit.MILLISECONDS);
             if (!finished) {
                 process.destroyForcibly();
                 IllegalStateException exception =
                         new IllegalStateException("Python script execution timed out after " + timeout);
+                String stdout = safeJoin(stdoutFuture, "stdout");
+                String stderr = safeJoin(stderrFuture, "stderr");
+                logScriptStreams(stdout, stderr);
                 LOGGER.error("Python data collection script timed out after {}", timeout, exception);
                 throw exception;
             }
 
             int exitCode = process.exitValue();
+            String stderr = safeJoin(stderrFuture, "stderr");
+            String output = safeJoin(stdoutFuture, "stdout");
+            logScriptStreams(output, stderr);
             if (exitCode != 0) {
                 IllegalStateException exception =
                         new IllegalStateException(
-                                "Python script exited with status " + exitCode + " and output: " + output);
+                                "Python script exited with status "
+                                        + exitCode
+                                        + " and stdout: "
+                                        + output
+                                        + appendIfNotBlank("; stderr: ", stderr));
                 LOGGER.error(
                         "Python data collection script exited abnormally with status {} and output: {}",
                         exitCode,
@@ -113,6 +125,43 @@ public class PythonDataCollectionClient {
             Thread.currentThread().interrupt();
             LOGGER.error("Python data collection execution was interrupted", ex);
             throw new IllegalStateException("Failed to execute python script", ex);
+        }
+    }
+
+    private void logScriptStreams(String stdout, String stderr) {
+        if (LOGGER.isDebugEnabled() && !stdout.isBlank()) {
+            LOGGER.debug("Python data collection script stdout: {}", stdout);
+        }
+        if (LOGGER.isDebugEnabled() && !stderr.isBlank()) {
+            LOGGER.debug("Python data collection script stderr: {}", stderr);
+        }
+    }
+
+    private String appendIfNotBlank(String prefix, String value) {
+        if (value == null || value.isBlank()) {
+            return "";
+        }
+        return prefix + value;
+    }
+
+    private CompletableFuture<String> readStreamAsync(InputStream stream) {
+        return CompletableFuture.supplyAsync(
+                () -> {
+                    try {
+                        return readOutput(stream);
+                    } catch (IOException ex) {
+                        throw new CompletionException(ex);
+                    }
+                });
+    }
+
+    private String safeJoin(CompletableFuture<String> future, String streamName) {
+        try {
+            return future.join();
+        } catch (CompletionException ex) {
+            Throwable cause = ex.getCause() != null ? ex.getCause() : ex;
+            LOGGER.error("Failed to read python {} stream", streamName, cause);
+            throw new IllegalStateException("Failed to read python " + streamName + " stream", cause);
         }
     }
 
@@ -371,8 +420,9 @@ public class PythonDataCollectionClient {
                 new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8))) {
             StringBuilder builder = new StringBuilder();
             String line;
+            String lineSeparator = System.lineSeparator();
             while ((line = reader.readLine()) != null) {
-                builder.append(line);
+                builder.append(line).append(lineSeparator);
             }
             return builder.toString();
         }
