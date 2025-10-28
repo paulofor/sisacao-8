@@ -16,8 +16,10 @@ import requests  # type: ignore[import-untyped]
 
 try:
     from bs4 import BeautifulSoup  # type: ignore[import-untyped]
+    from bs4 import FeatureNotFound  # type: ignore[import-untyped]
 except ModuleNotFoundError:  # pragma: no cover - optional dependency
     BeautifulSoup = None  # type: ignore[assignment]
+    FeatureNotFound = None  # type: ignore[assignment]
 
 # Timeout in seconds for HTTP requests
 TIMEOUT = 10
@@ -90,7 +92,16 @@ def extract_price_from_html(html: str) -> float:
         If the price element is not found or cannot be parsed.
     """
 
-    soup = _ensure_beautifulsoup_available()(html, "html.parser")
+    soup_class = _ensure_beautifulsoup_available()
+    try:
+        soup = soup_class(html, "html.parser")
+    except Exception as exc:  # pragma: no cover - defensive guard
+        if FeatureNotFound is not None and isinstance(exc, FeatureNotFound):
+            raise ModuleNotFoundError(
+                "BeautifulSoup requires an HTML parser. "
+                "Install the 'lxml' package with 'pip install lxml'."
+            ) from exc
+        raise
     price_div = soup.select_one("div.YMlKec.fxKbKc")
     if price_div is None:
         raise ValueError("Could not find price element in HTML")
