@@ -26,6 +26,23 @@ def test_extract_price_from_html_without_bs4(monkeypatch):
     assert "beautifulsoup4" in str(excinfo.value)
 
 
+def test_extract_price_from_html_missing_parser(monkeypatch):
+    if gf_scraper.FeatureNotFound is None:
+        pytest.skip("BeautifulSoup is not installed")
+
+    class DummySoup:
+        def __call__(self, *_args, **_kwargs):  # noqa: D401, ANN001
+            raise gf_scraper.FeatureNotFound("lxml")
+
+    monkeypatch.setattr(gf_scraper, "_ensure_beautifulsoup_available", lambda: DummySoup())
+
+    with pytest.raises(ModuleNotFoundError) as excinfo:
+        gf_scraper.extract_price_from_html("<div></div>")
+
+    message = str(excinfo.value)
+    assert "pip install lxml" in message
+
+
 def test_fetch_google_finance_price_ibov(monkeypatch):
     captured = {}
 
