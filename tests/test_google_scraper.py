@@ -19,6 +19,16 @@ def test_extract_price_from_html_wrong_class():
         gf_scraper.extract_price_from_html(html)
 
 
+def test_extract_price_from_html_span_selector():
+    html = '<span class="YMlKec fxKbKc">R$ 15,75</span>'
+    assert gf_scraper.extract_price_from_html(html) == pytest.approx(15.75)
+
+
+def test_extract_price_from_html_data_last_price():
+    html = '<div data-last-price="123,45"></div>'
+    assert gf_scraper.extract_price_from_html(html) == pytest.approx(123.45)
+
+
 def test_extract_price_from_html_without_bs4(monkeypatch):
     monkeypatch.setattr(gf_scraper, "BeautifulSoup", None)
     with pytest.raises(ModuleNotFoundError) as excinfo:

@@ -91,12 +91,28 @@ def extract_price_from_html(html: str) -> float:
     """
 
     soup = _ensure_beautifulsoup_available()(html, "html.parser")
-    price_div = soup.select_one("div.YMlKec.fxKbKc")
-    if price_div is None:
-        raise ValueError("Could not find price element in HTML")
 
-    price_text = price_div.get_text(strip=True)
-    return _parse_number(price_text)
+    selectors = [
+        "div.YMlKec.fxKbKc",
+        "span.YMlKec.fxKbKc",
+        "div[data-last-price]",
+        "span[data-last-price]",
+    ]
+
+    for selector in selectors:
+        element = soup.select_one(selector)
+        if element is None:
+            continue
+
+        if element.has_attr("data-last-price"):
+            price_text = element["data-last-price"].strip()
+        else:
+            price_text = element.get_text(strip=True)
+
+        if price_text:
+            return _parse_number(price_text)
+
+    raise ValueError("Could not find price element in HTML")
 
 
 def fetch_google_finance_price(
