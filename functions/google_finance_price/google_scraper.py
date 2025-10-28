@@ -13,12 +13,27 @@ import re
 from typing import Optional
 
 import requests  # type: ignore[import-untyped]
-from bs4 import BeautifulSoup  # type: ignore[import-untyped]
+
+try:
+    from bs4 import BeautifulSoup  # type: ignore[import-untyped]
+except ModuleNotFoundError:  # pragma: no cover - optional dependency
+    BeautifulSoup = None  # type: ignore[assignment]
 
 # Timeout in seconds for HTTP requests
 TIMEOUT = 10
 
 logger = logging.getLogger(__name__)
+
+
+def _ensure_beautifulsoup_available():
+    """Return the ``BeautifulSoup`` class or raise a helpful error."""
+
+    if BeautifulSoup is None:  # pragma: no branch - runtime guard
+        raise ModuleNotFoundError(
+            "BeautifulSoup is required to parse Google Finance HTML. "
+            "Install the 'beautifulsoup4' package."
+        )
+    return BeautifulSoup
 
 
 def _parse_number(value: str) -> float:
@@ -75,7 +90,7 @@ def extract_price_from_html(html: str) -> float:
         If the price element is not found or cannot be parsed.
     """
 
-    soup = BeautifulSoup(html, "html.parser")
+    soup = _ensure_beautifulsoup_available()(html, "html.parser")
     price_div = soup.select_one("div.YMlKec.fxKbKc")
     if price_div is None:
         raise ValueError("Could not find price element in HTML")
