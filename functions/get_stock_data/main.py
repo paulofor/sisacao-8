@@ -18,16 +18,30 @@ from google.cloud import bigquery  # type: ignore[import-untyped]
 if version_info >= (3, 9):  # pragma: no branch - runtime dependent import
     from zoneinfo import ZoneInfo
 else:  # pragma: no branch - runtime dependent import
-    from backports.zoneinfo import ZoneInfo  # type: ignore[import-untyped]
+    try:
+        from backports.zoneinfo import ZoneInfo  # type: ignore[import-untyped]
+    except ModuleNotFoundError:  # pragma: no cover - optional dependency
+        ZoneInfo = None  # type: ignore[assignment]
 
 try:
     from pytz import timezone  # type: ignore[import-untyped]
 except ModuleNotFoundError:  # pragma: no cover - fallback when pytz is absent
 
-    def timezone(name: str):
-        """Return ``ZoneInfo`` instance mimicking :func:`pytz.timezone`."""
+    def timezone(name: str):  # type: ignore[misc]
+        """Return timezone instance even when optional deps are missing."""
 
-        return ZoneInfo(name)
+        if ZoneInfo is not None:  # pragma: no branch - runtime guard
+            return ZoneInfo(name)
+
+        if name != "America/Sao_Paulo":  # pragma: no cover - defensive branch
+            raise ModuleNotFoundError(
+                f"Timezone support unavailable for name: {name}"
+            )
+
+        return datetime.timezone(  # type: ignore[return-value]
+            datetime.timedelta(hours=-3),
+            name,
+        )
 
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "WARNING").upper()
 logging.basicConfig(
