@@ -34,7 +34,14 @@ def test_extract_price_from_html_missing_parser(monkeypatch):
         def __call__(self, *_args, **_kwargs):  # noqa: D401, ANN001
             raise gf_scraper.FeatureNotFound("lxml")
 
-    monkeypatch.setattr(gf_scraper, "_ensure_beautifulsoup_available", lambda: DummySoup())
+    def dummy_soup_factory():
+        return DummySoup()
+
+    monkeypatch.setattr(
+        gf_scraper,
+        "_ensure_beautifulsoup_available",
+        dummy_soup_factory,
+    )
 
     with pytest.raises(ModuleNotFoundError) as excinfo:
         gf_scraper.extract_price_from_html("<div></div>")
@@ -61,7 +68,5 @@ def test_fetch_google_finance_price_ibov(monkeypatch):
     monkeypatch.setattr(gf_scraper.requests, "get", fake_get)
     price = gf_scraper.fetch_google_finance_price("IBOV")
     assert price == pytest.approx(10.50)
-    assert (
-        captured["url"]
-        == "https://www.google.com/finance/quote/IBOV:INDEXBVMF"  # noqa: E501
-    )
+    expected_url = "https://www.google.com/finance/quote/IBOV:INDEXBVMF"
+    assert captured["url"] == expected_url
