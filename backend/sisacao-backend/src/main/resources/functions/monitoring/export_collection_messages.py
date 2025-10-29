@@ -103,6 +103,28 @@ def _error_message(
     }
 
 
+def _exception_details(error: BaseException) -> Dict[str, Any]:
+    """Return structured diagnostic details for ``error``."""
+
+    details: Dict[str, Any] = {
+        "type": error.__class__.__name__,
+        "message": str(error),
+    }
+    extra = getattr(error, "details", None)
+    if callable(extra):
+        try:
+            extra = extra()
+        except Exception:  # pragma: no cover - defensive
+            extra = None
+    if isinstance(extra, dict):
+        for key, value in extra.items():
+            details.setdefault(key, value)
+    cause = getattr(error, "__cause__", None)
+    if cause is not None:
+        details.setdefault("cause", f"{cause.__class__.__name__}: {cause}")
+    return details
+
+
 def _load_tickers(get_stock_module: Any) -> List[str]:
     """Load configured tickers using the helper from ``get_stock_data``."""
 
@@ -164,13 +186,21 @@ def _build_intraday_failure_message(
     if not normalized_tickers:
         normalized_tickers = DEFAULT_INTRADAY_TICKERS[:5]
     reason = f"{summary}: {error}"
-    failures = {ticker: str(error) for ticker in normalized_tickers}
+    detailed_failures = {
+        ticker: _exception_details(error) for ticker in normalized_tickers
+    }
+    failures = {
+        ticker: details.get("message", str(error))
+        for ticker, details in detailed_failures.items()
+    }
     metadata: Dict[str, Any] = {
         "fonte": "google_finance",
         "tickersSolicitados": normalized_tickers,
         "falhas": failures,
         "error": str(error),
     }
+    if detailed_failures:
+        metadata["falhasDetalhadas"] = detailed_failures
     return {
         "id": f"google-finance-error-{int(time.time() * 1000)}",
         "collector": "google_finance_price",
@@ -365,23 +395,27 @@ def _collect_google_message() -> Dict[str, Any]:
         )
 
     results: List[Dict[str, Any]] = []
-    errors: Dict[str, str] = {}
+    failure_messages: Dict[str, str] = {}
+    failure_details: Dict[str, Dict[str, Any]] = {}
     for ticker in tickers:
         try:
             price = fetch_google_finance_price(ticker)
         except Exception as exc:  # noqa: BLE001
-            errors[ticker] = str(exc)
+            details = _exception_details(exc)
+            details.setdefault("ticker", ticker)
+            failure_details[ticker] = details
+            failure_messages[ticker] = details.get("message", str(exc))
             continue
         results.append({"ticker": ticker, "valor": round(float(price), 2)})
 
-    if results and not errors:
+    if results and not failure_details:
         severity = "SUCCESS"
         summary = f"Preços intraday capturados para {len(results)} tickers."
     elif results:
         severity = "WARNING"
         summary = (
             "Preços intraday parcialmente capturados "
-            f"({len(results)} sucesso, {len(errors)} falhas)."
+            f"({len(results)} sucesso, {len(failure_details)} falhas)."
         )
     else:
         severity = "ERROR"
@@ -393,8 +427,10 @@ def _collect_google_message() -> Dict[str, Any]:
     }
     if results:
         metadata["cotacoes"] = results
-    if errors:
-        metadata["falhas"] = errors
+    if failure_messages:
+        metadata["falhas"] = failure_messages
+    if failure_details:
+        metadata["falhasDetalhadas"] = failure_details
 
     message = {
         "id": f"google-finance-{int(time.time() * 1000)}",
@@ -406,7 +442,7 @@ def _collect_google_message() -> Dict[str, Any]:
         "metadata": metadata,
     }
     if severity == "ERROR":
-        message["metadata"]["error"] = errors or summary
+        message["metadata"]["error"] = failure_messages or summary
     return message
 
 
