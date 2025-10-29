@@ -46,7 +46,14 @@ try:
         fetch_google_finance_price,
     )
 except ImportError:  # pragma: no cover - fallback when imported as a package
-    from .google_scraper import fetch_google_finance_price
+    try:
+        from .google_scraper import fetch_google_finance_price
+    except ImportError:  # pragma: no cover - when executed as a script in Cloud Run
+        import importlib
+
+        fetch_google_finance_price = importlib.import_module(
+            "google_scraper"
+        ).fetch_google_finance_price
 
 logger = logging.getLogger(__name__)
 
