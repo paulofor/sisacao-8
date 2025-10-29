@@ -21,9 +21,8 @@ def test_extract_price_from_html_wrong_class():
 
 def test_extract_price_from_html_without_bs4(monkeypatch):
     monkeypatch.setattr(gf_scraper, "BeautifulSoup", None)
-    with pytest.raises(ModuleNotFoundError) as excinfo:
-        gf_scraper.extract_price_from_html("<div></div>")
-    assert "beautifulsoup4" in str(excinfo.value)
+    price = gf_scraper.extract_price_from_html('<div class="YMlKec fxKbKc">R$ 10,50</div>')
+    assert price == pytest.approx(10.50)
 
 
 def test_extract_price_from_html_missing_parser(monkeypatch):
@@ -34,14 +33,7 @@ def test_extract_price_from_html_missing_parser(monkeypatch):
         def __call__(self, *_args, **_kwargs):  # noqa: D401, ANN001
             raise gf_scraper.FeatureNotFound("lxml")
 
-    def dummy_soup_factory():
-        return DummySoup()
-
-    monkeypatch.setattr(
-        gf_scraper,
-        "_ensure_beautifulsoup_available",
-        dummy_soup_factory,
-    )
+    monkeypatch.setattr(gf_scraper, "BeautifulSoup", DummySoup())
 
     with pytest.raises(ModuleNotFoundError) as excinfo:
         gf_scraper.extract_price_from_html("<div></div>")

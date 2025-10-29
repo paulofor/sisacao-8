@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import re
+from html import unescape
 from typing import Optional
 
 import requests  # type: ignore[import-untyped]
@@ -27,15 +28,21 @@ TIMEOUT = 10
 logger = logging.getLogger(__name__)
 
 
-def _ensure_beautifulsoup_available():
-    """Return the ``BeautifulSoup`` class or raise a helpful error."""
+def _extract_price_with_regex(html: str) -> float:
+    """Extract price using a lightweight regex-based fallback."""
 
-    if BeautifulSoup is None:  # pragma: no branch - runtime guard
-        raise ModuleNotFoundError(
-            "BeautifulSoup is required to parse Google Finance HTML. "
-            "Install the 'beautifulsoup4' package."
-        )
-    return BeautifulSoup
+    pattern = re.compile(
+        r"<div[^>]*class=(['\"])(?P<classes>[^'\"]*?)\1[^>]*>(?P<content>.*?)</div>",
+        re.DOTALL,
+    )
+    for match in pattern.finditer(html):
+        classes = set(match.group("classes").split())
+        if {"YMlKec", "fxKbKc"}.issubset(classes):
+            raw_content = re.sub(r"<[^>]+>", "", match.group("content"))
+            price_text = unescape(raw_content).strip()
+            if price_text:
+                return _parse_number(price_text)
+    raise ValueError("Could not find price element in HTML")
 
 
 def _parse_number(value: str) -> float:
@@ -92,22 +99,27 @@ def extract_price_from_html(html: str) -> float:
         If the price element is not found or cannot be parsed.
     """
 
-    soup_class = _ensure_beautifulsoup_available()
-    try:
-        soup = soup_class(html, "html.parser")
-    except Exception as exc:  # pragma: no cover - defensive guard
-        if FeatureNotFound is not None and isinstance(exc, FeatureNotFound):
-            raise ModuleNotFoundError(
-                "BeautifulSoup requires an HTML parser. "
-                "Install the 'lxml' package with 'pip install lxml'."
-            ) from exc
-        raise
-    price_div = soup.select_one("div.YMlKec.fxKbKc")
-    if price_div is None:
-        raise ValueError("Could not find price element in HTML")
+    if BeautifulSoup is not None:
+        try:
+            soup = BeautifulSoup(html, "html.parser")
+        except Exception as exc:  # pragma: no cover - defensive guard
+            if FeatureNotFound is not None and isinstance(exc, FeatureNotFound):
+                raise ModuleNotFoundError(
+                    "BeautifulSoup requires an HTML parser. "
+                    "Install the 'lxml' package with 'pip install lxml'."
+                ) from exc
+            logger.warning("BeautifulSoup failed to parse HTML", exc_info=True)
+        else:
+            price_div = soup.select_one("div.YMlKec.fxKbKc")
+            if price_div is not None:
+                price_text = price_div.get_text(strip=True)
+                if price_text:
+                    return _parse_number(price_text)
+            logger.warning(
+                "BeautifulSoup could not find price element; falling back to regex",
+            )
 
-    price_text = price_div.get_text(strip=True)
-    return _parse_number(price_text)
+    return _extract_price_with_regex(html)
 
 
 def fetch_google_finance_price(
