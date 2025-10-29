@@ -85,6 +85,81 @@ const asString = (value: unknown, fallback = ''): string => {
   return fallback
 }
 
+const asNullableString = (value: unknown): string | null => {
+  const result = asString(value).trim()
+  return result ? result : null
+}
+
+const normalizeNumericString = (value: string): number | null => {
+  const trimmed = value.trim()
+  if (!trimmed) {
+    return null
+  }
+
+  const sanitized = trimmed.replace(/[^0-9.,-]/g, '')
+  if (!sanitized) {
+    return null
+  }
+
+  const commaIndex = sanitized.lastIndexOf(',')
+  const dotIndex = sanitized.lastIndexOf('.')
+  let normalized = sanitized
+
+  if (commaIndex >= 0 && dotIndex >= 0) {
+    if (commaIndex > dotIndex) {
+      normalized = sanitized.replace(/\./g, '').replace(',', '.')
+    } else {
+      normalized = sanitized.replace(/,/g, '')
+    }
+  } else if (commaIndex >= 0) {
+    normalized = sanitized.replace(',', '.')
+  }
+
+  const parsed = Number.parseFloat(normalized)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+const normalizePrice = (value: unknown): number | null => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value
+  }
+
+  if (typeof value === 'string') {
+    return normalizeNumericString(value)
+  }
+
+  if (typeof value === 'object' && value !== null && 'toString' in value) {
+    return normalizeNumericString(String(value))
+  }
+
+  return null
+}
+
+const extractTickerPrice = (ticker: unknown): number | null => {
+  if (ticker === null || typeof ticker !== 'object') {
+    return null
+  }
+
+  const data = ticker as Record<string, unknown>
+  const candidates: Array<unknown> = [
+    data.price,
+    data.valor,
+    data.preco,
+    data.precoFechamento,
+    data.preco_fechamento,
+    data.lastPrice,
+  ]
+
+  for (const candidate of candidates) {
+    const normalized = normalizePrice(candidate)
+    if (normalized !== null) {
+      return normalized
+    }
+  }
+
+  return null
+}
+
 const extractMessageArray = (response: AxiosResponse<unknown>): RawMessage[] => {
   const { data } = response
   if (Array.isArray(data)) {
@@ -176,23 +251,39 @@ export const fetchDataCollectionMessages = async (
     .sort((a, b) => dayjs(b.createdAt).valueOf() - dayjs(a.createdAt).valueOf())
 }
 
+const toInteger = (value: unknown): number => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return Math.trunc(value)
+  }
+
+  if (typeof value === 'string') {
+    const parsed = Number.parseInt(value, 10)
+    return Number.isNaN(parsed) ? 0 : parsed
+  }
+
+  return 0
+}
+
 export const fetchIntradaySummary = async (): Promise<IntradaySummary> => {
-  const response = await apiClient.get<IntradaySummary>('/data-collections/intraday-summary')
-  const summary = response.data
+  const response = await apiClient.get<unknown>('/data-collections/intraday-summary')
+  const summary = response.data as Record<string, unknown>
+  const tickers = Array.isArray(summary.tickers) ? summary.tickers : []
 
   return {
-    updatedAt: summary.updatedAt ?? null,
-    totalTickers: summary.totalTickers ?? 0,
-    successfulTickers: summary.successfulTickers ?? 0,
-    failedTickers: summary.failedTickers ?? 0,
-    tickers: Array.isArray(summary.tickers)
-      ? summary.tickers.map((ticker) => ({
-          ticker: ticker.ticker,
-          price: typeof ticker.price === 'number' ? ticker.price : null,
-          success: Boolean(ticker.success),
-          error: ticker.error ?? null,
-        }))
-      : [],
+    updatedAt: asNullableString(summary.updatedAt),
+    totalTickers: toInteger(summary.totalTickers),
+    successfulTickers: toInteger(summary.successfulTickers),
+    failedTickers: toInteger(summary.failedTickers),
+    tickers: tickers.map((ticker) => {
+      const tickerData = ticker as Record<string, unknown>
+
+      return {
+        ticker: asString(tickerData.ticker),
+        price: extractTickerPrice(ticker),
+        success: Boolean(tickerData.success),
+        error: asNullableString(tickerData.error),
+      }
+    }),
   }
 }
 
