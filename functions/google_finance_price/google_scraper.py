@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 import re
 from html import unescape
-from typing import Optional
+from typing import Any, Dict, Optional
 
 import requests  # type: ignore[import-untyped]
 
@@ -26,6 +26,49 @@ except ModuleNotFoundError:  # pragma: no cover - optional dependency
 TIMEOUT = 10
 
 logger = logging.getLogger(__name__)
+
+
+class GoogleFinancePriceError(RuntimeError):
+    """Custom exception that stores diagnostic details about failures."""
+
+    def __init__(
+        self,
+        ticker: str,
+        message: str,
+        *,
+        url: Optional[str] = None,
+        status: Optional[int] = None,
+        cause: Optional[BaseException] = None,
+        response_excerpt: Optional[str] = None,
+    ) -> None:
+        super().__init__(message)
+        self.ticker = ticker
+        self.url = url
+        self.status = status
+        self.cause = cause
+        self.response_excerpt = response_excerpt
+        base_details: Dict[str, Any] = {
+            "ticker": ticker,
+            "message": message,
+            "type": self.__class__.__name__,
+        }
+        if url:
+            base_details["url"] = url
+        if status is not None:
+            base_details["status"] = status
+        if cause:
+            base_details["cause"] = f"{cause.__class__.__name__}: {cause}"
+        if response_excerpt:
+            base_details["responseExcerpt"] = response_excerpt
+        self._details = base_details
+
+    def details(self) -> Dict[str, Any]:
+        """Return a serialisable dictionary with diagnostic details."""
+
+        # Return a shallow copy to keep the original dictionary immutable.
+        details = dict(self._details)
+        details.setdefault("message", str(self))
+        return details
 
 
 def _extract_price_with_regex(html: str) -> float:
@@ -122,6 +165,16 @@ def extract_price_from_html(html: str) -> float:
     return _extract_price_with_regex(html)
 
 
+def _normalize_excerpt(value: str, limit: int = 280) -> str:
+    """Return a compact excerpt of ``value`` limited to ``limit`` characters."""
+
+    # Collapse whitespace to keep the excerpt concise.
+    cleaned = re.sub(r"\s+", " ", value).strip()
+    if len(cleaned) <= limit:
+        return cleaned
+    return f"{cleaned[: limit - 3]}..."
+
+
 def fetch_google_finance_price(
     ticker: str,
     exchange: str = "BVMF",
@@ -151,13 +204,49 @@ def fetch_google_finance_price(
     logger.warning("Fetching Google Finance URL %s for ticker %s", url, ticker)
     sess = session or requests
     headers = {"User-Agent": "Mozilla/5.0"}
-    response = sess.get(url, headers=headers, timeout=TIMEOUT)
+    try:
+        response = sess.get(url, headers=headers, timeout=TIMEOUT)
+    except requests.RequestException as exc:  # pragma: no cover - network failure
+        status = getattr(getattr(exc, "response", None), "status_code", None)
+        text = getattr(getattr(exc, "response", None), "text", "")
+        raise GoogleFinancePriceError(
+            ticker,
+            f"Falha ao requisitar preço para {ticker}: {exc}",
+            url=url,
+            status=status,
+            cause=exc,
+            response_excerpt=_normalize_excerpt(text) if text else None,
+        ) from exc
+
     logger.warning(
         "Received response with status %s for ticker %s",
         response.status_code,
         ticker,
     )
-    response.raise_for_status()
-    price = extract_price_from_html(response.text)
+
+    try:
+        response.raise_for_status()
+    except requests.HTTPError as exc:
+        raise GoogleFinancePriceError(
+            ticker,
+            f"Resposta HTTP {response.status_code} para {ticker}",
+            url=url,
+            status=response.status_code,
+            cause=exc,
+            response_excerpt=_normalize_excerpt(getattr(response, "text", "")),
+        ) from exc
+
+    try:
+        price = extract_price_from_html(response.text)
+    except ValueError as exc:
+        raise GoogleFinancePriceError(
+            ticker,
+            f"Não foi possível extrair o preço para {ticker}: {exc}",
+            url=url,
+            status=response.status_code,
+            cause=exc,
+            response_excerpt=_normalize_excerpt(response.text),
+        ) from exc
+
     logger.warning("Extracted price %.2f for ticker %s", price, ticker)
     return price

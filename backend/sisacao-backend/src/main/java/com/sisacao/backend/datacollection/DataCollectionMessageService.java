@@ -176,7 +176,7 @@ public class DataCollectionMessageService {
             map.forEach((key, val) -> {
                 if (key != null && val != null) {
                     String ticker = key.toString();
-                    String error = val.toString();
+                    String error = formatFailureDetail(val);
                     result.put(ticker, error);
                 }
             });
@@ -186,12 +186,55 @@ public class DataCollectionMessageService {
                     Object tickerValue = map.get("ticker");
                     Object errorValue = map.get("erro");
                     if (tickerValue != null && errorValue != null) {
-                        result.put(tickerValue.toString(), errorValue.toString());
+                        result.put(tickerValue.toString(), formatFailureDetail(errorValue));
                     }
                 }
             }
         }
         return result;
+    }
+
+    private String formatFailureDetail(Object value) {
+        if (value instanceof Map<?, ?> detailMap) {
+            Object message = detailMap.get("message");
+            Object type = detailMap.get("type");
+            Object status = detailMap.get("status");
+            Object cause = detailMap.get("cause");
+            Object url = detailMap.get("url");
+            Object excerpt = detailMap.get("responseExcerpt");
+
+            StringBuilder builder = new StringBuilder();
+            if (type instanceof String typeStr && !typeStr.isBlank()) {
+                builder.append(typeStr);
+            }
+            if (message != null) {
+                String messageStr = message.toString();
+                if (!messageStr.isBlank()) {
+                    if (builder.length() > 0) {
+                        builder.append(": ");
+                    }
+                    builder.append(messageStr);
+                }
+            }
+            if (status instanceof String statusStr && !statusStr.isBlank()) {
+                builder.append(" (status ").append(statusStr).append(")");
+            } else if (status instanceof Number number) {
+                builder.append(" (status ").append(number).append(")");
+            }
+            if (cause instanceof String causeStr && !causeStr.isBlank()) {
+                builder.append(" — causa: ").append(causeStr);
+            }
+            if (url instanceof String urlStr && !urlStr.isBlank()) {
+                builder.append(" — url: ").append(urlStr);
+            }
+            if (excerpt instanceof String excerptStr && !excerptStr.isBlank()) {
+                builder.append(" — resposta: ").append(excerptStr);
+            }
+            if (builder.length() > 0) {
+                return builder.toString();
+            }
+        }
+        return value != null ? value.toString() : "";
     }
 
     private Double extractDouble(Object value) {

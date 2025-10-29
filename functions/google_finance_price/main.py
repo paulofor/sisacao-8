@@ -184,6 +184,30 @@ def fetch_active_tickers() -> List[str]:
         raise
 
 
+def _exception_details(error: BaseException) -> Dict[str, Any]:
+    """Return structured diagnostic details for ``error``."""
+
+    details: Dict[str, Any] = {
+        "type": error.__class__.__name__,
+        "message": str(error),
+    }
+    extra: Any = None
+    if hasattr(error, "details"):
+        extra = getattr(error, "details")
+        if callable(extra):
+            try:
+                extra = extra()
+            except Exception:  # pragma: no cover - defensive
+                extra = None
+    if isinstance(extra, dict):
+        for key, value in extra.items():
+            details.setdefault(key, value)
+    cause = getattr(error, "__cause__", None)
+    if cause is not None:
+        details.setdefault("cause", f"{cause.__class__.__name__}: {cause}")
+    return details
+
+
 def google_finance_price(request: Any) -> Tuple[Dict[str, Any], int]:
     """HTTP Cloud Run entry point returning latest prices for active
     tickers."""
@@ -200,7 +224,8 @@ def google_finance_price(request: Any) -> Tuple[Dict[str, Any], int]:
         return {"error": str(exc)}, 500
 
     rows = []
-    errors: List[str] = []
+    error_messages: List[str] = []
+    error_details: List[Dict[str, Any]] = []
     for ticker in tickers:
         try:
             price = fetch_google_finance_price(ticker)
@@ -221,7 +246,11 @@ def google_finance_price(request: Any) -> Tuple[Dict[str, Any], int]:
                 exc,
                 exc_info=True,
             )
-            errors.append(str(exc))
+            details = _exception_details(exc)
+            details.setdefault("ticker", ticker)
+            error_details.append(details)
+            message = details.get("message", str(exc))
+            error_messages.append(f"{ticker}: {message}")
 
     if rows:
         if pd is not None:
@@ -235,6 +264,18 @@ def google_finance_price(request: Any) -> Tuple[Dict[str, Any], int]:
             append_dataframe_to_bigquery(rows)
 
     if rows:
-        return {"tickers": tickers, "processed": len(rows)}, 200
+        response: Dict[str, Any] = {
+            "tickers": tickers,
+            "processed": len(rows),
+        }
+        if error_details:
+            response["errors"] = error_details
+        status = 200 if not error_details else 207
+        return response, status
 
-    return {"error": "; ".join(errors) or "No tickers processed"}, 500
+    payload: Dict[str, Any] = {
+        "error": "; ".join(error_messages) or "No tickers processed",
+    }
+    if error_details:
+        payload["errors"] = error_details
+    return payload, 500
