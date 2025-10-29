@@ -11,15 +11,23 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 @Service
 public class DataCollectionMessageService {
 
-    private final PythonDataCollectionClient pythonClient;
+    private static final Logger LOGGER = LoggerFactory.getLogger(DataCollectionMessageService.class);
 
-    public DataCollectionMessageService(PythonDataCollectionClient pythonClient) {
+    private final PythonDataCollectionClient pythonClient;
+    private final Optional<BigQueryCollectionMessageClient> bigQueryClient;
+
+    public DataCollectionMessageService(
+            PythonDataCollectionClient pythonClient,
+            Optional<BigQueryCollectionMessageClient> bigQueryClient) {
         this.pythonClient = pythonClient;
+        this.bigQueryClient = bigQueryClient;
     }
 
     public List<DataCollectionMessage> findMessages(
@@ -35,7 +43,7 @@ public class DataCollectionMessageService {
         Optional<Integer> limit =
                 Optional.ofNullable(limitFilter).filter(value -> value != null && value > 0);
 
-        List<DataCollectionMessage> messages = pythonClient.fetchMessages().stream()
+        List<DataCollectionMessage> messages = loadMessages().stream()
                 .map(this::toDataCollectionMessage)
                 .sorted(Comparator.comparing(DataCollectionMessage::createdAt).reversed())
                 .collect(Collectors.toList());
@@ -59,7 +67,7 @@ public class DataCollectionMessageService {
 
     public IntradaySummary buildIntradaySummary() {
         Optional<PythonDataCollectionClient.PythonMessage> latestIntradayMessage =
-                pythonClient.fetchMessages().stream()
+                loadMessages().stream()
                         .filter(message -> isIntradayDataset(message.dataset()))
                         .max(Comparator.comparing(PythonDataCollectionClient.PythonMessage::createdAt));
 
@@ -68,6 +76,24 @@ public class DataCollectionMessageService {
         }
 
         return toIntradaySummary(latestIntradayMessage.get());
+    }
+
+    private List<PythonDataCollectionClient.PythonMessage> loadMessages() {
+        if (bigQueryClient.isPresent()) {
+            try {
+                List<PythonDataCollectionClient.PythonMessage> messages = bigQueryClient.get().fetchMessages();
+                if (!messages.isEmpty()) {
+                    return messages;
+                }
+                LOGGER.debug(
+                        "BigQuery returned no collection messages. Falling back to python script source.");
+            } catch (RuntimeException ex) {
+                LOGGER.warn(
+                        "Failed to fetch collection messages from BigQuery. Falling back to python script.",
+                        ex);
+            }
+        }
+        return pythonClient.fetchMessages();
     }
 
     private DataCollectionMessage toDataCollectionMessage(PythonDataCollectionClient.PythonMessage raw) {
