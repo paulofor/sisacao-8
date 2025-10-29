@@ -21,7 +21,9 @@ def test_extract_price_from_html_wrong_class():
 
 def test_extract_price_from_html_without_bs4(monkeypatch):
     monkeypatch.setattr(gf_scraper, "BeautifulSoup", None)
-    price = gf_scraper.extract_price_from_html('<div class="YMlKec fxKbKc">R$ 10,50</div>')
+    price = gf_scraper.extract_price_from_html(
+        '<div class="YMlKec fxKbKc">R$ 10,50</div>'
+    )
     assert price == pytest.approx(10.50)
 
 

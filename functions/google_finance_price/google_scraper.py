@@ -75,7 +75,11 @@ def _extract_price_with_regex(html: str) -> float:
     """Extract price using a lightweight regex-based fallback."""
 
     pattern = re.compile(
-        r"<div[^>]*class=(['\"])(?P<classes>[^'\"]*?)\1[^>]*>(?P<content>.*?)</div>",
+        (
+            r"<div[^>]*class=(['\"])"
+            r"(?P<classes>[^'\"]*?)\1[^>]*>"
+            r"(?P<content>.*?)</div>"
+        ),
         re.DOTALL,
     )
     for match in pattern.finditer(html):
@@ -146,7 +150,9 @@ def extract_price_from_html(html: str) -> float:
         try:
             soup = BeautifulSoup(html, "html.parser")
         except Exception as exc:  # pragma: no cover - defensive guard
-            if FeatureNotFound is not None and isinstance(exc, FeatureNotFound):
+            if FeatureNotFound is not None and isinstance(
+                exc, FeatureNotFound
+            ):
                 raise ModuleNotFoundError(
                     "BeautifulSoup requires an HTML parser. "
                     "Install the 'lxml' package with 'pip install lxml'."
@@ -159,14 +165,18 @@ def extract_price_from_html(html: str) -> float:
                 if price_text:
                     return _parse_number(price_text)
             logger.warning(
-                "BeautifulSoup could not find price element; falling back to regex",
+                "BeautifulSoup could not find price element; falling back "
+                "to regex",
             )
 
     return _extract_price_with_regex(html)
 
 
 def _normalize_excerpt(value: str, limit: int = 280) -> str:
-    """Return a compact excerpt of ``value`` limited to ``limit`` characters."""
+    """Return a compact excerpt limited by ``limit`` characters.
+
+    The helper collapses whitespace and truncates the string when necessary.
+    """
 
     # Collapse whitespace to keep the excerpt concise.
     cleaned = re.sub(r"\s+", " ", value).strip()
@@ -206,7 +216,7 @@ def fetch_google_finance_price(
     headers = {"User-Agent": "Mozilla/5.0"}
     try:
         response = sess.get(url, headers=headers, timeout=TIMEOUT)
-    except requests.RequestException as exc:  # pragma: no cover - network failure
+    except requests.RequestException as exc:  # pragma: no cover - network error
         status = getattr(getattr(exc, "response", None), "status_code", None)
         text = getattr(getattr(exc, "response", None), "text", "")
         raise GoogleFinancePriceError(
