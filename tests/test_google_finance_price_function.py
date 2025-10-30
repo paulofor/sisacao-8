@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import datetime
 import importlib
+import json
 import sys
 import types
 from types import SimpleNamespace
@@ -50,8 +51,9 @@ def test_google_finance_price_success(monkeypatch):
     monkeypatch.setattr(module, "append_dataframe_to_bigquery", mock_append)
 
     request = DummyRequest(args={})
-    body, status = module.google_finance_price(request)
-    assert status == 200
+    response = module.google_finance_price(request)
+    assert response.status_code == 200
+    body = json.loads(response.get_data(as_text=True))
     assert body["tickers"] == ["YDUQ3", "PETR4"]
     assert body["processed"] == 2
     expected_table_id = (
@@ -109,8 +111,9 @@ def test_google_finance_price_failure(monkeypatch):
     monkeypatch.setattr(module, "append_dataframe_to_bigquery", mock_append)
 
     request = DummyRequest(args={})
-    body, status = module.google_finance_price(request)
-    assert status == 500
+    response = module.google_finance_price(request)
+    assert response.status_code == 500
+    body = json.loads(response.get_data(as_text=True))
     assert "error" in body
     assert "called" not in captured
 

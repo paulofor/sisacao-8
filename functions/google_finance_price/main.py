@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 import datetime
+import json
 import logging
 from sys import version_info
-from typing import Any, Dict, Iterable, List, Tuple
+from typing import Any, Dict, Iterable, List
 
 try:
     import pandas as pd  # type: ignore[import-untyped]
 except ModuleNotFoundError:  # pragma: no cover - optional dependency
     pd = None  # type: ignore[assignment]
 from google.cloud import bigquery  # type: ignore[import-untyped]
+from flask import Response
 
 if version_info >= (3, 9):  # pragma: no branch - runtime dependent import
     from zoneinfo import ZoneInfo
@@ -212,7 +214,14 @@ def _exception_details(error: BaseException) -> Dict[str, Any]:
     return details
 
 
-def google_finance_price(request: Any) -> Tuple[Dict[str, Any], int]:
+def _build_response(payload: Dict[str, Any], status: int) -> Response:
+    """Return an HTTP JSON response compatible with Cloud Run."""
+
+    body = json.dumps(payload, ensure_ascii=False)
+    return Response(body, status=status, mimetype="application/json")
+
+
+def google_finance_price(request: Any) -> Response:
     """HTTP Cloud Run entry point returning latest prices for active
     tickers."""
 
@@ -225,7 +234,7 @@ def google_finance_price(request: Any) -> Tuple[Dict[str, Any], int]:
     try:
         tickers = fetch_active_tickers()
     except Exception as exc:  # noqa: BLE001
-        return {"error": str(exc)}, 500
+        return _build_response({"error": str(exc)}, 500)
 
     rows = []
     error_messages: List[str] = []
@@ -275,11 +284,11 @@ def google_finance_price(request: Any) -> Tuple[Dict[str, Any], int]:
         if error_details:
             response["errors"] = error_details
         status = 200 if not error_details else 207
-        return response, status
+        return _build_response(response, status)
 
     payload: Dict[str, Any] = {
         "error": "; ".join(error_messages) or "No tickers processed",
     }
     if error_details:
         payload["errors"] = error_details
-    return payload, 500
+    return _build_response(payload, 500)
