@@ -1,0 +1,38 @@
+name: Update Google Finance fixture
+
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Refresh Google Finance fixture
+        run: PYTHONPATH=. python scripts/update_google_finance_fixture.py
+
+      - name: Commit and push changes
+        run: |
+          if [[ -n "$(git status --porcelain tests/fixtures/google_finance_PETR4.html frontend/app/public/test-results/google-finance-parser.json)" ]]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add tests/fixtures/google_finance_PETR4.html frontend/app/public/test-results/google-finance-parser.json
+            git commit -m "chore: refresh Google Finance fixture"
+            git push
+          else
+            echo "No changes detected"
+          fi
