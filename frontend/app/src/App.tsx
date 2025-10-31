@@ -20,8 +20,10 @@ import { useMemo, useState } from 'react'
 
 import type { DataCollectionMessage, DataCollectionMessageSeverity } from './api/dataCollections'
 import DataCollectionMessagesTable from './components/DataCollectionMessagesTable'
+import GoogleFinanceParserTestCard from './components/GoogleFinanceParserTestCard'
 import IntradaySummaryCard from './components/IntradaySummaryCard'
 import { useDataCollectionMessages } from './hooks/useDataCollectionMessages'
+import { useGoogleFinanceParserTestResult } from './hooks/useGoogleFinanceParserTestResult'
 import { useIntradaySummary } from './hooks/useIntradaySummary'
 
 const severityOptions: Array<'all' | DataCollectionMessageSeverity> = [
@@ -61,6 +63,13 @@ function App() {
     error: intradaySummaryError,
   } = useIntradaySummary()
 
+  const {
+    data: parserTestResult,
+    isLoading: isParserTestLoading,
+    isFetching: isParserTestFetching,
+    error: parserTestError,
+  } = useGoogleFinanceParserTestResult()
+
   const messages = data ?? []
 
   const filteredMessages = useMemo(
@@ -73,7 +82,10 @@ function App() {
     : 'Aguardando atualização'
 
   const isRefreshing = isFetching || isSummaryFetching
-  const isPageLoading = isLoading || isFetching || isSummaryLoading || isSummaryFetching
+  const isParserLoading = isParserTestLoading || (isParserTestFetching && !parserTestResult)
+
+  const isPageLoading =
+    isLoading || isFetching || isSummaryLoading || isSummaryFetching || isParserLoading
 
   const handleRefresh = () => {
     void Promise.all([refetch(), refetchIntradaySummary()])
@@ -113,6 +125,12 @@ function App() {
               encontrar rapidamente coletas específicas ou investigar eventuais falhas.
             </Typography>
           </Box>
+
+          <GoogleFinanceParserTestCard
+            result={parserTestResult}
+            isLoading={isParserLoading}
+            error={parserTestError}
+          />
 
           <IntradaySummaryCard
             summary={intradaySummary}
