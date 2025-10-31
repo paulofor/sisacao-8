@@ -14,7 +14,38 @@ try:
 except ModuleNotFoundError:  # pragma: no cover - optional dependency
     pd = None  # type: ignore[assignment]
 from google.cloud import bigquery  # type: ignore[import-untyped]
-from flask import Response
+
+try:
+    from flask import Response as FlaskResponse  # type: ignore[import-untyped]
+except ModuleNotFoundError:  # pragma: no cover - flask is optional for tests
+    FlaskResponse = None  # type: ignore[assignment]
+
+
+class _FallbackResponse:
+    """Minimal stand-in for :class:`flask.Response` used in tests."""
+
+    def __init__(
+        self,
+        response: Any,
+        status: int = 200,
+        mimetype: str | None = "application/json",
+    ) -> None:
+        if isinstance(response, bytes):
+            self._data = response
+        else:
+            self._data = str(response).encode("utf-8")
+        self.status_code = status
+        self.mimetype = mimetype
+
+    def get_data(self, as_text: bool = False) -> str | bytes:
+        """Return stored payload mirroring ``flask.Response`` semantics."""
+
+        if as_text:
+            return self._data.decode("utf-8")
+        return self._data
+
+
+Response = FlaskResponse or _FallbackResponse
 
 if version_info >= (3, 9):  # pragma: no branch - runtime dependent import
     from zoneinfo import ZoneInfo
@@ -300,7 +331,13 @@ def google_finance_price(request: Any) -> Response:
 def _create_flask_app() -> Any:
     """Return a lightweight Flask app that proxies to the function."""
 
-    from flask import Flask, request
+    try:
+        from flask import Flask, request  # type: ignore[import-untyped]
+    except ModuleNotFoundError:  # pragma: no cover - optional dependency
+        logger.warning(
+            "Flask is not installed. Skipping creation of the development app."
+        )
+        return None
 
     flask_app = Flask(__name__)
 
@@ -316,6 +353,9 @@ app = _create_flask_app()
 
 if __name__ == "__main__":  # pragma: no cover - manual execution helper
     port = int(os.environ.get("PORT", "8080"))
-    (_create_flask_app() if app is None else app).run(
-        host="0.0.0.0", port=port
-    )
+    flask_app = _create_flask_app() if app is None else app
+    if flask_app is None:
+        raise RuntimeError(
+            "Flask is required to run the development server but is not installed."
+        )
+    flask_app.run(host="0.0.0.0", port=port)
