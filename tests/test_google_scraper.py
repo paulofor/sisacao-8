@@ -1,3 +1,6 @@
+import json
+from pathlib import Path
+
 import pytest
 
 from functions.google_finance_price import google_scraper as gf_scraper
@@ -64,3 +67,35 @@ def test_fetch_google_finance_price_ibov(monkeypatch):
     assert price == pytest.approx(10.50)
     expected_url = "https://www.google.com/finance/quote/IBOV:INDEXBVMF"
     assert captured["url"] == expected_url
+
+
+def test_extract_price_from_real_google_finance_html():
+    fixtures_dir = Path(__file__).resolve().parent / "fixtures"
+    html_path = fixtures_dir / "google_finance_PETR4.html"
+    html_content = html_path.read_text(encoding="utf-8")
+
+    test_results_path = (
+        Path(__file__).resolve().parents[1]
+        / "frontend"
+        / "app"
+        / "public"
+        / "test-results"
+        / "google-finance-parser.json"
+    )
+    test_results = json.loads(test_results_path.read_text(encoding="utf-8"))
+
+    price = gf_scraper.extract_price_from_html(html_content)
+
+    assert price == pytest.approx(test_results["details"]["parsedPrice"])
+    assert test_results["status"].lower() == "passed"
+    assert test_results["details"]["ticker"] == "PETR4"
+    assert test_results["details"]["exchange"] == "BVMF"
+    assert test_results["details"]["parsedPrice"] == pytest.approx(price)
+
+    price_text = test_results["details"]["priceText"]
+    assert price_text.startswith("R$")
+    assert price_text[2:] == f"{price:.2f}"
+
+    assert "updatedAt" in test_results
+    # Ensure the timestamp follows the ISO-8601 format produced by datetime.isoformat.
+    assert "T" in test_results["updatedAt"]
