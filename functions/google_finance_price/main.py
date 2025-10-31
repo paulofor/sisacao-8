@@ -5,8 +5,9 @@ from __future__ import annotations
 import datetime
 import json
 import logging
+import os
 from sys import version_info
-from typing import Any, Dict, Iterable, List
+from typing import Any, Dict, Iterable, List, Optional
 
 try:
     import pandas as pd  # type: ignore[import-untyped]
@@ -63,6 +64,8 @@ DATASET_ID = "cotacao_intraday"
 TABELA_ID = "cotacao_bovespa"
 
 client = bigquery.Client()
+
+app: Optional[Any] = None
 
 
 def _normalize_time_value(raw_value: Any) -> str:
@@ -292,3 +295,27 @@ def google_finance_price(request: Any) -> Response:
     if error_details:
         payload["errors"] = error_details
     return _build_response(payload, 500)
+
+
+def _create_flask_app() -> Any:
+    """Return a lightweight Flask app that proxies to the function."""
+
+    from flask import Flask, request
+
+    flask_app = Flask(__name__)
+
+    @flask_app.route("/", methods=["GET", "POST"])
+    def _entrypoint():  # noqa: D401
+        return google_finance_price(request)
+
+    return flask_app
+
+
+app = _create_flask_app()
+
+
+if __name__ == "__main__":  # pragma: no cover - manual execution helper
+    port = int(os.environ.get("PORT", "8080"))
+    (_create_flask_app() if app is None else app).run(
+        host="0.0.0.0", port=port
+    )
