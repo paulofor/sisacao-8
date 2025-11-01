@@ -8,6 +8,16 @@ def test_extract_price_from_html_success():
     assert gf_scraper.extract_price_from_html(html) == pytest.approx(10.50)
 
 
+def test_extract_price_from_html_data_attribute():
+    html = '<div data-last-price="123.45"></div>'
+    assert gf_scraper.extract_price_from_html(html) == pytest.approx(123.45)
+
+
+def test_extract_price_from_html_json_payload():
+    html = '<script>"price": {"raw": 87.65, "fmt": "R$ 87,65"}</script>'
+    assert gf_scraper.extract_price_from_html(html) == pytest.approx(87.65)
+
+
 def test_extract_price_from_html_missing():
     with pytest.raises(ValueError):
         gf_scraper.extract_price_from_html("<div></div>")
@@ -25,6 +35,14 @@ def test_extract_price_from_html_without_bs4(monkeypatch):
         '<div class="YMlKec fxKbKc">R$ 10,50</div>'
     )
     assert price == pytest.approx(10.50)
+
+
+def test_extract_price_from_html_attribute_fallback():
+    html = (
+        '<div data-last-price="-"></div>'
+        '<div class="YMlKec fxKbKc">R$ 10,50</div>'
+    )
+    assert gf_scraper.extract_price_from_html(html) == pytest.approx(10.50)
 
 
 def test_extract_price_from_html_missing_parser(monkeypatch):

@@ -25,6 +25,15 @@ except ModuleNotFoundError:  # pragma: no cover - optional dependency
 # Timeout in seconds for HTTP requests
 TIMEOUT = 10
 
+DATA_LAST_PRICE_RE = re.compile(
+    r"data-last-price=(['\"])(?P<price>[^'\"]+)\1",
+    re.IGNORECASE,
+)
+
+JSON_PRICE_RE = re.compile(
+    r"\"price\"\s*:\s*\{\s*\"raw\"\s*:\s*(?P<price>-?[0-9.,]+)",
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -92,6 +101,31 @@ def _extract_price_with_regex(html: str) -> float:
     raise ValueError("Could not find price element in HTML")
 
 
+def _extract_price_from_data_attribute(html: str) -> float:
+    """Extract price from ``data-last-price`` attribute when present."""
+
+    match = DATA_LAST_PRICE_RE.search(html)
+    if not match:
+        raise ValueError("Could not find data-last-price attribute in HTML")
+
+    price_text = match.group("price").strip()
+    if not price_text or price_text in {"-", "—"}:
+        raise ValueError("Invalid price attribute value")
+
+    return _parse_number(price_text)
+
+
+def _extract_price_from_json_payload(html: str) -> float:
+    """Extract price from the embedded JSON payload in the HTML."""
+
+    match = JSON_PRICE_RE.search(html)
+    if not match:
+        raise ValueError("Could not find price JSON payload in HTML")
+
+    price_text = match.group("price").strip()
+    return _parse_number(price_text)
+
+
 def _parse_number(value: str) -> float:
     """Convert a price string into a float.
 
@@ -145,6 +179,15 @@ def extract_price_from_html(html: str) -> float:
     ValueError
         If the price element is not found or cannot be parsed.
     """
+
+    for extractor in (
+        _extract_price_from_data_attribute,
+        _extract_price_from_json_payload,
+    ):
+        try:
+            return extractor(html)
+        except ValueError:
+            continue
 
     if BeautifulSoup is not None:
         try:
