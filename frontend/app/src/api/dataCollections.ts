@@ -42,6 +42,11 @@ export interface IntradaySummary {
   tickers: IntradayTickerSummary[]
 }
 
+export interface IntradayDailyCount {
+  date: string
+  totalRecords: number
+}
+
 type RawMessage = Record<string, unknown>
 
 const toIsoString = (value: unknown): string => {
@@ -262,6 +267,38 @@ const toInteger = (value: unknown): number => {
   }
 
   return 0
+}
+
+const toIsoDateString = (value: unknown): string => {
+  if (typeof value === 'string') {
+    const parsed = dayjs(value)
+    if (parsed.isValid()) {
+      return parsed.format('YYYY-MM-DD')
+    }
+    return value
+  }
+
+  if (value instanceof Date) {
+    return dayjs(value).format('YYYY-MM-DD')
+  }
+
+  return ''
+}
+
+export const fetchIntradayDailyCounts = async (): Promise<IntradayDailyCount[]> => {
+  const response = await apiClient.get<unknown>('/data-collections/intraday-daily-counts')
+  const items = Array.isArray(response.data) ? response.data : []
+
+  return items
+    .map((item) => {
+      const record = item as Record<string, unknown>
+      const date = toIsoDateString(record.date ?? record.data ?? record.data_ref)
+      const totalRecords = toInteger(record.totalRecords ?? record.total_registros ?? record.total)
+
+      return { date, totalRecords }
+    })
+    .filter((item) => Boolean(item.date))
+    .sort((a, b) => dayjs(b.date).valueOf() - dayjs(a.date).valueOf())
 }
 
 export const fetchIntradaySummary = async (): Promise<IntradaySummary> => {

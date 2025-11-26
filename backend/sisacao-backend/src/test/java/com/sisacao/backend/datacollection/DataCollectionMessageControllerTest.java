@@ -32,9 +32,13 @@ class DataCollectionMessageControllerTest {
     @MockBean
     private PythonDataCollectionClient pythonClient;
 
+    @MockBean
+    private BigQueryIntradayMetricsClient intradayMetricsClient;
+
     @BeforeEach
     void setUpMocks() {
         given(pythonClient.fetchMessages()).willAnswer(invocation -> sampleMessages());
+        given(intradayMetricsClient.fetchDailyCounts()).willReturn(sampleIntradayCounts());
     }
 
     @Test
@@ -100,6 +104,17 @@ class DataCollectionMessageControllerTest {
                 .andExpect(header().string("Access-Control-Allow-Methods", containsString("GET")));
     }
 
+    @Test
+    void shouldReturnIntradayDailyCounts() throws Exception {
+        mockMvc.perform(get("/data-collections/intraday-daily-counts"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(2)))
+                .andExpect(jsonPath("$[0].date", is("2024-11-03")))
+                .andExpect(jsonPath("$[0].totalRecords", is(240)))
+                .andExpect(jsonPath("$[1].date", is("2024-11-02")))
+                .andExpect(jsonPath("$[1].totalRecords", is(180)));
+    }
+
     private List<PythonDataCollectionClient.PythonMessage> sampleMessages() {
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         return List.of(
@@ -151,5 +166,11 @@ class DataCollectionMessageControllerTest {
                         "gold.ordens_criticas",
                         now.minusMinutes(51),
                         Map.of("acaoRecomendada", "Acionar suporte")));
+    }
+
+    private List<IntradayDailyCount> sampleIntradayCounts() {
+        return List.of(
+                new IntradayDailyCount(java.time.LocalDate.parse("2024-11-03"), 240L),
+                new IntradayDailyCount(java.time.LocalDate.parse("2024-11-02"), 180L));
     }
 }

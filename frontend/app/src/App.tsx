@@ -20,8 +20,10 @@ import { useMemo, useState } from 'react'
 
 import type { DataCollectionMessage, DataCollectionMessageSeverity } from './api/dataCollections'
 import DataCollectionMessagesTable from './components/DataCollectionMessagesTable'
+import IntradayDailyCountsCard from './components/IntradayDailyCountsCard'
 import IntradaySummaryCard from './components/IntradaySummaryCard'
 import { useDataCollectionMessages } from './hooks/useDataCollectionMessages'
+import { useIntradayDailyCounts } from './hooks/useIntradayDailyCounts'
 import { useIntradaySummary } from './hooks/useIntradaySummary'
 
 const severityOptions: Array<'all' | DataCollectionMessageSeverity> = [
@@ -61,7 +63,15 @@ function App() {
     error: intradaySummaryError,
   } = useIntradaySummary()
 
-  const messages = data ?? []
+  const {
+    data: intradayDailyCounts,
+    isLoading: isDailyCountsLoading,
+    isFetching: isDailyCountsFetching,
+    refetch: refetchIntradayDailyCounts,
+    error: intradayDailyCountsError,
+  } = useIntradayDailyCounts()
+
+  const messages = useMemo(() => data ?? [], [data])
 
   const filteredMessages = useMemo(
     () => filterMessagesBySearch(messages, searchTerm),
@@ -72,12 +82,18 @@ function App() {
     ? `Atualizado às ${dayjs(dataUpdatedAt).format('HH:mm:ss')}`
     : 'Aguardando atualização'
 
-  const isRefreshing = isFetching || isSummaryFetching
+  const isRefreshing = isFetching || isSummaryFetching || isDailyCountsFetching
 
-  const isPageLoading = isLoading || isFetching || isSummaryLoading || isSummaryFetching
+  const isPageLoading =
+    isLoading ||
+    isFetching ||
+    isSummaryLoading ||
+    isSummaryFetching ||
+    isDailyCountsLoading ||
+    isDailyCountsFetching
 
   const handleRefresh = () => {
-    void Promise.all([refetch(), refetchIntradaySummary()])
+    void Promise.all([refetch(), refetchIntradaySummary(), refetchIntradayDailyCounts()])
   }
 
   return (
@@ -119,6 +135,12 @@ function App() {
             summary={intradaySummary}
             isLoading={isSummaryLoading && !intradaySummary}
             error={intradaySummaryError}
+          />
+
+          <IntradayDailyCountsCard
+            counts={intradayDailyCounts}
+            isLoading={isDailyCountsLoading && !intradayDailyCounts}
+            error={intradayDailyCountsError}
           />
 
           <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems={{ xs: 'stretch', md: 'center' }}>

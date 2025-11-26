@@ -22,12 +22,15 @@ public class DataCollectionMessageService {
 
     private final PythonDataCollectionClient pythonClient;
     private final Optional<BigQueryCollectionMessageClient> bigQueryClient;
+    private final Optional<BigQueryIntradayMetricsClient> intradayMetricsClient;
 
     public DataCollectionMessageService(
             PythonDataCollectionClient pythonClient,
-            Optional<BigQueryCollectionMessageClient> bigQueryClient) {
+            Optional<BigQueryCollectionMessageClient> bigQueryClient,
+            Optional<BigQueryIntradayMetricsClient> intradayMetricsClient) {
         this.pythonClient = pythonClient;
         this.bigQueryClient = bigQueryClient;
+        this.intradayMetricsClient = intradayMetricsClient;
     }
 
     public List<DataCollectionMessage> findMessages(
@@ -76,6 +79,10 @@ public class DataCollectionMessageService {
         }
 
         return toIntradaySummary(latestIntradayMessage.get());
+    }
+
+    public List<IntradayDailyCount> fetchIntradayDailyCounts() {
+        return intradayMetricsClient.map(BigQueryIntradayMetricsClient::fetchDailyCounts).orElseGet(List::of);
     }
 
     private List<PythonDataCollectionClient.PythonMessage> loadMessages() {
