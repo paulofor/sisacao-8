@@ -130,7 +130,7 @@ def _load_tickers(get_stock_module: Any) -> List[str]:
 
     tickers_path = ROOT_DIR / "functions" / "get_stock_data" / "tickers.txt"
     tickers = get_stock_module.load_tickers_from_file(tickers_path)
-    return tickers or ["YDUQ3", "PETR4"]
+    return tickers or ["YDUQ3", "PETR4", "IBOV"]
 
 
 def _read_tickers_from_file(path: Path) -> List[str]:
