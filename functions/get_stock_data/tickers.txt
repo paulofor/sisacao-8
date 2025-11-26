@@ -2,3 +2,4 @@
 # Linhas iniciadas com # são ignoradas.
 YDUQ3
 PETR4
+IBOV
