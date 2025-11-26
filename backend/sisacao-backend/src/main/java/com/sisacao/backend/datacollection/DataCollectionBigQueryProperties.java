@@ -10,6 +10,9 @@ public class DataCollectionBigQueryProperties {
     private String dataset = "monitoring";
     private String table = "collection_messages";
     private int maxRows = 200;
+    private String intradayDataset = "cotacao_intraday";
+    private String intradayTable = "cotacao_bovespa";
+    private int intradayDays = 14;
 
     public boolean isEnabled() {
         return enabled;
@@ -54,6 +57,36 @@ public class DataCollectionBigQueryProperties {
     public void setMaxRows(int maxRows) {
         if (maxRows > 0) {
             this.maxRows = maxRows;
+        }
+    }
+
+    public String getIntradayDataset() {
+        return intradayDataset;
+    }
+
+    public void setIntradayDataset(String intradayDataset) {
+        if (intradayDataset != null && !intradayDataset.isBlank()) {
+            this.intradayDataset = intradayDataset;
+        }
+    }
+
+    public String getIntradayTable() {
+        return intradayTable;
+    }
+
+    public void setIntradayTable(String intradayTable) {
+        if (intradayTable != null && !intradayTable.isBlank()) {
+            this.intradayTable = intradayTable;
+        }
+    }
+
+    public int getIntradayDays() {
+        return intradayDays;
+    }
+
+    public void setIntradayDays(int intradayDays) {
+        if (intradayDays > 0) {
+            this.intradayDays = intradayDays;
         }
     }
 }

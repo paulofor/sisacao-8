@@ -30,4 +30,11 @@ public class DataCollectionConfiguration {
             DataCollectionBigQueryProperties properties) {
         return new BigQueryCollectionMessageClient(bigQuery, objectMapper, properties);
     }
+
+    @Bean
+    @ConditionalOnProperty(prefix = "sisacao.data-collection.bigquery", name = "enabled", havingValue = "true")
+    public BigQueryIntradayMetricsClient bigQueryIntradayMetricsClient(
+            BigQuery bigQuery, DataCollectionBigQueryProperties properties) {
+        return new BigQueryIntradayMetricsClient(bigQuery, properties);
+    }
 }

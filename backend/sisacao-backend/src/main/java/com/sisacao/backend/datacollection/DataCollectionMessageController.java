@@ -28,4 +28,9 @@ public class DataCollectionMessageController {
     public IntradaySummary getIntradaySummary() {
         return service.buildIntradaySummary();
     }
+
+    @GetMapping("/intraday-daily-counts")
+    public List<IntradayDailyCount> getIntradayDailyCounts() {
+        return service.fetchIntradayDailyCounts();
+    }
 }
