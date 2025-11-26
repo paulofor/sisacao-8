@@ -185,8 +185,9 @@ def download_from_b3(
         date = datetime.date.today()
     date_str = date.strftime("%Y%m%d")
     nome_arquivo_zip = f"COTAHIST_D{date_str}.ZIP"
-    base_url = "https://www.b3.com.br/pesquisapregao/"
-    url = f"{base_url}download?filelist={nome_arquivo_zip}"
+    nome_arquivo_txt = f"COTAHIST_D{date_str}.TXT"
+    base_url = "https://bvmf.bmfbovespa.com.br/InstDados/SerHist/"
+    url = f"{base_url.rstrip('/')}/{nome_arquivo_zip}"
     logging.warning("Tickers solicitados: %s", tickers)
     logging.warning("Data usada para download: %s", date_str)
     logging.warning("Baixando arquivo da B3: %s", nome_arquivo_zip)
@@ -217,8 +218,22 @@ def download_from_b3(
                     )
                     diagnostics.append(formatted_message)
                 return result
-            nome_arquivo = arquivos_txt[0]
-            logging.warning("Arquivo dentro do ZIP: %s", nome_arquivo)
+            nome_arquivo = next(
+                (n for n in arquivos_txt if n.lower() == nome_arquivo_txt.lower()),
+                None,
+            )
+            if nome_arquivo:
+                logging.warning(
+                    "Arquivo esperado dentro do ZIP encontrado: %s", nome_arquivo
+                )
+            else:
+                nome_arquivo = arquivos_txt[0]
+                message = (
+                    f"Arquivo esperado {nome_arquivo_txt} ausente no ZIP, usando {nome_arquivo}"
+                )
+                logging.warning(message)
+                if diagnostics is not None:
+                    diagnostics.append(_format_diagnostic(message))
             with zf.open(nome_arquivo) as arquivo:
                 for linha in io.TextIOWrapper(arquivo, encoding="latin1"):
                     if not linha.startswith("01"):
