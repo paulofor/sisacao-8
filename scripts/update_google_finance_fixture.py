@@ -83,12 +83,15 @@ def refresh_fixture(ticker: str, exchange: str, currency_prefix: str = "R$") -> 
     parsed_price = google_scraper.extract_price_from_html(html_content)
     price_text = _format_price_text(parsed_price, currency_prefix)
 
-    timestamp = datetime.now(tz=timezone.utc).replace(microsecond=0).isoformat()
+    timestamp = datetime.now(tz=timezone.utc).replace(
+        microsecond=0
+    ).isoformat()
 
     test_result_payload = {
         "testName": "google_finance_parser_real_html",
         "description": (
-            "Valida o parser de preços do Google Finance contra um HTML real da PETR4 na B3."
+            "Valida o parser de preços do Google Finance contra um HTML real "
+            "da PETR4 na B3."
         ),
         "status": "passed",
         "updatedAt": timestamp,
@@ -116,9 +119,21 @@ def refresh_fixture(ticker: str, exchange: str, currency_prefix: str = "R$") -> 
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Atualiza o fixture real do Google Finance usado nos testes.")
-    parser.add_argument("--ticker", default="PETR4", help="Ticker monitorado (default: PETR4)")
-    parser.add_argument("--exchange", default="BVMF", help="Bolsa/mercado do ticker (default: BVMF)")
+    parser = argparse.ArgumentParser(
+        description=(
+            "Atualiza o fixture real do Google Finance usado nos testes."
+        )
+    )
+    parser.add_argument(
+        "--ticker",
+        default="PETR4",
+        help="Ticker monitorado (default: PETR4)",
+    )
+    parser.add_argument(
+        "--exchange",
+        default="BVMF",
+        help="Bolsa/mercado do ticker (default: BVMF)",
+    )
     parser.add_argument(
         "--currency-prefix",
         default="R$",
@@ -130,12 +145,15 @@ def main() -> None:
     try:
         refresh_fixture(args.ticker, args.exchange, args.currency_prefix)
     except Exception as exc:  # noqa: BLE001
-        timestamp = datetime.now(tz=timezone.utc).replace(microsecond=0).isoformat()
+        timestamp = datetime.now(tz=timezone.utc).replace(
+            microsecond=0
+        ).isoformat()
 
         error_payload = {
             "testName": "google_finance_parser_real_html",
             "description": (
-                "Valida o parser de preços do Google Finance contra um HTML real da PETR4 na B3."
+                "Valida o parser de preços do Google Finance contra um HTML real "
+                "da PETR4 na B3."
             ),
             "status": "failed",
             "updatedAt": timestamp,
