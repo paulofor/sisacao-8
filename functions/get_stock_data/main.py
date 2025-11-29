@@ -229,7 +229,8 @@ def download_from_b3(
             else:
                 nome_arquivo = arquivos_txt[0]
                 message = (
-                    f"Arquivo esperado {nome_arquivo_txt} ausente no ZIP, usando {nome_arquivo}"
+                    "Arquivo esperado "
+                    f"{nome_arquivo_txt} ausente no ZIP, usando {nome_arquivo}"
                 )
                 logging.warning(message)
                 if diagnostics is not None:
