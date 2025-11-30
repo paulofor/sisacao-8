@@ -1,5 +1,8 @@
 name: Update Google Finance fixture
 
+permissions:
+  contents: write
+
 on:
   schedule:
     - cron: '0 3 * * *'
