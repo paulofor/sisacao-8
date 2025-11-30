@@ -5,10 +5,15 @@ import importlib
 import json
 import sys
 import types
+from pathlib import Path
 from types import SimpleNamespace
 
 import pandas as pd  # type: ignore[import-untyped]
 import pytest
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 
 class DummyRequest(SimpleNamespace):
@@ -116,6 +121,56 @@ def test_google_finance_price_failure(monkeypatch):
     body = json.loads(response.get_data(as_text=True))
     assert "error" in body
     assert "called" not in captured
+
+
+def test_google_finance_price_uses_fallback_when_bigquery_unavailable(monkeypatch):
+    fake_bigquery = types.ModuleType("bigquery")
+
+    class FakeClient:
+        project = "test-project"
+
+        def query(self, query):  # noqa: D401, ANN001
+            raise RuntimeError("unavailable")
+
+    fake_bigquery.Client = lambda *a, **k: FakeClient()
+    fake_cloud = types.ModuleType("cloud")
+    fake_cloud.bigquery = fake_bigquery
+    fake_google = types.ModuleType("google")
+    fake_google.cloud = fake_cloud
+    monkeypatch.setitem(sys.modules, "google", fake_google)
+    monkeypatch.setitem(sys.modules, "google.cloud", fake_cloud)
+    monkeypatch.setitem(sys.modules, "google.cloud.bigquery", fake_bigquery)
+
+    module = importlib.reload(
+        importlib.import_module("functions.google_finance_price.main")
+    )
+
+    monkeypatch.setenv("FALLBACK_TICKERS", "PETR4,VALE3")
+    monkeypatch.delenv("MAX_INTRADAY_TICKERS", raising=False)
+
+    def mock_fetch(ticker: str, exchange: str = "BVMF", session=None) -> float:
+        return {"PETR4": 10.0, "VALE3": 21.5}[ticker]
+
+    monkeypatch.setattr(module, "fetch_google_finance_price", mock_fetch)
+
+    captured = {}
+
+    def mock_append(df):
+        captured["tickers"] = list(df["ticker"])
+        captured["valor"] = list(df["valor"])
+
+    monkeypatch.setattr(module, "append_dataframe_to_bigquery", mock_append)
+
+    request = DummyRequest(args={})
+    response = module.google_finance_price(request)
+    assert response.status_code == 200
+    body = json.loads(response.get_data(as_text=True))
+    assert body["tickers"] == ["PETR4", "VALE3"]
+    assert body["processed"] == 2
+    assert captured["tickers"] == ["PETR4", "VALE3"]
+    assert captured["valor"][0] == pytest.approx(10.0)
+    assert captured["valor"][1] == pytest.approx(21.5)
+
 
 
 def test_append_dataframe_without_pandas(monkeypatch):
