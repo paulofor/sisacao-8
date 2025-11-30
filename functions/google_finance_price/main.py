@@ -7,6 +7,7 @@ import json
 import logging
 import os
 from sys import version_info
+from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
 try:
@@ -97,6 +98,91 @@ TABELA_ID = "cotacao_bovespa"
 client = bigquery.Client()
 
 app: Optional[Any] = None
+
+
+DEFAULT_FALLBACK_TICKERS = [
+    "PETR4",
+    "VALE3",
+    "ITUB4",
+    "BBDC4",
+    "BBAS3",
+    "IBOV",
+]
+FALLBACK_TICKERS_ENV = "FALLBACK_TICKERS"
+FALLBACK_TICKERS_FILE_ENV = "FALLBACK_TICKERS_FILE"
+MAX_INTRADAY_TICKERS_ENV = "MAX_INTRADAY_TICKERS"
+DEFAULT_TICKERS_FILE = Path(__file__).resolve().parent.parent / "get_stock_data" / "tickers.txt"
+
+
+def _max_intraday_tickers() -> int:
+    raw_value = os.environ.get(MAX_INTRADAY_TICKERS_ENV)
+    if not raw_value:
+        return 50
+    try:
+        parsed = int(raw_value)
+    except ValueError:
+        logger.warning(
+            "Invalid value '%s' for %s. Falling back to 50 tickers.",
+            raw_value,
+            MAX_INTRADAY_TICKERS_ENV,
+        )
+        return 50
+    return parsed if parsed > 0 else 50
+
+
+def _normalize_ticker_list(values: Iterable[Any]) -> List[str]:
+    tickers: List[str] = []
+    for raw in values:
+        ticker = str(raw).strip().upper()
+        if ticker and ticker not in tickers:
+            tickers.append(ticker)
+    return tickers
+
+
+def _load_tickers_from_file(path: Path) -> List[str]:
+    try:
+        return _normalize_ticker_list(path.read_text(encoding="utf-8").splitlines())
+    except OSError:
+        logger.warning("Fallback tickers file not accessible: %%s", path)
+        return []
+
+
+def _fallback_tickers() -> List[str]:
+    env_value = os.environ.get(FALLBACK_TICKERS_ENV)
+    if env_value:
+        tickers = _normalize_ticker_list(env_value.split(","))
+        if tickers:
+            logger.warning(
+                "Using fallback tickers from environment variable %s: %s",
+                FALLBACK_TICKERS_ENV,
+                tickers,
+            )
+            return tickers[: _max_intraday_tickers()]
+
+    file_override = os.environ.get(FALLBACK_TICKERS_FILE_ENV)
+    if file_override:
+        tickers = _load_tickers_from_file(Path(file_override))
+        if tickers:
+            logger.warning(
+                "Using fallback tickers from file specified in %s: %s",
+                FALLBACK_TICKERS_FILE_ENV,
+                tickers,
+            )
+            return tickers[: _max_intraday_tickers()]
+
+    tickers = _load_tickers_from_file(DEFAULT_TICKERS_FILE)
+    if tickers:
+        logger.warning(
+            "Using fallback tickers from default file %s",
+            DEFAULT_TICKERS_FILE,
+        )
+        return tickers[: _max_intraday_tickers()]
+
+    logger.warning(
+        "Fallback tickers file %s not found. Falling back to built-in defaults.",
+        DEFAULT_TICKERS_FILE,
+    )
+    return DEFAULT_FALLBACK_TICKERS[: _max_intraday_tickers()]
 
 
 def _normalize_time_value(raw_value: Any) -> str:
@@ -210,18 +296,42 @@ def fetch_active_tickers() -> List[str]:
     query = f"SELECT ticker FROM `{table_id}` WHERE ativo = TRUE"
     try:
         query_job = client.query(query)
+        tickers: List[str] = []
         if pd is not None:
             df = query_job.to_dataframe()
-            return df["ticker"].astype(str).tolist()
-        results = query_job.result()
-        return [str(row["ticker"]) for row in results]
+            if "ticker" in df.columns:
+                tickers = _normalize_ticker_list(df["ticker"].tolist())
+            else:
+                logger.warning(
+                    "BigQuery table %s did not return a 'ticker' column. Using fallback list.",
+                    table_id,
+                )
+        else:
+            results = query_job.result()
+            tickers = _normalize_ticker_list(row["ticker"] for row in results)
+
+        if tickers:
+            max_items = _max_intraday_tickers()
+            if len(tickers) > max_items:
+                logger.warning(
+                    "Limiting active tickers from %s to %s for intraday collection.",
+                    len(tickers),
+                    max_items,
+                )
+            return tickers[:max_items]
+
+        logger.warning(
+            "BigQuery table %s returned no active tickers. Falling back to local list.",
+            table_id,
+        )
     except Exception as exc:  # noqa: BLE001
         logger.warning(
-            "Failed to fetch active tickers: %s",
+            "Failed to fetch active tickers from BigQuery table %s: %s",
+            table_id,
             exc,
             exc_info=True,
         )
-        raise
+    return _fallback_tickers()
 
 
 def _exception_details(error: BaseException) -> Dict[str, Any]:
