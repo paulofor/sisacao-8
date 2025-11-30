@@ -111,7 +111,11 @@ DEFAULT_FALLBACK_TICKERS = [
 FALLBACK_TICKERS_ENV = "FALLBACK_TICKERS"
 FALLBACK_TICKERS_FILE_ENV = "FALLBACK_TICKERS_FILE"
 MAX_INTRADAY_TICKERS_ENV = "MAX_INTRADAY_TICKERS"
-DEFAULT_TICKERS_FILE = Path(__file__).resolve().parent.parent / "get_stock_data" / "tickers.txt"
+DEFAULT_TICKERS_FILE = (
+    Path(__file__).resolve().parent.parent
+    / "get_stock_data"
+    / "tickers.txt"
+)
 
 
 def _max_intraday_tickers() -> int:
@@ -303,7 +307,8 @@ def fetch_active_tickers() -> List[str]:
                 tickers = _normalize_ticker_list(df["ticker"].tolist())
             else:
                 logger.warning(
-                    "BigQuery table %s did not return a 'ticker' column. Using fallback list.",
+                    "BigQuery table %s did not return a 'ticker' column. "
+                    "Using fallback list.",
                     table_id,
                 )
         else:
