@@ -101,7 +101,9 @@ def test_extract_price_from_real_google_finance_html():
         / "google-finance-parser.json"
     )
 
-    fallback_results_path = Path(__file__).resolve().parent / "fixtures" / "google-finance-parser.json"
+    fallback_results_path = (
+        Path(__file__).resolve().parent / "fixtures" / "google-finance-parser.json"
+    )
 
     for results_path in (test_results_path, fallback_results_path):
         if results_path.exists():
