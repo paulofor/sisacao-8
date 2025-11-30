@@ -172,7 +172,6 @@ def test_google_finance_price_uses_fallback_when_bigquery_unavailable(monkeypatc
     assert captured["valor"][1] == pytest.approx(21.5)
 
 
-
 def test_append_dataframe_without_pandas(monkeypatch):
     fake_bigquery = types.ModuleType("bigquery")
 
