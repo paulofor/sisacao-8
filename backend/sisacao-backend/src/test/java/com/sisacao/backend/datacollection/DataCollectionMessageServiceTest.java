@@ -2,6 +2,7 @@ package com.sisacao.backend.datacollection;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
@@ -17,6 +18,7 @@ class DataCollectionMessageServiceTest {
     private final PythonDataCollectionClient pythonClient = mock(PythonDataCollectionClient.class);
     private final BigQueryCollectionMessageClient bigQueryClient = mock(BigQueryCollectionMessageClient.class);
     private final BigQueryIntradayMetricsClient metricsClient = mock(BigQueryIntradayMetricsClient.class);
+    private final DataCollectionBigQueryProperties properties = new DataCollectionBigQueryProperties();
 
     @Test
     void shouldUseBigQueryClientWhenItReturnsMessages() {
@@ -34,7 +36,7 @@ class DataCollectionMessageServiceTest {
         when(bigQueryClient.fetchMessages()).thenReturn(bigQueryMessages);
 
         DataCollectionMessageService service =
-                new DataCollectionMessageService(pythonClient, Optional.of(bigQueryClient), Optional.empty());
+                new DataCollectionMessageService(pythonClient, Optional.of(bigQueryClient), Optional.empty(), properties);
 
         List<DataCollectionMessage> result = service.findMessages(null, null, null);
 
@@ -60,7 +62,7 @@ class DataCollectionMessageServiceTest {
         when(pythonClient.fetchMessages()).thenReturn(pythonMessages);
 
         DataCollectionMessageService service =
-                new DataCollectionMessageService(pythonClient, Optional.of(bigQueryClient), Optional.empty());
+                new DataCollectionMessageService(pythonClient, Optional.of(bigQueryClient), Optional.empty(), properties);
 
         List<DataCollectionMessage> result = service.findMessages(null, null, null);
 
@@ -85,7 +87,7 @@ class DataCollectionMessageServiceTest {
         when(pythonClient.fetchMessages()).thenReturn(pythonMessages);
 
         DataCollectionMessageService service =
-                new DataCollectionMessageService(pythonClient, Optional.of(bigQueryClient), Optional.empty());
+                new DataCollectionMessageService(pythonClient, Optional.of(bigQueryClient), Optional.empty(), properties);
 
         List<DataCollectionMessage> result = service.findMessages(null, null, null);
 
@@ -101,7 +103,7 @@ class DataCollectionMessageServiceTest {
 
         DataCollectionMessageService service =
                 new DataCollectionMessageService(
-                        pythonClient, Optional.of(bigQueryClient), Optional.of(metricsClient));
+                        pythonClient, Optional.of(bigQueryClient), Optional.of(metricsClient), properties);
 
         List<IntradayDailyCount> result = service.fetchIntradayDailyCounts();
 
@@ -110,13 +112,48 @@ class DataCollectionMessageServiceTest {
     }
 
     @Test
-    void shouldReturnEmptyCountsWhenMetricsClientMissing() {
+    void shouldBuildIntradayCountsFromPythonMessagesWhenMetricsUnavailable() {
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        Map<String, Object> metadata = Map.of(
+                "cotacoes",
+                List.of(
+                        Map.of("ticker", "PETR4", "valor", 32.5),
+                        Map.of("ticker", "VALE3", "valor", 68.1)
+                ));
+        List<PythonDataCollectionClient.PythonMessage> pythonMessages =
+                List.of(new PythonDataCollectionClient.PythonMessage(
+                        "evt-555",
+                        "google_finance_price",
+                        "SUCCESS",
+                        "Resumo fallback",
+                        "cotacao_intraday.cotacao_bovespa",
+                        now,
+                        metadata));
+
+        when(pythonClient.fetchMessages()).thenReturn(pythonMessages);
+
         DataCollectionMessageService service =
-                new DataCollectionMessageService(pythonClient, Optional.empty(), Optional.empty());
+                new DataCollectionMessageService(pythonClient, Optional.empty(), Optional.empty(), properties);
+
+        List<IntradayDailyCount> result = service.fetchIntradayDailyCounts();
+
+        assertThat(result).hasSize(1);
+        IntradayDailyCount count = result.getFirst();
+        assertThat(count.totalRecords()).isEqualTo(2L);
+        assertThat(count.date()).isEqualTo(now.toLocalDate());
+        verify(pythonClient).fetchMessages();
+    }
+
+    @Test
+    void shouldReturnEmptyCountsWhenMetricsClientMissing() {
+        when(pythonClient.fetchMessages()).thenReturn(List.of());
+
+        DataCollectionMessageService service =
+                new DataCollectionMessageService(pythonClient, Optional.empty(), Optional.empty(), properties);
 
         List<IntradayDailyCount> result = service.fetchIntradayDailyCounts();
 
         assertThat(result).isEmpty();
-        verifyNoInteractions(pythonClient);
+        verify(pythonClient).fetchMessages();
     }
 }
