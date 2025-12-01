@@ -1,11 +1,18 @@
 package com.sisacao.backend.datacollection;
 
+import java.lang.reflect.Array;
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -23,14 +30,17 @@ public class DataCollectionMessageService {
     private final PythonDataCollectionClient pythonClient;
     private final Optional<BigQueryCollectionMessageClient> bigQueryClient;
     private final Optional<BigQueryIntradayMetricsClient> intradayMetricsClient;
+    private final DataCollectionBigQueryProperties bigQueryProperties;
 
     public DataCollectionMessageService(
             PythonDataCollectionClient pythonClient,
             Optional<BigQueryCollectionMessageClient> bigQueryClient,
-            Optional<BigQueryIntradayMetricsClient> intradayMetricsClient) {
+            Optional<BigQueryIntradayMetricsClient> intradayMetricsClient,
+            DataCollectionBigQueryProperties bigQueryProperties) {
         this.pythonClient = pythonClient;
         this.bigQueryClient = bigQueryClient;
         this.intradayMetricsClient = intradayMetricsClient;
+        this.bigQueryProperties = bigQueryProperties;
     }
 
     public List<DataCollectionMessage> findMessages(
@@ -82,7 +92,20 @@ public class DataCollectionMessageService {
     }
 
     public List<IntradayDailyCount> fetchIntradayDailyCounts() {
-        return intradayMetricsClient.map(BigQueryIntradayMetricsClient::fetchDailyCounts).orElseGet(List::of);
+        if (intradayMetricsClient.isPresent()) {
+            try {
+                List<IntradayDailyCount> counts = intradayMetricsClient.get().fetchDailyCounts();
+                if (!counts.isEmpty()) {
+                    return counts;
+                }
+                LOGGER.debug("BigQuery returned no intraday daily counts. Falling back to python metadata.");
+            } catch (RuntimeException ex) {
+                LOGGER.warn(
+                        "Failed to fetch intraday daily counts from BigQuery. Falling back to python metadata.",
+                        ex);
+            }
+        }
+        return buildIntradayDailyCountsFromMessages();
     }
 
     private List<PythonDataCollectionClient.PythonMessage> loadMessages() {
@@ -126,6 +149,103 @@ public class DataCollectionMessageService {
             return false;
         }
         return dataset.toLowerCase().contains("cotacao_intraday.cotacao_bovespa");
+    }
+
+    private List<IntradayDailyCount> buildIntradayDailyCountsFromMessages() {
+        List<PythonDataCollectionClient.PythonMessage> messages = loadMessages();
+        if (messages.isEmpty()) {
+            return List.of();
+        }
+
+        int lookbackDays = Math.max(bigQueryProperties.getIntradayDays(), 1);
+        LocalDate cutoffDate = LocalDate.now(ZoneOffset.UTC).minusDays(Math.max(lookbackDays - 1L, 0L));
+
+        Map<LocalDate, Long> totalsByDate = new HashMap<>();
+
+        for (PythonDataCollectionClient.PythonMessage message : messages) {
+            if (!isIntradayDataset(message.dataset())) {
+                continue;
+            }
+
+            OffsetDateTime createdAt = message.createdAt();
+            if (createdAt == null) {
+                continue;
+            }
+
+            LocalDate messageDate = createdAt.toLocalDate();
+            if (messageDate.isBefore(cutoffDate)) {
+                continue;
+            }
+
+            long recordCount = extractIntradayRecordCount(message.metadata());
+            totalsByDate.merge(messageDate, recordCount, Long::sum);
+        }
+
+        if (totalsByDate.isEmpty()) {
+            return List.of();
+        }
+
+        return totalsByDate.entrySet().stream()
+                .sorted(Entry.<LocalDate, Long>comparingByKey().reversed())
+                .limit(lookbackDays)
+                .map(entry -> new IntradayDailyCount(entry.getKey(), entry.getValue()))
+                .collect(Collectors.toList());
+    }
+
+    private long extractIntradayRecordCount(Map<String, Object> metadata) {
+        if (metadata == null || metadata.isEmpty()) {
+            return 0L;
+        }
+
+        long quoteCount = sizeOf(metadata.get("cotacoes"));
+        if (quoteCount > 0L) {
+            return quoteCount;
+        }
+
+        long processedLines = toPositiveLong(metadata.get("linhasProcessadas"));
+        if (processedLines > 0L) {
+            return processedLines;
+        }
+
+        long insertedRecords = toPositiveLong(metadata.get("registrosInseridos"));
+        if (insertedRecords > 0L) {
+            return insertedRecords;
+        }
+
+        long requestedTickers = sizeOf(metadata.get("tickersSolicitados"));
+        if (requestedTickers > 0L) {
+            return requestedTickers;
+        }
+
+        return 0L;
+    }
+
+    private long sizeOf(Object value) {
+        if (value instanceof Collection<?> collection) {
+            return collection.size();
+        }
+        if (value instanceof Map<?, ?> map) {
+            return map.size();
+        }
+        if (value != null && value.getClass().isArray()) {
+            return Array.getLength(value);
+        }
+        return toPositiveLong(value);
+    }
+
+    private long toPositiveLong(Object value) {
+        if (value instanceof Number number) {
+            return Math.max(0L, number.longValue());
+        }
+        if (value instanceof String str) {
+            try {
+                return Math.max(0L, Long.parseLong(str.trim()));
+            } catch (NumberFormatException ex) {
+                LOGGER.debug("Unable to parse numeric value '{}' while building intraday fallback counts.", str);
+                return 0L;
+            }
+        }
+        return 0L;
     }
 
     private IntradaySummary toIntradaySummary(PythonDataCollectionClient.PythonMessage message) {
