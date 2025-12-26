@@ -31,6 +31,8 @@ Este documento consolida as configurações necessárias para que todos os jobs 
 
 ### 2. `google-finance-price-intraday`
 
+> Consulte o guia [Validação do agendamento `google_finance_price` (Cloud Run)](./google_finance_price_cloud_run.md) para o passo a passo completo de confirmação do endpoint, ajuste do Scheduler e testes no Cloud Logging/BigQuery.
+
 | Campo | Valor recomendado |
 |-------|-------------------|
 | Serviço-alvo | Cloud Run (ou Function HTTP) `google_finance_price` |
