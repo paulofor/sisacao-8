@@ -137,8 +137,6 @@ def _max_intraday_tickers() -> int:
         return 50
     return parsed if parsed > 0 else 50
 
-
-
 def _max_workers(ticker_count: int | None = None) -> int:
     """Return the number of concurrent workers to fetch prices."""
 
@@ -421,9 +419,6 @@ def _build_response(payload: Dict[str, Any], status: int) -> Response:
 
     body = json.dumps(payload, ensure_ascii=False)
     return Response(body, status=status, mimetype="application/json")
-
-
-
 
 def _build_price_row(
     ticker: str,
