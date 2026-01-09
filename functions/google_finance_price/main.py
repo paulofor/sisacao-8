@@ -6,6 +6,8 @@ import datetime
 import json
 import logging
 import os
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from sys import version_info
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
@@ -111,6 +113,8 @@ DEFAULT_FALLBACK_TICKERS = [
 FALLBACK_TICKERS_ENV = "FALLBACK_TICKERS"
 FALLBACK_TICKERS_FILE_ENV = "FALLBACK_TICKERS_FILE"
 MAX_INTRADAY_TICKERS_ENV = "MAX_INTRADAY_TICKERS"
+MAX_WORKERS_ENV = "GOOGLE_FINANCE_MAX_WORKERS"
+FUNCTION_DEADLINE_SECONDS_ENV = "FUNCTION_DEADLINE_SECONDS"
 DEFAULT_TICKERS_FILE = (
     Path(__file__).resolve().parent.parent
     / "get_stock_data"
@@ -132,6 +136,55 @@ def _max_intraday_tickers() -> int:
         )
         return 50
     return parsed if parsed > 0 else 50
+
+
+
+def _max_workers(ticker_count: int | None = None) -> int:
+    """Return the number of concurrent workers to fetch prices."""
+
+    raw_value = os.environ.get(MAX_WORKERS_ENV)
+    default_workers = 5
+    if not raw_value:
+        return min(default_workers, ticker_count or default_workers)
+    try:
+        parsed = int(raw_value)
+    except ValueError:
+        logger.warning(
+            "Invalid value '%s' for %s. Falling back to %s workers.",
+            raw_value,
+            MAX_WORKERS_ENV,
+            default_workers,
+        )
+        return min(default_workers, ticker_count or default_workers)
+
+    if parsed <= 0:
+        return min(default_workers, ticker_count or default_workers)
+
+    # Keep a sane upper bound to avoid overwhelming Google Finance.
+    bounded = min(parsed, 16)
+    return min(bounded, ticker_count or bounded)
+
+
+def _function_deadline_seconds() -> float:
+    """Return the maximum time the request should run before aborting."""
+
+    raw_value = os.environ.get(FUNCTION_DEADLINE_SECONDS_ENV)
+    default_deadline = 55.0
+    if not raw_value:
+        return default_deadline
+    try:
+        parsed = float(raw_value)
+    except ValueError:
+        logger.warning(
+            "Invalid value '%s' for %s. Falling back to %.1f seconds.",
+            raw_value,
+            FUNCTION_DEADLINE_SECONDS_ENV,
+            default_deadline,
+        )
+        return default_deadline
+
+    # Never allow a value too small to finish at least a couple requests.
+    return max(10.0, parsed)
 
 
 def _normalize_ticker_list(values: Iterable[Any]) -> List[str]:
@@ -370,6 +423,27 @@ def _build_response(payload: Dict[str, Any], status: int) -> Response:
     return Response(body, status=status, mimetype="application/json")
 
 
+
+
+def _build_price_row(
+    ticker: str,
+    data_atual: str,
+    hora_atual: str,
+    data_hora_atual: datetime.datetime,
+) -> Dict[str, Any]:
+    """Fetch price for ``ticker`` and return the BigQuery row payload."""
+
+    price = fetch_google_finance_price(ticker)
+    return {
+        "ticker": ticker,
+        "data": data_atual,
+        "hora": hora_atual,
+        "valor": round(price, 2),
+        "hora_atual": hora_atual,
+        "data_hora_atual": data_hora_atual,
+    }
+
+
 def google_finance_price(request: Any) -> Response:
     """HTTP Cloud Run entry point returning latest prices for active
     tickers."""
@@ -385,34 +459,68 @@ def google_finance_price(request: Any) -> Response:
     except Exception as exc:  # noqa: BLE001
         return _build_response({"error": str(exc)}, 500)
 
-    rows = []
+    rows: List[Dict[str, Any]] = []
     error_messages: List[str] = []
     error_details: List[Dict[str, Any]] = []
-    for ticker in tickers:
-        try:
-            price = fetch_google_finance_price(ticker)
-            rows.append(
-                {
-                    "ticker": ticker,
-                    "data": data_atual,
-                    "hora": hora_atual,
-                    "valor": round(price, 2),
-                    "hora_atual": hora_atual,
-                    "data_hora_atual": data_hora_atual,
-                }
-            )
-        except Exception as exc:  # noqa: BLE001
-            logger.warning(
-                "Failed to fetch price for ticker %s: %s",
+
+    deadline_seconds = _function_deadline_seconds()
+    deadline = time.monotonic() + deadline_seconds
+    max_workers = _max_workers(len(tickers))
+    logger.warning(
+        "Fetching prices for %s tickers using %s workers (deadline %.1fs)",
+        len(tickers),
+        max_workers,
+        deadline_seconds,
+    )
+
+    timed_out = False
+    executor = ThreadPoolExecutor(max_workers=max_workers)
+    future_to_ticker: Dict[Any, str] = {}
+    try:
+        for ticker in tickers:
+            if time.monotonic() >= deadline:
+                timed_out = True
+                break
+            future = executor.submit(
+                _build_price_row,
                 ticker,
-                exc,
-                exc_info=True,
+                data_atual,
+                hora_atual,
+                data_hora_atual,
             )
-            details = _exception_details(exc)
-            details.setdefault("ticker", ticker)
-            error_details.append(details)
-            message = details.get("message", str(exc))
-            error_messages.append(f"{ticker}: {message}")
+            future_to_ticker[future] = ticker
+
+        for future in as_completed(future_to_ticker):
+            ticker = future_to_ticker[future]
+            if time.monotonic() >= deadline:
+                timed_out = True
+                break
+            try:
+                row = future.result()
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "Failed to fetch price for ticker %s: %s",
+                    ticker,
+                    exc,
+                    exc_info=True,
+                )
+                details = _exception_details(exc)
+                details.setdefault("ticker", ticker)
+                error_details.append(details)
+                message = details.get("message", str(exc))
+                error_messages.append(f"{ticker}: {message}")
+            else:
+                rows.append(row)
+    finally:
+        executor.shutdown(wait=not timed_out, cancel_futures=timed_out)
+
+    if timed_out:
+        skipped = len(tickers) - len(rows) - len(error_details)
+        message = "Tempo limite atingido; algumas coletas foram interrompidas"
+        if skipped > 0:
+            message += f" ({skipped} tickers restantes)"
+        error_messages.append(message)
+        error_details.append({"type": "Timeout", "message": message})
 
     if rows:
         if pd is not None:
