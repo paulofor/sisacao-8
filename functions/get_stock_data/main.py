@@ -183,7 +183,11 @@ def download_from_b3(
     """
     if date is None:
         date = datetime.date.today()
-    date_str = date.strftime("%Y%m%d")
+    # Os arquivos do portal da B3 utilizam o padrão DDMMAAAA no nome,
+    # diferente do conteúdo interno (que permanece AAAAMMDD). Ver
+    # https://arquivos.b3.com.br/api/swagger/24.1.31.1/swagger.json
+    # para o catálogo oficial de publicações.
+    date_str = date.strftime("%d%m%Y")
     nome_arquivo_zip = f"COTAHIST_D{date_str}.ZIP"
     nome_arquivo_txt = f"COTAHIST_D{date_str}.TXT"
     base_url = "https://bvmf.bmfbovespa.com.br/InstDados/SerHist/"

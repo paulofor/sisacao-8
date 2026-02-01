@@ -12,7 +12,7 @@ séries de preços sem necessidade de serviços adicionais.
 ## Estrutura atual do repositório
 
 - `config/`: contém o arquivo `env.example` com as variáveis mínimas necessárias para definir projeto, dataset e região no GCP.
-- `functions/get_stock_data/`: Cloud Function que baixa o arquivo oficial da B3 (`COTAHIST_D{data}.ZIP`), extrai as cotações
+- `functions/get_stock_data/`: Cloud Function que baixa o arquivo oficial da B3 (`COTAHIST_D{DDMMAAAA}.ZIP`), extrai as cotações
   solicitadas e insere os dados na tabela dedicada `cotacao_intraday.cotacao_fechamento_diario` usando o cliente do BigQuery.
 - `functions/google_finance_price/`: função HTTP pensada para Cloud Run que consulta a lista de tickers ativos no BigQuery,
   busca o último preço no Google Finance via *scraping* e grava os resultados na tabela intraday
