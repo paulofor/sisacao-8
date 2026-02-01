@@ -81,16 +81,19 @@ except ModuleNotFoundError:  # pragma: no cover - fallback when pytz is absent
 try:
     from functions.google_finance_price.google_scraper import (
         fetch_google_finance_price,
+        TIMEOUT as GOOGLE_FINANCE_TIMEOUT,
     )
 except ImportError:  # pragma: no cover - fallback when imported as a package
     try:
         from .google_scraper import fetch_google_finance_price
+        from .google_scraper import TIMEOUT as GOOGLE_FINANCE_TIMEOUT
     except ImportError:  # pragma: no cover - when executed as a script in Cloud Run
         import importlib
 
         fetch_google_finance_price = importlib.import_module(
             "google_scraper"
         ).fetch_google_finance_price
+        GOOGLE_FINANCE_TIMEOUT = importlib.import_module("google_scraper").TIMEOUT
 
 logger = logging.getLogger(__name__)
 
@@ -168,7 +171,7 @@ def _function_deadline_seconds() -> float:
     """Return the maximum time the request should run before aborting."""
 
     raw_value = os.environ.get(FUNCTION_DEADLINE_SECONDS_ENV)
-    default_deadline = 55.0
+    default_deadline = 25.0
     if not raw_value:
         return default_deadline
     try:
@@ -184,6 +187,40 @@ def _function_deadline_seconds() -> float:
 
     # Never allow a value too small to finish at least a couple requests.
     return max(10.0, parsed)
+
+
+def _limit_tickers_for_deadline(
+    tickers: List[str],
+    *,
+    deadline_seconds: float,
+    max_workers: int,
+) -> List[str]:
+    """Trim tickers to honor the request deadline."""
+
+    if not tickers:
+        return tickers
+    if max_workers <= 0:
+        return tickers
+
+    per_request_budget = GOOGLE_FINANCE_TIMEOUT + 1.0
+    if per_request_budget <= 0:
+        return tickers
+
+    buffer_seconds = 3.0
+    effective_deadline = max(1.0, deadline_seconds - buffer_seconds)
+    max_batches = max(1, int(effective_deadline // per_request_budget))
+    max_by_deadline = max_workers * max_batches
+    if max_by_deadline < len(tickers):
+        logger.warning(
+            "Limiting tickers to %s based on deadline %.1fs, timeout %.1fs, "
+            "and %s workers.",
+            max_by_deadline,
+            deadline_seconds,
+            GOOGLE_FINANCE_TIMEOUT,
+            max_workers,
+        )
+        return tickers[:max_by_deadline]
+    return tickers
 
 
 def _normalize_ticker_list(values: Iterable[Any]) -> List[str]:
@@ -461,8 +498,13 @@ def google_finance_price(request: Any) -> Response:
     error_details: List[Dict[str, Any]] = []
 
     deadline_seconds = _function_deadline_seconds()
-    deadline = time.monotonic() + deadline_seconds
     max_workers = _max_workers(len(tickers))
+    tickers = _limit_tickers_for_deadline(
+        tickers,
+        deadline_seconds=deadline_seconds,
+        max_workers=max_workers,
+    )
+    deadline = time.monotonic() + deadline_seconds
     logger.warning(
         "Fetching prices for %s tickers using %s workers (deadline %.1fs)",
         len(tickers),
