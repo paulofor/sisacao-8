@@ -115,6 +115,7 @@ FALLBACK_TICKERS_FILE_ENV = "FALLBACK_TICKERS_FILE"
 MAX_INTRADAY_TICKERS_ENV = "MAX_INTRADAY_TICKERS"
 MAX_WORKERS_ENV = "GOOGLE_FINANCE_MAX_WORKERS"
 FUNCTION_DEADLINE_SECONDS_ENV = "FUNCTION_DEADLINE_SECONDS"
+BATCH_SIZE_ENV = "GOOGLE_FINANCE_BATCH_SIZE"
 DEFAULT_TICKERS_FILE = (
     Path(__file__).resolve().parent.parent
     / "get_stock_data"
@@ -184,6 +185,26 @@ def _function_deadline_seconds() -> float:
 
     # Never allow a value too small to finish at least a couple requests.
     return max(10.0, parsed)
+
+
+def _batch_size() -> int:
+    raw_value = os.environ.get(BATCH_SIZE_ENV)
+    default_size = 10
+    if not raw_value:
+        return default_size
+    try:
+        parsed = int(raw_value)
+    except ValueError:
+        logger.warning(
+            "Invalid value '%s' for %s. Falling back to %s rows.",
+            raw_value,
+            BATCH_SIZE_ENV,
+            default_size,
+        )
+        return default_size
+    if parsed <= 0:
+        return default_size
+    return min(parsed, 200)
 
 
 def _normalize_ticker_list(values: Iterable[Any]) -> List[str]:
@@ -346,6 +367,16 @@ def append_dataframe_to_bigquery(data: Any) -> None:
         )
 
 
+def _append_rows(rows: List[Dict[str, Any]]) -> None:
+    if not rows:
+        return
+    logger.warning("Appending %s rows to BigQuery.", len(rows))
+    if pd is not None:
+        append_dataframe_to_bigquery(pd.DataFrame(rows))
+    else:
+        append_dataframe_to_bigquery(rows)
+
+
 def fetch_active_tickers() -> List[str]:
     """Return list of active tickers from ``acao_bovespa`` table."""
     table_id = f"{client.project}.{DATASET_ID}.acao_bovespa"
@@ -457,17 +488,20 @@ def google_finance_price(request: Any) -> Response:
         return _build_response({"error": str(exc)}, 500)
 
     rows: List[Dict[str, Any]] = []
+    batch_rows: List[Dict[str, Any]] = []
     error_messages: List[str] = []
     error_details: List[Dict[str, Any]] = []
 
     deadline_seconds = _function_deadline_seconds()
     deadline = time.monotonic() + deadline_seconds
     max_workers = _max_workers(len(tickers))
+    batch_size = _batch_size()
     logger.warning(
-        "Fetching prices for %s tickers using %s workers (deadline %.1fs)",
+        "Fetching prices for %s tickers using %s workers (deadline %.1fs, batch %s)",
         len(tickers),
         max_workers,
         deadline_seconds,
+        batch_size,
     )
 
     timed_out = False
@@ -508,8 +542,16 @@ def google_finance_price(request: Any) -> Response:
                 error_messages.append(f"{ticker}: {message}")
             else:
                 rows.append(row)
+                batch_rows.append(row)
+                if len(batch_rows) >= batch_size:
+                    _append_rows(batch_rows)
+                    batch_rows.clear()
     finally:
         executor.shutdown(wait=not timed_out, cancel_futures=timed_out)
+
+    if batch_rows:
+        _append_rows(batch_rows)
+        batch_rows.clear()
 
     if timed_out:
         skipped = len(tickers) - len(rows) - len(error_details)
@@ -518,17 +560,6 @@ def google_finance_price(request: Any) -> Response:
             message += f" ({skipped} tickers restantes)"
         error_messages.append(message)
         error_details.append({"type": "Timeout", "message": message})
-
-    if rows:
-        if pd is not None:
-            df = pd.DataFrame(rows)
-            append_dataframe_to_bigquery(df)
-        else:
-            logger.warning(
-                "Pandas is not installed. Loading %s rows using JSON payload.",
-                len(rows),
-            )
-            append_dataframe_to_bigquery(rows)
 
     if rows:
         response: Dict[str, Any] = {
