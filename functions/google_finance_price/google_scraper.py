@@ -34,6 +34,14 @@ JSON_PRICE_RE = re.compile(
     r"\"price\"\s*:\s*\{\s*\"raw\"\s*:\s*(?P<price>-?[0-9.,]+)",
 )
 
+JSNAME_PRICE_RE = re.compile(
+    (
+        r"jsname=(['\"])ip75Cb\1[^>]*>"
+        r"(?P<content>.*?)</div>"
+    ),
+    re.DOTALL,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -93,7 +101,7 @@ def _extract_price_with_regex(html: str) -> float:
     )
     for match in pattern.finditer(html):
         classes = set(match.group("classes").split())
-        if {"YMlKec", "fxKbKc"}.issubset(classes):
+        if "YMlKec" in classes:
             raw_content = re.sub(r"<[^>]+>", "", match.group("content"))
             price_text = unescape(raw_content).strip()
             if price_text:
@@ -124,6 +132,25 @@ def _extract_price_from_json_payload(html: str) -> float:
 
     price_text = match.group("price").strip()
     return _parse_number(price_text)
+
+
+def _extract_price_from_jsname_container(html: str) -> float:
+    """Extract price from the ``jsname=ip75Cb`` container when present."""
+
+    for match in JSNAME_PRICE_RE.finditer(html):
+        content = match.group("content")
+        price_match = re.search(
+            r"class=(['\"])(?P<classes>[^'\"]*?\bYMlKec\b[^'\"]*)\1[^>]*>"
+            r"(?P<price>[^<]+)",
+            content,
+            re.DOTALL,
+        )
+        if not price_match:
+            continue
+        price_text = unescape(price_match.group("price")).strip()
+        if price_text:
+            return _parse_number(price_text)
+    raise ValueError("Could not find price in jsname container")
 
 
 def _parse_number(value: str) -> float:
@@ -183,6 +210,7 @@ def extract_price_from_html(html: str) -> float:
     for extractor in (
         _extract_price_from_data_attribute,
         _extract_price_from_json_payload,
+        _extract_price_from_jsname_container,
     ):
         try:
             return extractor(html)
@@ -202,8 +230,15 @@ def extract_price_from_html(html: str) -> float:
                 ) from exc
             logger.warning("BeautifulSoup failed to parse HTML", exc_info=True)
         else:
-            price_div = soup.select_one("div.YMlKec.fxKbKc")
-            if price_div is not None:
+            selectors = [
+                "div[jsname='ip75Cb'] div.YMlKec",
+                "div.YMlKec.fxKbKc",
+                "div.YMlKec",
+            ]
+            for selector in selectors:
+                price_div = soup.select_one(selector)
+                if price_div is None:
+                    continue
                 price_text = price_div.get_text(strip=True)
                 if price_text:
                     return _parse_number(price_text)
