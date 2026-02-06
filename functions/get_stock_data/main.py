@@ -182,7 +182,8 @@ def download_from_b3(
     Returns a mapping of ticker to a tuple (date, close_price).
     """
     if date is None:
-        date = datetime.date.today()
+        brasil_tz = timezone("America/Sao_Paulo")
+        date = datetime.datetime.now(brasil_tz).date()
     # Os arquivos do portal da B3 utilizam o padrão DDMMAAAA no nome,
     # diferente do conteúdo interno (que permanece AAAAMMDD). Ver
     # https://arquivos.b3.com.br/api/swagger/24.1.31.1/swagger.json
