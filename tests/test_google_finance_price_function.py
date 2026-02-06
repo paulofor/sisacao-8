@@ -284,6 +284,7 @@ def test_append_dataframe_without_pandas(monkeypatch):
     assert row["hora_atual"] == "12:34:00"
     assert row["data_hora_atual"] == "2024-01-02T12:34:00"
 
+
 def test_append_dataframe_to_bigquery_drops_timezone(monkeypatch):
     fake_bigquery = types.ModuleType("bigquery")
 
