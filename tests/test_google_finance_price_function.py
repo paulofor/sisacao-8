@@ -62,10 +62,12 @@ def test_google_finance_price_success(monkeypatch):
     assert body["tickers"] == ["YDUQ3", "PETR4"]
     assert body["processed"] == 2
     expected_table_id = (
-        f"{FakeClient.project}.{module.DATASET_ID}.acao_bovespa"  # noqa: E501
+        f"{FakeClient.project}.{module.DATASET_ID}.acao_bovespa"
     )
     expected_query = (
-        f"SELECT ticker FROM `{expected_table_id}` WHERE ativo = TRUE"  # noqa: E501
+        "SELECT ticker FROM "
+        f"`{expected_table_id}` "
+        "WHERE ativo = TRUE"
     )
     assert FakeClient.last_query == expected_query
     df = captured["df"]
