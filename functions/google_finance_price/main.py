@@ -275,6 +275,14 @@ def _normalize_time_value(raw_value: Any) -> str:
     return value
 
 
+def _ensure_naive_datetime(value: datetime.datetime) -> datetime.datetime:
+    """Return ``value`` without timezone information."""
+
+    if value.tzinfo is None:
+        return value
+    return value.replace(tzinfo=None)
+
+
 def _normalize_rows(rows: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Convert iterable of rows into BigQuery friendly dictionaries."""
 
@@ -292,7 +300,9 @@ def _normalize_rows(rows: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
             record["hora_atual"] = _normalize_time_value(hora_atual_value)
         data_hora_value = record.get("data_hora_atual")
         if isinstance(data_hora_value, datetime.datetime):
-            record["data_hora_atual"] = data_hora_value.isoformat()
+            record["data_hora_atual"] = _ensure_naive_datetime(
+                data_hora_value
+            ).isoformat()
         normalized.append(record)
     return normalized
 
@@ -334,7 +344,12 @@ def append_dataframe_to_bigquery(data: Any) -> None:
                 )
                 df["hora_atual"] = hora_atual_col.dt.time
             if "data_hora_atual" in df.columns:
-                df["data_hora_atual"] = pd.to_datetime(df["data_hora_atual"])
+                data_hora_col = pd.to_datetime(df["data_hora_atual"])
+                try:
+                    data_hora_col = data_hora_col.dt.tz_localize(None)
+                except (AttributeError, TypeError):
+                    pass
+                df["data_hora_atual"] = data_hora_col
 
             job = client.load_table_from_dataframe(
                 df,
@@ -468,7 +483,7 @@ def _build_price_row(
         "hora": hora_atual,
         "valor": round(price, 2),
         "hora_atual": hora_atual,
-        "data_hora_atual": data_hora_atual,
+        "data_hora_atual": _ensure_naive_datetime(data_hora_atual),
     }
 
 

@@ -79,6 +79,7 @@ def test_google_finance_price_success(monkeypatch):
     ]
     assert list(df["ticker"]) == ["YDUQ3", "PETR4"]
     assert list(df["valor"]) == [pytest.approx(11.11), pytest.approx(22.22)]
+    assert all(getattr(value, "tzinfo", None) is None for value in df["data_hora_atual"])
 
 
 def test_google_finance_price_failure(monkeypatch):
@@ -257,7 +258,9 @@ def test_append_dataframe_without_pandas(monkeypatch):
             "hora": "12:34",
             "valor": 10.5,
             "hora_atual": datetime.time(12, 34),
-            "data_hora_atual": datetime.datetime(2024, 1, 2, 12, 34),
+            "data_hora_atual": datetime.datetime(
+                2024, 1, 2, 12, 34, tzinfo=datetime.timezone(datetime.timedelta(hours=-3))
+            ),
         }
     ]
 
@@ -270,4 +273,75 @@ def test_append_dataframe_without_pandas(monkeypatch):
     assert captured["rows"][0]["hora"] == "12:34:00"
     row = captured["rows"][0]
     assert row["hora_atual"] == "12:34:00"
-    assert row["data_hora_atual"].startswith("2024-01-02T12:34:00")
+    assert row["data_hora_atual"] == "2024-01-02T12:34:00"
+
+
+
+def test_append_dataframe_to_bigquery_drops_timezone(monkeypatch):
+    fake_bigquery = types.ModuleType("bigquery")
+
+    class DummyJob:
+        def result(self):  # noqa: D401
+            return None
+
+    class DummyJobConfig:
+        def __init__(self, schema=None, write_disposition=None):  # noqa: D401, ANN001
+            self.schema = schema
+            self.write_disposition = write_disposition
+
+    class DummySchemaField:
+        def __init__(self, name, field_type):  # noqa: D401, ANN001
+            self.name = name
+            self.field_type = field_type
+
+    class DummyWriteDisposition:
+        WRITE_APPEND = "WRITE_APPEND"
+
+    captured = {}
+
+    class FakeClient:
+        project = "test-project"
+
+        def load_table_from_dataframe(self, df, table_id, job_config):  # noqa: D401
+            captured["tzinfo"] = getattr(df["data_hora_atual"].iloc[0], "tzinfo", "missing")
+            captured["table_id"] = table_id
+            captured["schema"] = job_config.schema
+            return DummyJob()
+
+    fake_bigquery.Client = lambda *a, **k: FakeClient()
+    fake_bigquery.LoadJobConfig = DummyJobConfig
+    fake_bigquery.SchemaField = DummySchemaField
+    fake_bigquery.WriteDisposition = DummyWriteDisposition
+    fake_cloud = types.ModuleType("cloud")
+    fake_cloud.bigquery = fake_bigquery
+    fake_google = types.ModuleType("google")
+    fake_google.cloud = fake_cloud
+    monkeypatch.setitem(sys.modules, "google", fake_google)
+    monkeypatch.setitem(sys.modules, "google.cloud", fake_cloud)
+    monkeypatch.setitem(sys.modules, "google.cloud.bigquery", fake_bigquery)
+
+    module = importlib.reload(
+        importlib.import_module("functions.google_finance_price.main")
+    )
+
+    df = pd.DataFrame(
+        [
+            {
+                "ticker": "PETR4",
+                "data": "2024-02-01",
+                "hora": "12:34",
+                "valor": 1.23,
+                "hora_atual": "12:34",
+                "data_hora_atual": datetime.datetime(
+                    2024, 2, 1, 12, 34, tzinfo=datetime.timezone.utc
+                ),
+            }
+        ]
+    )
+
+    module.append_dataframe_to_bigquery(df)
+
+    assert captured["table_id"].endswith(
+        f"{module.DATASET_ID}.{module.TABELA_ID}"
+    )
+    assert captured["tzinfo"] is None
