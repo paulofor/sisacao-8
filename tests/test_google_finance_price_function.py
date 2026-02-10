@@ -355,3 +355,58 @@ def test_append_dataframe_to_bigquery_drops_timezone(monkeypatch):
         f"{module.DATASET_ID}.{module.TABELA_ID}"
     )
     assert captured["tzinfo"] is None
+
+
+def test_google_finance_price_persists_partial_rows_before_timeout(monkeypatch):
+    fake_bigquery = types.ModuleType("bigquery")
+
+    class FakeClient:
+        project = "test-project"
+
+        def query(self, query):  # noqa: D401, ANN001
+            return SimpleNamespace(
+                to_dataframe=lambda: pd.DataFrame(
+                    {"ticker": ["FAST1", "FAST2", "SLOW1"]}
+                )
+            )
+
+    fake_bigquery.Client = lambda *a, **k: FakeClient()
+    fake_cloud = types.ModuleType("cloud")
+    fake_cloud.bigquery = fake_bigquery
+    fake_google = types.ModuleType("google")
+    fake_google.cloud = fake_cloud
+    monkeypatch.setitem(sys.modules, "google", fake_google)
+    monkeypatch.setitem(sys.modules, "google.cloud", fake_cloud)
+    monkeypatch.setitem(sys.modules, "google.cloud.bigquery", fake_bigquery)
+
+    module = importlib.reload(
+        importlib.import_module("functions.google_finance_price.main")
+    )
+
+    monkeypatch.setenv("GOOGLE_FINANCE_MAX_WORKERS", "3")
+    monkeypatch.setenv("GOOGLE_FINANCE_BATCH_SIZE", "1")
+    monkeypatch.setattr(module, "_function_deadline_seconds", lambda: 0.2)
+
+    def mock_fetch(ticker: str, exchange: str = "BVMF", session=None) -> float:
+        if ticker == "SLOW1":
+            import time
+
+            time.sleep(0.5)
+        return {"FAST1": 10.0, "FAST2": 20.0, "SLOW1": 30.0}[ticker]
+
+    monkeypatch.setattr(module, "fetch_google_finance_price", mock_fetch)
+
+    batches = []
+
+    def mock_append(df):
+        batches.append(list(df["ticker"]))
+
+    monkeypatch.setattr(module, "append_dataframe_to_bigquery", mock_append)
+
+    response = module.google_finance_price(DummyRequest(args={}))
+
+    assert response.status_code == 207
+    body = json.loads(response.get_data(as_text=True))
+    assert body["processed"] == 2
+    assert {item for batch in batches for item in batch} == {"FAST1", "FAST2"}
+    assert any(error.get("type") == "Timeout" for error in body["errors"])
