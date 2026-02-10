@@ -7,7 +7,7 @@ import json
 import logging
 import os
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from sys import version_info
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
@@ -536,31 +536,52 @@ def google_finance_price(request: Any) -> Response:
             )
             future_to_ticker[future] = ticker
 
-        for future in as_completed(future_to_ticker):
-            ticker = future_to_ticker[future]
-            if time.monotonic() >= deadline:
+        pending = set(future_to_ticker.keys())
+        while pending:
+            remaining_seconds = deadline - time.monotonic()
+            if remaining_seconds <= 0:
                 timed_out = True
                 break
-            try:
-                row = future.result()
-            except Exception as exc:  # noqa: BLE001
-                logger.warning(
-                    "Failed to fetch price for ticker %s: %s",
-                    ticker,
-                    exc,
-                    exc_info=True,
-                )
-                details = _exception_details(exc)
-                details.setdefault("ticker", ticker)
-                error_details.append(details)
-                message = details.get("message", str(exc))
-                error_messages.append(f"{ticker}: {message}")
-            else:
-                rows.append(row)
-                batch_rows.append(row)
-                if len(batch_rows) >= batch_size:
-                    _append_rows(batch_rows)
-                    batch_rows.clear()
+
+            done, pending = wait(
+                pending,
+                timeout=remaining_seconds,
+                return_when=FIRST_COMPLETED,
+            )
+            if not done:
+                timed_out = True
+                break
+
+            for future in done:
+                ticker = future_to_ticker[future]
+                try:
+                    row = future.result()
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "Failed to fetch price for ticker %s: %s",
+                        ticker,
+                        exc,
+                        exc_info=True,
+                    )
+                    details = _exception_details(exc)
+                    details.setdefault("ticker", ticker)
+                    error_details.append(details)
+                    message = details.get("message", str(exc))
+                    error_messages.append(f"{ticker}: {message}")
+                else:
+                    rows.append(row)
+                    batch_rows.append(row)
+                    if len(batch_rows) >= batch_size:
+                        _append_rows(batch_rows)
+                        batch_rows.clear()
+
+            if time.monotonic() >= deadline and pending:
+                timed_out = True
+                break
+
+        if timed_out:
+            for future in pending:
+                future.cancel()
     finally:
         executor.shutdown(wait=not timed_out, cancel_futures=timed_out)
 
