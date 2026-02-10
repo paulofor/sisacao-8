@@ -88,3 +88,45 @@ def test_download_from_b3_records_diagnostics_on_error(monkeypatch):
     )
     assert result == {}
     assert any("proxy failed" in item for item in diagnostics)
+
+
+def test_build_b3_daily_filenames_uses_ddmmaaaa(monkeypatch):
+    """Ensure daily B3 filenames are generated in DDMMAAAA format."""
+
+    monkeypatch.setattr("google.cloud.bigquery.Client", lambda: None)
+    main = importlib.import_module("functions.get_stock_data.main")
+
+    token, zip_name, txt_name = main._build_b3_daily_filenames(
+        datetime.date(2026, 2, 9)
+    )
+
+    assert token == "09022026"
+    assert zip_name == "COTAHIST_D09022026.ZIP"
+    assert txt_name == "COTAHIST_D09022026.TXT"
+
+
+def test_download_from_b3_requests_ddmmaaaa_filename(monkeypatch):
+    """Ensure request URL contains daily DDMMAAAA filename."""
+
+    monkeypatch.setattr("google.cloud.bigquery.Client", lambda: None)
+    main = importlib.import_module("functions.get_stock_data.main")
+    download_from_b3 = main.download_from_b3
+
+    requested_urls = []
+
+    class DummyResponse:
+        content = b""
+
+        def raise_for_status(self) -> None:
+            """Pretend response is OK."""
+
+    def mock_get(url, *args, **kwargs):  # noqa: ANN001, ANN002 - match requests.get
+        requested_urls.append(url)
+        return DummyResponse()
+
+    monkeypatch.setattr(requests, "get", mock_get)
+
+    download_from_b3(["YDUQ3"], date=datetime.date(2026, 2, 9))
+
+    assert requested_urls
+    assert requested_urls[0].endswith("/COTAHIST_D09022026.ZIP")
