@@ -171,6 +171,21 @@ def _fallback_b3_prices(
     return result
 
 
+def _build_b3_daily_filenames(
+    reference_date: datetime.date,
+) -> Tuple[str, str, str]:
+    """Build B3 daily ZIP/TXT names using the DDMMAAAA filename standard."""
+
+    date_token = (
+        f"{reference_date.day:02d}"
+        f"{reference_date.month:02d}"
+        f"{reference_date.year:04d}"
+    )
+    zip_name = f"COTAHIST_D{date_token}.ZIP"
+    txt_name = f"COTAHIST_D{date_token}.TXT"
+    return date_token, zip_name, txt_name
+
+
 def download_from_b3(
     tickers: List[str],
     date: Optional[datetime.date] = None,
@@ -188,9 +203,7 @@ def download_from_b3(
     # diferente do conteúdo interno (que permanece AAAAMMDD). Ver
     # https://arquivos.b3.com.br/api/swagger/24.1.31.1/swagger.json
     # para o catálogo oficial de publicações.
-    date_str = date.strftime("%d%m%Y")
-    nome_arquivo_zip = f"COTAHIST_D{date_str}.ZIP"
-    nome_arquivo_txt = f"COTAHIST_D{date_str}.TXT"
+    date_str, nome_arquivo_zip, nome_arquivo_txt = _build_b3_daily_filenames(date)
     base_url = "https://bvmf.bmfbovespa.com.br/InstDados/SerHist/"
     url = f"{base_url.rstrip('/')}/{nome_arquivo_zip}"
     logging.warning("Tickers solicitados: %s", tickers)
