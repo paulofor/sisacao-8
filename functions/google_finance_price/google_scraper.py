@@ -8,6 +8,7 @@ performs an HTTP request and parses the HTML, but a smaller
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from html import unescape
@@ -42,7 +43,20 @@ JSNAME_PRICE_RE = re.compile(
     re.DOTALL,
 )
 
+HTML_LANG_RE = re.compile(
+    r"<html[^>]*\blang=['""](?P<lang>[A-Za-z-]+)['""][^>]*>",
+    re.IGNORECASE,
+)
+
 logger = logging.getLogger(__name__)
+
+WIZ_GLOBAL_DATA_RE = re.compile(
+    r"window\.WIZ_global_data\s*=\s*(\{.*?\});",
+    re.DOTALL,
+)
+
+DEFAULT_BUILD_LABEL = "boq_finance-ui_20260210.01_p0"
+DEFAULT_LANG = "en"
 
 
 class GoogleFinancePriceError(RuntimeError):
@@ -263,31 +277,140 @@ def _normalize_excerpt(value: str, limit: int = 280) -> str:
     return f"{cleaned[: limit - 3]}..."
 
 
+def _extract_global_data(html: str) -> Dict[str, Any]:
+    """Return the parsed ``window.WIZ_global_data`` dictionary if present."""
+
+    match = WIZ_GLOBAL_DATA_RE.search(html)
+    if not match:
+        return {}
+    try:
+        return json.loads(match.group(1))
+    except json.JSONDecodeError:
+        logger.warning(
+            "Falha ao interpretar window.WIZ_global_data; ignorando fallback via API."
+        )
+        return {}
+
+
+def _detect_page_language(html: str) -> str:
+    """Infer the language declared in the ``<html>`` tag."""
+
+    match = HTML_LANG_RE.search(html)
+    if match:
+        lang = match.group("lang").strip()
+        if lang:
+            return lang.split('-')[0]
+    return DEFAULT_LANG
+
+
+def _extract_wrapped_rpc_payload(payload: str, rpc_id: str) -> Optional[str]:
+    """Return the JSON blob stored inside the batchexecute wrapper."""
+
+    for line in payload.splitlines():
+        line = line.strip()
+        if not line or not line.startswith('[["wrb.fr"'):
+            continue
+        try:
+            frame = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not frame or not isinstance(frame, list):
+            continue
+        current = frame[0]
+        if not isinstance(current, list) or len(current) < 3:
+            continue
+        if current[1] == rpc_id:
+            blob = current[2]
+            if isinstance(blob, str) and blob:
+                return blob
+    return None
+
+
+def _parse_batchexecute_price(raw_payload: str) -> float:
+    """Extract the price value from the ``mKsvE`` RPC payload."""
+
+    try:
+        data = json.loads(raw_payload)
+        quote_block = data[0][0][3]
+        price_block = quote_block[5]
+        price = price_block[0]
+    except (IndexError, KeyError, TypeError, json.JSONDecodeError) as exc:
+        raise ValueError(
+            "Estrutura inesperada na resposta da API do Google Finance"
+        ) from exc
+    if not isinstance(price, (int, float)):
+        raise ValueError("Preço ausente na resposta da API do Google Finance")
+    return float(price)
+
+
+def _build_batchexecute_body(symbol: str) -> str:
+    """Return the serialized ``f.req`` payload for ``mKsvE``."""
+
+    serialized_symbol = json.dumps([symbol])
+    return json.dumps([[['mKsvE', serialized_symbol, None, 'generic']]])
+
+
+def _fetch_price_from_batchexecute(
+    symbol: str,
+    source_path: str,
+    html: str,
+    session: requests.sessions.Session | Any,
+) -> float:
+    """Use the internal batchexecute endpoint as a fallback source."""
+
+    global_data = _extract_global_data(html)
+    if not global_data:
+        raise ValueError('window.WIZ_global_data ausente')
+
+    build_label = str(global_data.get('cfb2h') or DEFAULT_BUILD_LABEL)
+    lang = _detect_page_language(html)
+    params = {
+        'rpcids': 'mKsvE',
+        'source-path': source_path,
+        'hl': lang or DEFAULT_LANG,
+        'bl': build_label or DEFAULT_BUILD_LABEL,
+        'rt': 'c',
+    }
+    f_sid = global_data.get('FdrFJe')
+    if f_sid:
+        params['f.sid'] = str(f_sid)
+
+    headers = {
+        'User-Agent': 'Mozilla/5.0',
+        'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+        'Referer': f'https://www.google.com{source_path}',
+    }
+    body = {'f.req': _build_batchexecute_body(symbol)}
+
+    response = session.post(
+        'https://www.google.com/finance/_/GoogleFinanceUi/data/batchexecute',
+        params=params,
+        data=body,
+        headers=headers,
+        timeout=TIMEOUT,
+    )
+    response.raise_for_status()
+    payload = _extract_wrapped_rpc_payload(response.text, 'mKsvE')
+    if not payload:
+        raise ValueError('Resposta da API não trouxe o payload esperado')
+    return _parse_batchexecute_price(payload)
+
+
 def fetch_google_finance_price(
     ticker: str,
     exchange: str = "BVMF",
     session: Optional[requests.Session] = None,
 ) -> float:
-    """Fetch the latest price for ``ticker`` from Google Finance.
+    """Fetch the latest price for ``ticker`` from Google Finance."""
 
-    Parameters
-    ----------
-    ticker:
-        Stock ticker symbol, e.g. ``"YDUQ3"``.
-    exchange:
-        Exchange suffix used by Google Finance, default ``"BVMF"``.
-    session:
-        Optional ``requests.Session`` to reuse connections.
-
-    Returns
-    -------
-    float
-        Latest price for the ticker.
-    """
-    if ticker.upper() == "IBOV":
-        url = "https://www.google.com/finance/quote/IBOV:INDEXBVMF"
+    ticker_upper = ticker.upper()
+    if ticker_upper == "IBOV":
+        symbol = "IBOV:INDEXBVMF"
     else:
-        url = f"https://www.google.com/finance/quote/{ticker}:{exchange}"
+        symbol = f"{ticker_upper}:{exchange}"
+
+    url = f"https://www.google.com/finance/quote/{symbol}"
+    source_path = f"/finance/quote/{symbol}"
 
     logger.warning("Fetching Google Finance URL %s for ticker %s", url, ticker)
     sess = session or requests
@@ -296,14 +419,14 @@ def fetch_google_finance_price(
         response = sess.get(url, headers=headers, timeout=TIMEOUT)
     except requests.RequestException as exc:  # pragma: no cover - network error
         status = getattr(getattr(exc, "response", None), "status_code", None)
-        text = getattr(getattr(exc, "response", None), "text", "")
+        text_excerpt = getattr(getattr(exc, "response", None), "text", "")
         raise GoogleFinancePriceError(
             ticker,
             f"Falha ao requisitar preço para {ticker}: {exc}",
             url=url,
             status=status,
             cause=exc,
-            response_excerpt=_normalize_excerpt(text) if text else None,
+            response_excerpt=_normalize_excerpt(text_excerpt) if text_excerpt else None,
         ) from exc
 
     logger.warning(
@@ -324,17 +447,35 @@ def fetch_google_finance_price(
             response_excerpt=_normalize_excerpt(getattr(response, "text", "")),
         ) from exc
 
+    html = response.text
     try:
-        price = extract_price_from_html(response.text)
-    except ValueError as exc:
-        raise GoogleFinancePriceError(
+        price = extract_price_from_html(html)
+    except ValueError as html_error:
+        logger.warning(
+            "HTML parsing failed for %s (%s); trying batchexecute fallback",
             ticker,
-            f"Não foi possível extrair o preço para {ticker}: {exc}",
-            url=url,
-            status=response.status_code,
-            cause=exc,
-            response_excerpt=_normalize_excerpt(response.text),
-        ) from exc
+            html_error,
+        )
+        try:
+            price = _fetch_price_from_batchexecute(symbol, source_path, html, sess)
+        except (ValueError, requests.RequestException) as api_error:
+            message = (
+                f"Não foi possível extrair o preço para {ticker} após o fallback via API: {api_error}"
+            )
+            raise GoogleFinancePriceError(
+                ticker,
+                message,
+                url=url,
+                status=response.status_code,
+                cause=api_error,
+                response_excerpt=_normalize_excerpt(html),
+            ) from api_error
+        else:
+            logger.warning(
+                "Extracted price %.2f for ticker %s via batchexecute fallback",
+                price,
+                ticker,
+            )
 
     logger.warning("Extracted price %.2f for ticker %s", price, ticker)
     return price

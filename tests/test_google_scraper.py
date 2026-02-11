@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 import pytest
+import requests
 
 from functions.google_finance_price import google_scraper as gf_scraper
 
@@ -134,3 +135,66 @@ def test_extract_price_from_real_google_finance_html():
     assert "updatedAt" in test_results
     # Ensure the timestamp follows the ISO-8601 format produced by datetime.isoformat.
     assert "T" in test_results["updatedAt"]
+
+
+def test_fetch_google_finance_price_uses_batchexecute_fallback(monkeypatch):
+    html_content = """
+    <html lang="pt-BR">
+        <head>
+            <script>
+                window.WIZ_global_data = {"cfb2h":"test_build","FdrFJe":"123456789"};
+            </script>
+        </head>
+    </html>
+    """
+
+    quote_payload = [
+        "/g/12fh0ph_n",
+        ["TEST", "BVMF"],
+        "Test Corp",
+        0,
+        "BRL",
+        [42.42, 0, 0, 2, 2, 2],
+        None,
+        42.0,
+        "#000000",
+        "BR",
+        None,
+        [1770831703],
+    ]
+    raw_data = [[["/g/12fh0ph_n", None, None, quote_payload]]]
+    frame = ["wrb.fr", "mKsvE", json.dumps(raw_data), None, None, None, "generic"]
+    api_payload_lines = [
+        ")]}'",
+        "",
+        str(len(frame[2])),
+        json.dumps([frame]),
+    ]
+    api_payload = "\n".join(api_payload_lines)
+
+
+
+
+    class DummyResponse:
+        def __init__(self, text: str, status: int = 200):
+            self.text = text
+            self.status_code = status
+
+        def raise_for_status(self):
+            if self.status_code >= 400:
+                raise requests.HTTPError(f"status {self.status_code}")
+
+    class DummySession:
+        def get(self, *_args, **_kwargs):
+            return DummyResponse(html_content)
+
+        def post(self, *_args, **_kwargs):
+            return DummyResponse(api_payload)
+
+    def fake_extract(_html: str) -> float:  # noqa: D401, ANN001
+        raise ValueError("missing price")
+
+    monkeypatch.setattr(gf_scraper, "extract_price_from_html", fake_extract)
+
+    price = gf_scraper.fetch_google_finance_price("test", session=DummySession())
+    assert price == pytest.approx(42.42)
