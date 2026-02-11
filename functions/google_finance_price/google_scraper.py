@@ -460,7 +460,8 @@ def fetch_google_finance_price(
             price = _fetch_price_from_batchexecute(symbol, source_path, html, sess)
         except (ValueError, requests.RequestException) as api_error:
             message = (
-                f"Não foi possível extrair o preço para {ticker} após o fallback via API: {api_error}"
+                f"Não foi possível extrair o preço para {ticker} "
+                f"após o fallback via API: {api_error}"
             )
             raise GoogleFinancePriceError(
                 ticker,

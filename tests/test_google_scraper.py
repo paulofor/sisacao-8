@@ -172,9 +172,6 @@ def test_fetch_google_finance_price_uses_batchexecute_fallback(monkeypatch):
     ]
     api_payload = "\n".join(api_payload_lines)
 
-
-
-
     class DummyResponse:
         def __init__(self, text: str, status: int = 200):
             self.text = text
