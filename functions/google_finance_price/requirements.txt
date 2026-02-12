@@ -2,6 +2,7 @@ functions-framework
 requests
 beautifulsoup4
 pandas
+pandas-gbq>=0.26.1
 google-cloud-bigquery>=3.12
 db-dtypes
 pyarrow
