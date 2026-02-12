@@ -95,7 +95,7 @@ except ImportError:  # pragma: no cover - fallback when imported as a package
 logger = logging.getLogger(__name__)
 
 DATASET_ID = "cotacao_intraday"
-TABELA_ID = "cotacao_bovespa"
+TABELA_ID = "cotacao_b3"
 
 client = bigquery.Client()
 
@@ -369,7 +369,20 @@ def append_dataframe_to_bigquery(data: Any) -> None:
                 job_config=job_config,
             )
             inserted_rows = len(rows)
+        logger.warning(
+            "BigQuery load job submitted: id=%s table=%s rows=%s",
+            getattr(job, "job_id", "unknown"),
+            tabela_id,
+            inserted_rows,
+        )
         job.result()
+        output_rows = getattr(job, "output_rows", None)
+        if output_rows is not None:
+            logger.warning(
+                "BigQuery load job completed: id=%s output_rows=%s",
+                getattr(job, "job_id", "unknown"),
+                output_rows,
+            )
         logger.warning(
             "Data inserted successfully into BigQuery (%s rows).",
             inserted_rows,

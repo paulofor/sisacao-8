@@ -19,7 +19,7 @@ Coleta cotações de ações e carrega no **BigQuery** usando **Google Cloud Fun
 3. Garanta que os tickers desejados estejam marcados como ativos na tabela
    `cotacao_intraday.acao_bovespa`, utilizada pela função
    `google_finance_price`. Os preços coletados por essa função são inseridos
-   na tabela intraday `ingestaokraken.cotacao_intraday.cotacao_bovespa`. A
+   na tabela intraday `ingestaokraken.cotacao_intraday.cotacao_b3`. A
    função `get_stock_data` reutiliza essa mesma lista ao buscar os fechamentos
    diários. Se preferir testar com um arquivo local, edite
    `functions/get_stock_data/tickers.txt` (um símbolo por linha) e defina a
