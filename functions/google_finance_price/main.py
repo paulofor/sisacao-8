@@ -313,15 +313,32 @@ def append_dataframe_to_bigquery(data: Any) -> None:
     try:
         tabela_id = f"{client.project}.{DATASET_ID}.{TABELA_ID}"
         logger.warning("Destination table: %s", tabela_id)
+        try:
+            ticker_field = bigquery.SchemaField(
+                "ticker", "STRING", mode="REQUIRED"
+            )
+        except TypeError:
+            ticker_field = bigquery.SchemaField("ticker", "STRING")
+
+        expected_schema = [
+            ticker_field,
+            bigquery.SchemaField("data", "DATE"),
+            bigquery.SchemaField("hora", "TIME"),
+            bigquery.SchemaField("valor", "FLOAT"),
+            bigquery.SchemaField("hora_atual", "TIME"),
+            bigquery.SchemaField("data_hora_atual", "DATETIME"),
+        ]
+        try:
+            expected_schema = client.get_table(tabela_id).schema
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Failed to read destination schema from %s; using local fallback: %s",
+                tabela_id,
+                exc,
+            )
+
         job_config = bigquery.LoadJobConfig(
-            schema=[
-                bigquery.SchemaField("ticker", "STRING"),
-                bigquery.SchemaField("data", "DATE"),
-                bigquery.SchemaField("hora", "TIME"),
-                bigquery.SchemaField("valor", "FLOAT"),
-                bigquery.SchemaField("hora_atual", "TIME"),
-                bigquery.SchemaField("data_hora_atual", "DATETIME"),
-            ],
+            schema=expected_schema,
             write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
         )
 
