@@ -371,6 +371,13 @@ def append_dataframe_to_bigquery(data: Any) -> None:
             inserted_rows = len(rows)
         job.result()
         logger.warning(
+            "BigQuery load job completed (job_id=%s, state=%s, output_rows=%s, errors=%s)",
+            getattr(job, "job_id", "unknown"),
+            getattr(job, "state", "unknown"),
+            getattr(job, "output_rows", "unknown"),
+            getattr(job, "errors", None),
+        )
+        logger.warning(
             "Data inserted successfully into BigQuery (%s rows).",
             inserted_rows,
         )
