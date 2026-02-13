@@ -130,3 +130,51 @@ def test_download_from_b3_requests_ddmmaaaa_filename(monkeypatch):
 
     assert requested_urls
     assert requested_urls[0].endswith("/COTAHIST_D09022026.ZIP")
+
+
+def test_download_from_b3_fallbacks_after_404(monkeypatch):
+    """Fallback to previous day when latest file returns 404."""
+
+    monkeypatch.setattr("google.cloud.bigquery.Client", lambda: None)
+    main = importlib.import_module("functions.get_stock_data.main")
+    download_from_b3 = main.download_from_b3
+
+    requested_urls = []
+
+    prefix = "01" + "20260211" + "  " + "YDUQ3      "
+    line = prefix + " " * (108 - 24) + "0000000001500\n"
+
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as zf:
+        zf.writestr("COTAHIST_D11022026.TXT", line)
+    buffer.seek(0)
+
+    class NotFoundResponse:
+        status_code = 404
+        content = b""
+
+        def raise_for_status(self) -> None:
+            response = requests.Response()
+            response.status_code = 404
+            raise requests.exceptions.HTTPError("404", response=response)
+
+    class OkResponse:
+        status_code = 200
+        content = buffer.getvalue()
+
+        def raise_for_status(self) -> None:
+            return None
+
+    def mock_get(url, *args, **kwargs):  # noqa: ANN001, ANN002 - match requests.get
+        requested_urls.append(url)
+        if url.endswith("/COTAHIST_D12022026.ZIP"):
+            return NotFoundResponse()
+        return OkResponse()
+
+    monkeypatch.setattr(requests, "get", mock_get)
+
+    result = download_from_b3(["YDUQ3"], date=datetime.date(2026, 2, 12))
+
+    assert result["YDUQ3"] == ("2026-02-11", 15.0)
+    assert requested_urls[0].endswith("/COTAHIST_D12022026.ZIP")
+    assert requested_urls[1].endswith("/COTAHIST_D11022026.ZIP")
