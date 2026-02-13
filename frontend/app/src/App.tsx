@@ -21,9 +21,11 @@ import { useMemo, useState } from 'react'
 import type { DataCollectionMessage, DataCollectionMessageSeverity } from './api/dataCollections'
 import DataCollectionMessagesTable from './components/DataCollectionMessagesTable'
 import IntradayDailyCountsCard from './components/IntradayDailyCountsCard'
+import IntradayLatestRecordsCard from './components/IntradayLatestRecordsCard'
 import IntradaySummaryCard from './components/IntradaySummaryCard'
 import { useDataCollectionMessages } from './hooks/useDataCollectionMessages'
 import { useIntradayDailyCounts } from './hooks/useIntradayDailyCounts'
+import { useIntradayLatestRecords } from './hooks/useIntradayLatestRecords'
 import { useIntradaySummary } from './hooks/useIntradaySummary'
 
 const severityOptions: Array<'all' | DataCollectionMessageSeverity> = [
@@ -71,6 +73,14 @@ function App() {
     error: intradayDailyCountsError,
   } = useIntradayDailyCounts()
 
+  const {
+    data: intradayLatestRecords,
+    isLoading: isLatestRecordsLoading,
+    isFetching: isLatestRecordsFetching,
+    refetch: refetchIntradayLatestRecords,
+    error: intradayLatestRecordsError,
+  } = useIntradayLatestRecords()
+
   const messages = useMemo(() => data ?? [], [data])
 
   const filteredMessages = useMemo(
@@ -82,7 +92,7 @@ function App() {
     ? `Atualizado às ${dayjs(dataUpdatedAt).format('HH:mm:ss')}`
     : 'Aguardando atualização'
 
-  const isRefreshing = isFetching || isSummaryFetching || isDailyCountsFetching
+  const isRefreshing = isFetching || isSummaryFetching || isDailyCountsFetching || isLatestRecordsFetching
 
   const isPageLoading =
     isLoading ||
@@ -90,10 +100,12 @@ function App() {
     isSummaryLoading ||
     isSummaryFetching ||
     isDailyCountsLoading ||
-    isDailyCountsFetching
+    isDailyCountsFetching ||
+    isLatestRecordsLoading ||
+    isLatestRecordsFetching
 
   const handleRefresh = () => {
-    void Promise.all([refetch(), refetchIntradaySummary(), refetchIntradayDailyCounts()])
+    void Promise.all([refetch(), refetchIntradaySummary(), refetchIntradayDailyCounts(), refetchIntradayLatestRecords()])
   }
 
   return (
@@ -141,6 +153,12 @@ function App() {
             counts={intradayDailyCounts}
             isLoading={isDailyCountsLoading && !intradayDailyCounts}
             error={intradayDailyCountsError}
+          />
+
+          <IntradayLatestRecordsCard
+            records={intradayLatestRecords}
+            isLoading={isLatestRecordsLoading && !intradayLatestRecords}
+            error={intradayLatestRecordsError}
           />
 
           <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems={{ xs: 'stretch', md: 'center' }}>

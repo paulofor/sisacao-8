@@ -11,8 +11,9 @@ public class DataCollectionBigQueryProperties {
     private String table = "collection_messages";
     private int maxRows = 200;
     private String intradayDataset = "cotacao_intraday";
-    private String intradayTable = "cotacao_bovespa";
+    private String intradayTable = "cotacao_b3";
     private int intradayDays = 14;
+    private int intradayLatestLimit = 20;
 
     public boolean isEnabled() {
         return enabled;
@@ -87,6 +88,16 @@ public class DataCollectionBigQueryProperties {
     public void setIntradayDays(int intradayDays) {
         if (intradayDays > 0) {
             this.intradayDays = intradayDays;
+        }
+    }
+
+    public int getIntradayLatestLimit() {
+        return intradayLatestLimit;
+    }
+
+    public void setIntradayLatestLimit(int intradayLatestLimit) {
+        if (intradayLatestLimit > 0) {
+            this.intradayLatestLimit = intradayLatestLimit;
         }
     }
 }

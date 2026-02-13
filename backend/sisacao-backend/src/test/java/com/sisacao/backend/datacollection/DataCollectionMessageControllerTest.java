@@ -39,6 +39,7 @@ class DataCollectionMessageControllerTest {
     void setUpMocks() {
         given(pythonClient.fetchMessages()).willAnswer(invocation -> sampleMessages());
         given(intradayMetricsClient.fetchDailyCounts()).willReturn(sampleIntradayCounts());
+        given(intradayMetricsClient.fetchLatestRecords(20)).willReturn(sampleIntradayLatestRecords());
     }
 
     @Test
@@ -85,6 +86,16 @@ class DataCollectionMessageControllerTest {
                 .andExpect(jsonPath("$.tickers[2].ticker", is("BBAS3")))
                 .andExpect(jsonPath("$.tickers[2].success", is(false)))
                 .andExpect(jsonPath("$.tickers[2].error", containsString("Timeout")));
+    }
+
+    @Test
+    void shouldReturnIntradayLatestRecords() throws Exception {
+        mockMvc.perform(get("/data-collections/intraday-latest-records"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(2)))
+                .andExpect(jsonPath("$[0].ticker", is("PETR4")))
+                .andExpect(jsonPath("$[0].price", is(33.2)))
+                .andExpect(jsonPath("$[1].ticker", is("VALE3")));
     }
 
     @Test
@@ -173,4 +184,13 @@ class DataCollectionMessageControllerTest {
                 new IntradayDailyCount(java.time.LocalDate.parse("2024-11-03"), 240L),
                 new IntradayDailyCount(java.time.LocalDate.parse("2024-11-02"), 180L));
     }
+
+    private List<IntradayLatestRecord> sampleIntradayLatestRecords() {
+        return List.of(
+                new IntradayLatestRecord(
+                        "PETR4", 33.2, OffsetDateTime.parse("2024-11-03T13:00:00Z"), "2024-11-03", "10:00:00"),
+                new IntradayLatestRecord(
+                        "VALE3", 71.8, OffsetDateTime.parse("2024-11-03T12:59:00Z"), "2024-11-03", "09:59:00"));
+    }
 }
+
