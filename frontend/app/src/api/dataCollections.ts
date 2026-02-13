@@ -47,6 +47,14 @@ export interface IntradayDailyCount {
   totalRecords: number
 }
 
+export interface IntradayLatestRecord {
+  ticker: string
+  price?: number | null
+  capturedAt?: string | null
+  tradeDate?: string | null
+  tradeTime?: string | null
+}
+
 type RawMessage = Record<string, unknown>
 
 const toIsoString = (value: unknown): string => {
@@ -299,6 +307,23 @@ export const fetchIntradayDailyCounts = async (): Promise<IntradayDailyCount[]> 
     })
     .filter((item) => Boolean(item.date))
     .sort((a, b) => dayjs(b.date).valueOf() - dayjs(a.date).valueOf())
+}
+
+export const fetchIntradayLatestRecords = async (): Promise<IntradayLatestRecord[]> => {
+  const response = await apiClient.get<unknown>('/data-collections/intraday-latest-records')
+  const items = Array.isArray(response.data) ? response.data : []
+
+  return items.map((item) => {
+    const record = item as Record<string, unknown>
+
+    return {
+      ticker: asString(record.ticker),
+      price: normalizePrice(record.price ?? record.valor),
+      capturedAt: asNullableString(record.capturedAt ?? record.captured_at),
+      tradeDate: asNullableString(record.tradeDate ?? record.trade_date ?? record.data_ref ?? record.data),
+      tradeTime: asNullableString(record.tradeTime ?? record.trade_time ?? record.hora_ref ?? record.hora),
+    }
+  })
 }
 
 export const fetchIntradaySummary = async (): Promise<IntradaySummary> => {
