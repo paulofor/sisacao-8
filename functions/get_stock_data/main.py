@@ -55,6 +55,7 @@ FONTE_FECHAMENTO = "b3_cotahist"
 
 # Timeout em segundos para requisições HTTP
 TIMEOUT = 120
+MAX_B3_LOOKBACK_DAYS = int(os.environ.get("MAX_B3_LOOKBACK_DAYS", "5"))
 
 client = bigquery.Client()
 
@@ -199,115 +200,144 @@ def download_from_b3(
     if date is None:
         brasil_tz = timezone("America/Sao_Paulo")
         date = datetime.datetime.now(brasil_tz).date()
-    # Os arquivos do portal da B3 utilizam o padrão DDMMAAAA no nome,
-    # diferente do conteúdo interno (que permanece AAAAMMDD). Ver
-    # https://arquivos.b3.com.br/api/swagger/24.1.31.1/swagger.json
-    # para o catálogo oficial de publicações.
-    date_str, nome_arquivo_zip, nome_arquivo_txt = _build_b3_daily_filenames(date)
-    base_url = "https://bvmf.bmfbovespa.com.br/InstDados/SerHist/"
-    url = f"{base_url.rstrip('/')}/{nome_arquivo_zip}"
     logging.warning("Tickers solicitados: %s", tickers)
-    logging.warning("Data usada para download: %s", date_str)
-    logging.warning("Baixando arquivo da B3: %s", nome_arquivo_zip)
-    logging.warning("URL da requisição: %s", url)
+    logging.warning("Data base usada para download: %s", date.isoformat())
     headers = {
         "User-Agent": "Mozilla/5.0",
         "Referer": "https://www.b3.com.br/",
     }
     result: Dict[str, Tuple[str, float]] = {}
-    try:
-        response = requests.get(url, headers=headers, timeout=TIMEOUT)
-        logging.warning(
-            "Resposta HTTP: %s | %s bytes",
-            getattr(response, "status_code", "unknown"),
-            len(getattr(response, "content", b"")),
+    base_url = "https://bvmf.bmfbovespa.com.br/InstDados/SerHist/"
+    for day_offset in range(MAX_B3_LOOKBACK_DAYS + 1):
+        attempt_date = date - datetime.timedelta(days=day_offset)
+        # Os arquivos do portal da B3 utilizam o padrão DDMMAAAA no nome,
+        # diferente do conteúdo interno (que permanece AAAAMMDD).
+        _, nome_arquivo_zip, nome_arquivo_txt = _build_b3_daily_filenames(
+            attempt_date
         )
-        response.raise_for_status()
-        with zipfile.ZipFile(io.BytesIO(response.content)) as zf:
-            nomes = zf.namelist()
-            logging.warning("Arquivos no ZIP: %s", nomes)
-            arquivos_txt = [n for n in nomes if n.lower().endswith(".txt")]
-            if not arquivos_txt:
-                msg_erro = "Nenhum arquivo .txt encontrado em %s"
-                logging.warning(msg_erro, nome_arquivo_zip)
-                if diagnostics is not None:
-                    formatted_message = _format_diagnostic(
-                        msg_erro % nome_arquivo_zip
-                    )
-                    diagnostics.append(formatted_message)
-                return result
-            nome_arquivo = next(
-                (n for n in arquivos_txt if n.lower() == nome_arquivo_txt.lower()),
-                None,
+        url = f"{base_url.rstrip('/')}/{nome_arquivo_zip}"
+        logging.warning("Tentativa %s de download da B3", day_offset + 1)
+        logging.warning("Baixando arquivo da B3: %s", nome_arquivo_zip)
+        logging.warning("URL da requisição: %s", url)
+        try:
+            response = requests.get(url, headers=headers, timeout=TIMEOUT)
+            logging.warning(
+                "Resposta HTTP: %s | %s bytes",
+                getattr(response, "status_code", "unknown"),
+                len(getattr(response, "content", b"")),
             )
-            if nome_arquivo:
-                logging.warning(
-                    "Arquivo esperado dentro do ZIP encontrado: %s", nome_arquivo
-                )
-            else:
-                nome_arquivo = arquivos_txt[0]
-                message = (
-                    "Arquivo esperado "
-                    f"{nome_arquivo_txt} ausente no ZIP, usando {nome_arquivo}"
-                )
-                logging.warning(message)
-                if diagnostics is not None:
-                    diagnostics.append(_format_diagnostic(message))
-            with zf.open(nome_arquivo) as arquivo:
-                for linha in io.TextIOWrapper(arquivo, encoding="latin1"):
-                    if not linha.startswith("01"):
-                        continue
-                    ticker = linha[12:24].strip()
-                    if ticker not in tickers:
-                        continue
-                    data_cotacao = datetime.datetime.strptime(
-                        linha[2:10], "%Y%m%d"
-                    ).strftime("%Y-%m-%d")
-                    preco_str = linha[108:121].strip()
-                    logging.warning(
-                        "Linha processada para %s: data %s preço %s",
-                        ticker,
-                        data_cotacao,
-                        preco_str,
+            response.raise_for_status()
+            try:
+                with zipfile.ZipFile(io.BytesIO(response.content)) as zf:
+                    nomes = zf.namelist()
+                    logging.warning("Arquivos no ZIP: %s", nomes)
+                    arquivos_txt = [n for n in nomes if n.lower().endswith(".txt")]
+                    if not arquivos_txt:
+                        msg_erro = "Nenhum arquivo .txt encontrado em %s"
+                        logging.warning(msg_erro, nome_arquivo_zip)
+                        if diagnostics is not None:
+                            formatted_message = _format_diagnostic(
+                                msg_erro % nome_arquivo_zip
+                            )
+                            diagnostics.append(formatted_message)
+                        return result
+                    nome_arquivo = next(
+                        (
+                            n
+                            for n in arquivos_txt
+                            if n.lower() == nome_arquivo_txt.lower()
+                        ),
+                        None,
                     )
-                    try:
-                        preco = float(preco_str) / 100.0
-                        result[ticker] = (data_cotacao, preco)
-                    except ValueError as exc:
-                        message = f"Valor inválido para {ticker}: {preco_str}"
+                    if nome_arquivo:
+                        logging.warning(
+                            "Arquivo esperado dentro do ZIP encontrado: %s",
+                            nome_arquivo,
+                        )
+                    else:
+                        nome_arquivo = arquivos_txt[0]
+                        message = (
+                            "Arquivo esperado "
+                            f"{nome_arquivo_txt} ausente no ZIP, usando {nome_arquivo}"
+                        )
                         logging.warning(message)
                         if diagnostics is not None:
                             diagnostics.append(_format_diagnostic(message))
-                        logging.debug(
-                            "Detalhes do erro: %s",
-                            exc,
-                            exc_info=True,
-                        )
-    except requests.exceptions.RequestException as exc:
-        logging.warning(
-            "Erro ao baixar arquivo da B3: %s",
-            exc,
-            exc_info=True,
-        )
-        if diagnostics is not None:
-            diagnostics.append(_format_diagnostic(str(exc)))
-    except zipfile.BadZipFile as exc:
-        logging.warning(
-            "Arquivo ZIP inválido recebido da B3: %s",
-            exc,
-            exc_info=True,
-        )
-        if diagnostics is not None:
-            diagnostics.append(_format_diagnostic(str(exc)))
-    except Exception as exc:  # noqa: BLE001
-        logging.warning(
-            "Erro inesperado ao processar arquivo da B3: %s",
-            exc,
-            exc_info=True,
-        )
-        if diagnostics is not None:
-            diagnostics.append(_format_diagnostic(str(exc)))
-
+                    with zf.open(nome_arquivo) as arquivo:
+                        for linha in io.TextIOWrapper(arquivo, encoding="latin1"):
+                            if not linha.startswith("01"):
+                                continue
+                            ticker = linha[12:24].strip()
+                            if ticker not in tickers:
+                                continue
+                            data_cotacao = datetime.datetime.strptime(
+                                linha[2:10], "%Y%m%d"
+                            ).strftime("%Y-%m-%d")
+                            preco_str = linha[108:121].strip()
+                            logging.warning(
+                                "Linha processada para %s: data %s preço %s",
+                                ticker,
+                                data_cotacao,
+                                preco_str,
+                            )
+                            try:
+                                preco = float(preco_str) / 100.0
+                                result[ticker] = (data_cotacao, preco)
+                            except ValueError as exc:
+                                message = f"Valor inválido para {ticker}: {preco_str}"
+                                logging.warning(message)
+                                if diagnostics is not None:
+                                    diagnostics.append(_format_diagnostic(message))
+                                logging.debug(
+                                    "Detalhes do erro: %s",
+                                    exc,
+                                    exc_info=True,
+                                )
+            except zipfile.BadZipFile as exc:
+                logging.warning(
+                    "Arquivo ZIP inválido recebido da B3: %s",
+                    exc,
+                    exc_info=True,
+                )
+                if diagnostics is not None:
+                    diagnostics.append(_format_diagnostic(str(exc)))
+                break
+            if result:
+                if day_offset > 0:
+                    logging.warning(
+                        "Dados obtidos com fallback para %s dia(s) anteriores.",
+                        day_offset,
+                    )
+                break
+            logging.warning(
+                "Arquivo %s processado sem dados para os tickers solicitados.",
+                nome_arquivo_zip,
+            )
+        except requests.exceptions.HTTPError as exc:
+            status_code = getattr(getattr(exc, "response", None), "status_code", None)
+            if status_code == 404 and day_offset < MAX_B3_LOOKBACK_DAYS:
+                logging.warning(
+                    "Arquivo não encontrado para %s. Tentando dia anterior.",
+                    attempt_date.isoformat(),
+                )
+                continue
+            logging.warning(
+                "Erro HTTP ao baixar arquivo da B3: %s",
+                exc,
+                exc_info=True,
+            )
+            if diagnostics is not None:
+                diagnostics.append(_format_diagnostic(str(exc)))
+            break
+        except requests.exceptions.RequestException as exc:
+            logging.warning(
+                "Erro ao baixar arquivo da B3: %s",
+                exc,
+                exc_info=True,
+            )
+            if diagnostics is not None:
+                diagnostics.append(_format_diagnostic(str(exc)))
+            break
     if not result and diagnostics is not None and not diagnostics:
         diagnostics.append("sem dados")
     return result
