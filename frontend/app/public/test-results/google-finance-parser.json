@@ -2,7 +2,7 @@
   "testName": "google_finance_parser_real_html",
   "description": "Valida o parser de preços do Google Finance contra um HTML real da PETR4 na B3.",
   "status": "passed",
-  "updatedAt": "2026-02-14T04:28:12+00:00",
+  "updatedAt": "2026-02-15T04:50:39+00:00",
   "details": {
     "ticker": "PETR4",
     "exchange": "BVMF",
