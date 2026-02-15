@@ -67,7 +67,14 @@ if _env_tickers_path:
 else:
     TICKERS_FILE = DEFAULT_TICKERS_FILE
 
-GOOGLE_FINANCE_MODULE = "functions.google_finance_price.main"
+GOOGLE_FINANCE_MODULE = os.environ.get(
+    "GOOGLE_FINANCE_MODULE",
+    "functions.google_finance_price.main",
+)
+GOOGLE_FINANCE_MODULE_CANDIDATES = (
+    GOOGLE_FINANCE_MODULE,
+    "google_finance_price.main",
+)
 
 
 def load_tickers_from_file(file_path: Optional[Path] = None) -> List[str]:
@@ -106,7 +113,20 @@ def load_tickers_from_file(file_path: Optional[Path] = None) -> List[str]:
 def load_tickers_from_google_finance() -> List[str]:
     """Load tickers using the google_finance_price helper."""
 
-    module = import_module(GOOGLE_FINANCE_MODULE)
+    module = None
+    import_errors: List[str] = []
+    for module_name in GOOGLE_FINANCE_MODULE_CANDIDATES:
+        if not module_name:
+            continue
+        try:
+            module = import_module(module_name)
+            break
+        except ModuleNotFoundError as exc:
+            import_errors.append(f"{module_name}: {exc}")
+
+    if module is None:
+        raise ModuleNotFoundError(" | ".join(import_errors))
+
     fetch = getattr(module, "fetch_active_tickers", None)
     if fetch is None:
         raise AttributeError("fetch_active_tickers is not available")
@@ -138,6 +158,12 @@ def load_configured_tickers(file_path: Optional[Path] = None) -> List[str]:
         return load_tickers_from_file(Path(_env_tickers_path))
     try:
         return load_tickers_from_google_finance()
+    except ModuleNotFoundError as exc:
+        logging.warning(
+            "Módulo google_finance_price indisponível (%s). "
+            "Usando fallback por arquivo.",
+            exc,
+        )
     except Exception as exc:  # noqa: BLE001
         logging.warning(
             "Falha ao carregar tickers via google_finance_price: %s",
@@ -369,11 +395,15 @@ def append_dataframe_to_bigquery(data: Any) -> None:
         logging.warning("Tabela de destino: %s", tabela_id)
         job_config = bigquery.LoadJobConfig(
             schema=[
-                bigquery.SchemaField("ticker", "STRING"),
-                bigquery.SchemaField("data_pregao", "DATE"),
-                bigquery.SchemaField("preco_fechamento", "FLOAT"),
-                bigquery.SchemaField("data_captura", "DATETIME"),
-                bigquery.SchemaField("fonte", "STRING"),
+                bigquery.SchemaField("ticker", "STRING", mode="REQUIRED"),
+                bigquery.SchemaField("data_pregao", "DATE", mode="REQUIRED"),
+                bigquery.SchemaField(
+                    "preco_fechamento",
+                    "FLOAT",
+                    mode="REQUIRED",
+                ),
+                bigquery.SchemaField("data_captura", "DATETIME", mode="REQUIRED"),
+                bigquery.SchemaField("fonte", "STRING", mode="REQUIRED"),
             ],
             write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
         )

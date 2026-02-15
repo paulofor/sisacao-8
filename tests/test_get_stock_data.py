@@ -23,9 +23,11 @@ def import_get_stock_module(monkeypatch):
             self,
             name,
             field_type,
+            mode=None,
         ):  # noqa: D401, ANN001
             self.name = name
             self.field_type = field_type
+            self.mode = mode
 
     class DummyWriteDisposition:
         WRITE_APPEND = "WRITE_APPEND"
@@ -103,6 +105,29 @@ def test_load_configured_tickers_uses_google(monkeypatch):
     assert calls.get("imported") == module.GOOGLE_FINANCE_MODULE
     assert calls.get("fetched") is True
     assert tickers == ["YDUQ3", "PETR4"]
+
+
+
+
+def test_load_tickers_from_google_finance_uses_fallback_module(monkeypatch):
+    module = import_get_stock_module(monkeypatch)
+
+    def fake_import(path):  # noqa: D401
+        if path == module.GOOGLE_FINANCE_MODULE:
+            raise ModuleNotFoundError("functions")
+
+        class DummyModule:
+            @staticmethod
+            def fetch_active_tickers():  # noqa: D401
+                return ["PETR4", " VALE3 "]
+
+        return DummyModule()
+
+    monkeypatch.setattr(module, "import_module", fake_import)
+
+    tickers = module.load_tickers_from_google_finance()
+
+    assert tickers == ["PETR4", "VALE3"]
 
 
 def test_load_configured_tickers_fallbacks_to_file(monkeypatch):
