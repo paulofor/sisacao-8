@@ -61,13 +61,9 @@ def test_google_finance_price_success(monkeypatch):
     body = json.loads(response.get_data(as_text=True))
     assert body["tickers"] == ["YDUQ3", "PETR4"]
     assert body["processed"] == 2
-    expected_table_id = (
-        f"{FakeClient.project}.{module.DATASET_ID}.acao_bovespa"
-    )
+    expected_table_id = f"{FakeClient.project}.{module.DATASET_ID}.acao_bovespa"
     expected_query = (
-        "SELECT ticker FROM "
-        f"`{expected_table_id}` "
-        "WHERE ativo = TRUE"
+        "SELECT ticker FROM " f"`{expected_table_id}` " "WHERE ativo = TRUE"
     )
     assert FakeClient.last_query == expected_query
     df = captured["df"]
@@ -245,9 +241,7 @@ def test_append_dataframe_without_pandas(monkeypatch):
     class FakeClient:
         project = "test-project"
 
-        def load_table_from_json(  # noqa: D401
-            self, rows, table_id, job_config
-        ):
+        def load_table_from_json(self, rows, table_id, job_config):  # noqa: D401
             captured["rows"] = rows
             captured["table_id"] = table_id
             captured["schema"] = job_config.schema
@@ -275,9 +269,7 @@ def test_append_dataframe_without_pandas(monkeypatch):
 
     module.append_dataframe_to_bigquery(rows)
 
-    assert captured["table_id"].endswith(
-        f"{module.DATASET_ID}.{module.TABELA_ID}"
-    )
+    assert captured["table_id"].endswith(f"{module.DATASET_ID}.{module.TABELA_ID}")
     assert captured["rows"][0]["data"] == "2024-01-02"
     assert captured["rows"][0]["hora"] == "12:34:00"
     row = captured["rows"][0]
@@ -351,9 +343,7 @@ def test_append_dataframe_to_bigquery_drops_timezone(monkeypatch):
 
     module.append_dataframe_to_bigquery(df)
 
-    assert captured["table_id"].endswith(
-        f"{module.DATASET_ID}.{module.TABELA_ID}"
-    )
+    assert captured["table_id"].endswith(f"{module.DATASET_ID}.{module.TABELA_ID}")
     assert captured["tzinfo"] is None
 
 
@@ -410,3 +400,64 @@ def test_google_finance_price_persists_partial_rows_before_timeout(monkeypatch):
     assert body["processed"] == 2
     assert {item for batch in batches for item in batch} == {"FAST1", "FAST2"}
     assert any(error.get("type") == "Timeout" for error in body["errors"])
+
+
+def test_google_finance_price_skips_on_holiday(monkeypatch):
+    fake_bigquery = types.ModuleType("bigquery")
+
+    class FakeClient:
+        project = "test-project"
+
+    fake_bigquery.Client = lambda *a, **k: FakeClient()
+    fake_cloud = types.ModuleType("cloud")
+    fake_cloud.bigquery = fake_bigquery
+    fake_google = types.ModuleType("google")
+    fake_google.cloud = fake_cloud
+    monkeypatch.setitem(sys.modules, "google", fake_google)
+    monkeypatch.setitem(sys.modules, "google.cloud", fake_cloud)
+    monkeypatch.setitem(sys.modules, "google.cloud.bigquery", fake_bigquery)
+
+    module = importlib.reload(
+        importlib.import_module("functions.google_finance_price.main")
+    )
+
+    monkeypatch.setattr(module, "is_b3_holiday", lambda date: True)
+    monkeypatch.setattr(module, "fetch_active_tickers", lambda: ["PETR4"])
+
+    response = module.google_finance_price(DummyRequest(args={}))
+
+    assert response.status_code == 200
+    body = json.loads(response.get_data(as_text=True))
+    assert body["processed"] == 0
+    assert "feriado" in body["message"].lower()
+
+
+def test_is_b3_holiday_returns_true_when_query_has_rows(monkeypatch):
+    fake_bigquery = types.ModuleType("bigquery")
+
+    class FakeClient:
+        project = "test-project"
+
+        def query(self, query):  # noqa: D401, ANN001
+            self.last_query = query
+            return SimpleNamespace(
+                to_dataframe=lambda: pd.DataFrame({"data_feriado": ["2026-01-01"]})
+            )
+
+    fake_bigquery.Client = lambda *a, **k: FakeClient()
+    fake_cloud = types.ModuleType("cloud")
+    fake_cloud.bigquery = fake_bigquery
+    fake_google = types.ModuleType("google")
+    fake_google.cloud = fake_cloud
+    monkeypatch.setitem(sys.modules, "google", fake_google)
+    monkeypatch.setitem(sys.modules, "google.cloud", fake_cloud)
+    monkeypatch.setitem(sys.modules, "google.cloud.bigquery", fake_bigquery)
+
+    module = importlib.reload(
+        importlib.import_module("functions.google_finance_price.main")
+    )
+
+    result = module.is_b3_holiday(datetime.date(2026, 1, 1))
+
+    assert result is True
+    assert module.FERIADOS_TABLE_ID in module.client.last_query

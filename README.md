@@ -25,7 +25,12 @@ Coleta cotações de ações e carrega no **BigQuery** usando **Google Cloud Fun
    `functions/get_stock_data/tickers.txt` (um símbolo por linha) e defina a
    variável de ambiente `TICKERS_FILE` apontando para ele.
 
-4. Teste localmente a Cloud Function `get_stock_data`:
+4. Crie e mantenha a tabela de feriados da B3 com `infra/bq/feriados_b3.sql`.
+   As funções `google_finance_price` e `get_stock_data` consultam
+   `ingestaokraken.cotacao_intraday.feriados_b3` e pulam a coleta quando a
+   data corrente estiver marcada como feriado ativo.
+
+5. Teste localmente a Cloud Function `get_stock_data`:
 
    ```bash
    pip install functions-framework

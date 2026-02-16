@@ -107,8 +107,6 @@ def test_load_configured_tickers_uses_google(monkeypatch):
     assert tickers == ["YDUQ3", "PETR4"]
 
 
-
-
 def test_load_tickers_from_google_finance_uses_fallback_module(monkeypatch):
     module = import_get_stock_module(monkeypatch)
 
@@ -164,9 +162,7 @@ def test_append_dataframe_to_bigquery_without_pandas(monkeypatch):
     class FakeClient:
         project = "test-project"
 
-        def load_table_from_json(  # noqa: D401
-            self, rows, table_id, job_config
-        ):
+        def load_table_from_json(self, rows, table_id, job_config):  # noqa: D401
             captured["rows"] = rows
             captured["table_id"] = table_id
             captured["schema"] = job_config.schema
@@ -192,3 +188,35 @@ def test_append_dataframe_to_bigquery_without_pandas(monkeypatch):
     assert captured["rows"][0]["data_pregao"] == "2024-01-03"
     row = captured["rows"][0]
     assert row["data_captura"].startswith("2024-01-03T15:45:00")
+
+
+def test_get_stock_data_skips_on_holiday(monkeypatch):
+    module = import_get_stock_module(monkeypatch)
+
+    monkeypatch.setattr(module, "is_b3_holiday", lambda date: True)
+
+    response = module.get_stock_data(None)
+
+    assert response == "Skipped holiday"
+
+
+def test_is_b3_holiday_true_when_row_exists(monkeypatch):
+    module = import_get_stock_module(monkeypatch)
+    monkeypatch.setattr(module, "pd", None, raising=False)
+
+    class FakeClient:
+        project = "test-project"
+
+        def query(self, query):  # noqa: D401, ANN001
+            self.query_text = query
+            return types.SimpleNamespace(
+                result=lambda: [{"data_feriado": "2026-01-01"}]
+            )
+
+    fake_client = FakeClient()
+    monkeypatch.setattr(module, "client", fake_client, raising=False)
+
+    result = module.is_b3_holiday(datetime.date(2026, 1, 1))
+
+    assert result is True
+    assert module.FERIADOS_TABLE_ID in fake_client.query_text

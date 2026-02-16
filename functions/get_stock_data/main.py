@@ -34,14 +34,13 @@ except ModuleNotFoundError:  # pragma: no cover - fallback when pytz is absent
             return ZoneInfo(name)
 
         if name != "America/Sao_Paulo":  # pragma: no cover - defensive branch
-            raise ModuleNotFoundError(
-                f"Timezone support unavailable for name: {name}"
-            )
+            raise ModuleNotFoundError(f"Timezone support unavailable for name: {name}")
 
         return datetime.timezone(  # type: ignore[return-value]
             datetime.timedelta(hours=-3),
             name,
         )
+
 
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "WARNING").upper()
 logging.basicConfig(
@@ -51,6 +50,7 @@ logging.basicConfig(
 
 DATASET_ID = "cotacao_intraday"
 FECHAMENTO_TABLE_ID = "cotacao_fechamento_diario"
+FERIADOS_TABLE_ID = "feriados_b3"
 FONTE_FECHAMENTO = "b3_cotahist"
 
 # Timeout em segundos para requisições HTTP
@@ -238,9 +238,7 @@ def download_from_b3(
         attempt_date = date - datetime.timedelta(days=day_offset)
         # Os arquivos do portal da B3 utilizam o padrão DDMMAAAA no nome,
         # diferente do conteúdo interno (que permanece AAAAMMDD).
-        _, nome_arquivo_zip, nome_arquivo_txt = _build_b3_daily_filenames(
-            attempt_date
-        )
+        _, nome_arquivo_zip, nome_arquivo_txt = _build_b3_daily_filenames(attempt_date)
         url = f"{base_url.rstrip('/')}/{nome_arquivo_zip}"
         logging.warning("Tentativa %s de download da B3", day_offset + 1)
         logging.warning("Baixando arquivo da B3: %s", nome_arquivo_zip)
@@ -453,8 +451,58 @@ def append_dataframe_to_bigquery(data: Any) -> None:
         )
 
 
+def is_b3_holiday(reference_date: datetime.date) -> bool:
+    """Return ``True`` when ``reference_date`` is configured as B3 holiday."""
+
+    project_id = getattr(client, "project", None)
+    if not project_id:
+        logging.warning(
+            "Cliente BigQuery sem project configurado; ignorando validação de feriado."
+        )
+        return False
+    table_id = f"{project_id}.{DATASET_ID}.{FERIADOS_TABLE_ID}"
+    query = (
+        "SELECT data_feriado "
+        f"FROM `{table_id}` "
+        f"WHERE data_feriado = DATE '{reference_date.isoformat()}' "
+        "LIMIT 1"
+    )
+    try:
+        query_job = client.query(query)
+        if pd is not None:
+            df = query_job.to_dataframe()
+            if "data_feriado" not in df.columns:
+                logging.warning(
+                    "Consulta de feriados retornou colunas inesperadas (%s). "
+                    "Ignorando validação de feriado.",
+                    list(df.columns),
+                )
+                return False
+            return not df.empty
+        rows = list(query_job.result())
+        return len(rows) > 0
+    except Exception as exc:  # noqa: BLE001
+        logging.warning(
+            "Falha ao consultar tabela de feriados %s: %s",
+            table_id,
+            exc,
+            exc_info=True,
+        )
+        return False
+
+
 def get_stock_data(request):
     """Entry point for the Cloud Function that stores daily closing prices."""
+    brasil_tz = timezone("America/Sao_Paulo")
+    reference_date = datetime.datetime.now(brasil_tz).date()
+    if is_b3_holiday(reference_date):
+        logging.warning(
+            "Coleta de fechamento ignorada: %s é feriado cadastrado na tabela %s.",
+            reference_date,
+            FERIADOS_TABLE_ID,
+        )
+        return "Skipped holiday"
+
     tickers = load_configured_tickers()
     if not tickers:
         logging.warning("Nenhum ticker configurado para processamento.")
@@ -477,7 +525,6 @@ def get_stock_data(request):
             logging.warning("Nenhum dado foi retornado pelos arquivos da B3.")
             return "No data fetched"
 
-        brasil_tz = timezone("America/Sao_Paulo")
         data_captura = datetime.datetime.now(brasil_tz).replace(tzinfo=None)
         logging.warning("Horário local da captura: %s", data_captura)
 
