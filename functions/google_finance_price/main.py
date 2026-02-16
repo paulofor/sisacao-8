@@ -69,14 +69,13 @@ except ModuleNotFoundError:  # pragma: no cover - fallback when pytz is absent
             return ZoneInfo(name)
 
         if name != "America/Sao_Paulo":  # pragma: no cover - defensive branch
-            raise ModuleNotFoundError(
-                f"Timezone support unavailable for name: {name}"
-            )
+            raise ModuleNotFoundError(f"Timezone support unavailable for name: {name}")
 
         return datetime.timezone(  # type: ignore[return-value]
             datetime.timedelta(hours=-3),
             name,
         )
+
 
 try:
     from functions.google_finance_price.google_scraper import (
@@ -96,6 +95,7 @@ logger = logging.getLogger(__name__)
 
 DATASET_ID = "cotacao_intraday"
 TABELA_ID = "cotacao_b3"
+FERIADOS_TABLE_ID = "feriados_b3"
 
 client = bigquery.Client()
 
@@ -117,9 +117,7 @@ MAX_WORKERS_ENV = "GOOGLE_FINANCE_MAX_WORKERS"
 FUNCTION_DEADLINE_SECONDS_ENV = "FUNCTION_DEADLINE_SECONDS"
 BATCH_SIZE_ENV = "GOOGLE_FINANCE_BATCH_SIZE"
 DEFAULT_TICKERS_FILE = (
-    Path(__file__).resolve().parent.parent
-    / "get_stock_data"
-    / "tickers.txt"
+    Path(__file__).resolve().parent.parent / "get_stock_data" / "tickers.txt"
 )
 
 
@@ -314,9 +312,7 @@ def append_dataframe_to_bigquery(data: Any) -> None:
         tabela_id = f"{client.project}.{DATASET_ID}.{TABELA_ID}"
         logger.warning("Destination table: %s", tabela_id)
         try:
-            ticker_field = bigquery.SchemaField(
-                "ticker", "STRING", mode="REQUIRED"
-            )
+            ticker_field = bigquery.SchemaField("ticker", "STRING", mode="REQUIRED")
         except TypeError:
             ticker_field = bigquery.SchemaField("ticker", "STRING")
 
@@ -376,9 +372,7 @@ def append_dataframe_to_bigquery(data: Any) -> None:
             inserted_rows = len(df)
         else:
             rows = list(data) if not isinstance(data, list) else data
-            logger.warning(
-                "Received %s rows without pandas installed", len(rows)
-            )
+            logger.warning("Received %s rows without pandas installed", len(rows))
             normalized_rows = _normalize_rows(rows)
             job = client.load_table_from_json(
                 normalized_rows,
@@ -467,6 +461,44 @@ def fetch_active_tickers() -> List[str]:
     return _fallback_tickers()
 
 
+def is_b3_holiday(reference_date: datetime.date) -> bool:
+    """Return ``True`` when ``reference_date`` exists in the holidays table."""
+
+    project_id = getattr(client, "project", None)
+    if not project_id:
+        logger.warning("BigQuery client without project; skipping holiday gate.")
+        return False
+    table_id = f"{project_id}.{DATASET_ID}.{FERIADOS_TABLE_ID}"
+    query = (
+        "SELECT data_feriado "
+        f"FROM `{table_id}` "
+        f"WHERE data_feriado = DATE '{reference_date.isoformat()}' "
+        "LIMIT 1"
+    )
+    try:
+        query_job = client.query(query)
+        if pd is not None:
+            df = query_job.to_dataframe()
+            if "data_feriado" not in df.columns:
+                logger.warning(
+                    "Holiday query returned unexpected columns (%s). "
+                    "Ignoring holiday gate.",
+                    list(df.columns),
+                )
+                return False
+            return not df.empty
+        rows = list(query_job.result())
+        return len(rows) > 0
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "Failed to query holiday table %s: %s",
+            table_id,
+            exc,
+            exc_info=True,
+        )
+        return False
+
+
 def _exception_details(error: BaseException) -> Dict[str, Any]:
     """Return structured diagnostic details for ``error``."""
 
@@ -526,6 +558,20 @@ def google_finance_price(request: Any) -> Response:
     data_atual = now.strftime("%Y-%m-%d")
     hora_atual = now.strftime("%H:%M")
     data_hora_atual = now
+
+    if is_b3_holiday(now.date()):
+        logger.warning(
+            "Intraday collection skipped: %s is configured as B3 holiday.",
+            data_atual,
+        )
+        return _build_response(
+            {
+                "message": "Coleta ignorada por feriado da B3",
+                "date": data_atual,
+                "processed": 0,
+            },
+            200,
+        )
 
     try:
         tickers = fetch_active_tickers()
