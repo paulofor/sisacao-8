@@ -30,21 +30,29 @@ Coleta cotações de ações e carrega no **BigQuery** usando **Google Cloud Fun
    `ingestaokraken.cotacao_intraday.feriados_b3` e pulam a coleta quando a
    data corrente estiver marcada como feriado ativo.
 
-5. Teste localmente a Cloud Function `get_stock_data`:
+   O script já inclui os calendários de 2026 e 2027; no início de cada ano,
+   atualize com os próximos feriados oficiais da B3 para manter a automação.
+
+5. A função `get_stock_data` já grava candles diários em formato OHLCV (`open`,
+   `high`, `low`, `close`, `volume`). Para idempotência em reprocessamentos,
+   configure `BQ_DAILY_LOAD_STRATEGY` com `DELETE_PARTITION_APPEND` (padrão)
+   ou `MERGE` (staging + chave lógica `ticker`+`reference_date`).
+
+6. Teste localmente a Cloud Function `get_stock_data`:
 
    ```bash
    pip install functions-framework
    functions-framework --target=get_stock_data
    ```
 
-6. Gere os candles intraday consolidados executando a Cloud Function
+7. Gere os candles intraday consolidados executando a Cloud Function
    `intraday_candles`. Ela lê os registros crus da tabela
    `cotacao_intraday.cotacao_b3`, agrega em janelas de 15 minutos e grava os
    candles normalizados nas tabelas `candles_intraday_15m` e `candles_intraday_1h`.
    O job aceita o parâmetro opcional `date=YYYY-MM-DD` via query string para
    reprocessamentos idempotentes.
 
-7. Após o fechamento, acione a função `eod_signals` (até 22h BRT) para gerar os
+8. Após o fechamento, acione a função `eod_signals` (até 22h BRT) para gerar os
    sinais condicionais do dia. O resultado é salvo na tabela
    `cotacao_intraday.signals_eod_v0` e contém `entry`, `target`, `stop`,
    `rank`, `model_version`, `source_snapshot` e `code_version` para auditoria.

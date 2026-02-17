@@ -1,13 +1,12 @@
 CREATE OR REPLACE VIEW `ingestaokraken.cotacao_intraday.mv_indicadores` AS
 WITH base AS (
   SELECT
-    ticker AS ticker,
-    CAST(data_pregao AS DATE) AS dt,
-    preco_fechamento AS px_close,
-    /* se não houver high/low, estes ficarão NULL e o ATR vira NULL */
-    NULL AS px_high,
-    NULL AS px_low,
-    LAG(preco_fechamento) OVER (PARTITION BY ticker ORDER BY data_pregao) AS px_prev
+    ticker,
+    reference_date AS dt,
+    close AS px_close,
+    high AS px_high,
+    low AS px_low,
+    LAG(close) OVER (PARTITION BY ticker ORDER BY reference_date) AS px_prev
   FROM `ingestaokraken.cotacao_intraday.candles_diarios`
 ),
 bb AS (
@@ -21,7 +20,7 @@ bb AS (
     -- RSI14 (aprox.) por ganhos/perdas em 14 janelas
     SUM(GREATEST(px_close - px_prev, 0)) OVER w14
       / NULLIF(SUM(LEAST(px_close - px_prev, 0)) OVER w14 * -1, 0) AS rs_raw,
-    -- True Range (para ATR; se high/low forem NULL, este campo ficará 0/NULL)
+    -- True Range (baseado em high/low/close anterior)
     GREATEST(
       COALESCE(px_high - px_low, 0),
       ABS(COALESCE(px_high, px_prev) - px_prev),

@@ -264,3 +264,57 @@ def test_is_b3_holiday_true_when_row_exists(monkeypatch):
 
     assert result is True
     assert module.FERIADOS_TABLE_ID in fake_client.query_text
+
+
+def test_append_dataframe_to_bigquery_merge_strategy(monkeypatch):
+    module = import_get_stock_module(monkeypatch)
+    monkeypatch.setattr(module, "pd", None, raising=False)
+    monkeypatch.setattr(module, "LOAD_STRATEGY", "MERGE", raising=False)
+
+    captured = {"queries": []}
+
+    class FakeJob:
+        def result(self):  # noqa: D401
+            return None
+
+    class FakeWriteDisposition:
+        WRITE_APPEND = "WRITE_APPEND"
+        WRITE_TRUNCATE = "WRITE_TRUNCATE"
+
+    monkeypatch.setattr(module.bigquery, "WriteDisposition", FakeWriteDisposition)
+
+    class FakeClient:
+        project = "test-project"
+
+        def query(self, query, job_config=None):  # noqa: D401, ANN001
+            captured["queries"].append(query)
+            return FakeJob()
+
+        def load_table_from_json(self, rows, table_id, job_config):  # noqa: D401
+            captured["table_id"] = table_id
+            captured["write_disposition"] = job_config.write_disposition
+            return FakeJob()
+
+    monkeypatch.setattr(module, "client", FakeClient(), raising=False)
+
+    rows = [
+        {
+            "ticker": "YDUQ3",
+            "candle_datetime": datetime.datetime(2024, 1, 3, 0, 0),
+            "reference_date": datetime.date(2024, 1, 3),
+            "open": 10.0,
+            "high": 11.0,
+            "low": 9.5,
+            "close": 10.5,
+            "volume": 1000.0,
+            "source": module.FONTE_FECHAMENTO,
+            "timeframe": "1D",
+            "ingested_at": datetime.datetime(2024, 1, 3, 18, 0),
+        }
+    ]
+
+    module.append_dataframe_to_bigquery(rows, datetime.date(2024, 1, 3))
+
+    assert captured["table_id"].endswith("candles_diarios_staging")
+    assert captured["write_disposition"] == "WRITE_TRUNCATE"
+    assert any("MERGE `" in query for query in captured["queries"])
