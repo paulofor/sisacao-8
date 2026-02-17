@@ -22,9 +22,8 @@ def _resolve_project_root() -> Path:
 
     candidates = []
 
-    env_root = (
-        os.environ.get("SISACAO_APP_ROOT")
-        or os.environ.get("SISACAO_PROJECT_ROOT")
+    env_root = os.environ.get("SISACAO_APP_ROOT") or os.environ.get(
+        "SISACAO_PROJECT_ROOT"
     )
     if env_root:
         candidates.append(Path(env_root).expanduser())
@@ -245,10 +244,13 @@ def _collect_b3_message() -> Dict[str, Any]:
             continue
 
         if data:
+
             def _serialize(candle: Any) -> Dict[str, Any]:
                 return {
                     "ticker": getattr(candle, "ticker", "unknown"),
-                    "dataPregao": getattr(candle, "reference_date", target_date).isoformat(),
+                    "dataPregao": getattr(
+                        candle, "reference_date", target_date
+                    ).isoformat(),
                     "open": round(float(getattr(candle, "open", 0)), 4),
                     "high": round(float(getattr(candle, "high", 0)), 4),
                     "low": round(float(getattr(candle, "low", 0)), 4),
@@ -291,8 +293,7 @@ def _collect_b3_message() -> Dict[str, Any]:
         )
 
     dataset = (
-        f"{get_stock_module.DATASET_ID}."
-        f"{get_stock_module.FECHAMENTO_TABLE_ID}"
+        f"{get_stock_module.DATASET_ID}." f"{get_stock_module.FECHAMENTO_TABLE_ID}"
     )
     fallback_loader: Callable[[List[str], dt.date], Dict[str, Any]] = getattr(
         get_stock_module,
@@ -303,6 +304,7 @@ def _collect_b3_message() -> Dict[str, Any]:
         today,
     )
     if fallback_data:
+
         def _serialize(candle: Any) -> Dict[str, Any]:
             return {
                 "ticker": getattr(candle, "ticker", "unknown"),
@@ -337,16 +339,13 @@ def _collect_b3_message() -> Dict[str, Any]:
             "metadata": metadata,
         }
 
-    error = RuntimeError(
-        f"Nenhum dado retornado pelas últimas tentativas: {attempts}"
-    )
+    error = RuntimeError(f"Nenhum dado retornado pelas últimas tentativas: {attempts}")
     return _error_message(
         "get_stock_data",
         dataset,
         "Falha ao obter cotações de fechamento da B3.",
         error,
     )
-
 
 
 def _collect_google_message() -> Dict[str, Any]:

@@ -33,7 +33,9 @@ class Timeframe(str, Enum):
         }[self]
 
 
-def ensure_timezone(value: dt.datetime, timezone: ZoneInfo = SAO_PAULO_TZ) -> dt.datetime:
+def ensure_timezone(
+    value: dt.datetime, timezone: ZoneInfo = SAO_PAULO_TZ
+) -> dt.datetime:
     """Return ``value`` localized in the requested timezone."""
 
     if value.tzinfo is None:
@@ -155,9 +157,15 @@ class Candle:
         """Convert the candle into a dictionary ready for BigQuery."""
 
         candle_dt = ensure_timezone(self.timestamp, SAO_PAULO_TZ).replace(tzinfo=None)
-        ingested_dt = ensure_timezone(self.ingested_at, SAO_PAULO_TZ).replace(tzinfo=None)
+        ingested_dt = ensure_timezone(self.ingested_at, SAO_PAULO_TZ).replace(
+            tzinfo=None
+        )
         reference_date = candle_dt.date()
-        timeframe = self.timeframe.value if isinstance(self.timeframe, Timeframe) else str(self.timeframe)
+        timeframe = (
+            self.timeframe.value
+            if isinstance(self.timeframe, Timeframe)
+            else str(self.timeframe)
+        )
         row = {
             "ticker": self.ticker,
             "candle_datetime": candle_dt,

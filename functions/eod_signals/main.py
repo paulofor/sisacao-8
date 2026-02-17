@@ -67,11 +67,7 @@ def _fetch_daily_frame(reference_date: dt.date) -> pd.DataFrame:
 
 
 def _delete_partition(table_id: str, reference_date: dt.date) -> None:
-    query = (
-        "DELETE FROM `"
-        f"{table_id}"
-        "` WHERE reference_date = @ref_date"
-    )
+    query = "DELETE FROM `" f"{table_id}" "` WHERE reference_date = @ref_date"
     job_config = bigquery.QueryJobConfig(
         query_parameters=[
             bigquery.ScalarQueryParameter("ref_date", "DATE", reference_date)
@@ -133,14 +129,16 @@ def generate_eod_signals(request: Any) -> Dict[str, Any]:
 
     frame = _fetch_daily_frame(reference_date)
     if frame.empty:
-        message = f"Sem candles disponíveis para {reference_date}".
+        message = f"Sem candles disponíveis para {reference_date}"
         logging.warning(message)
         return {"status": "empty", "reason": message}
 
     frame = frame.fillna(0)
     if MIN_VOLUME > 0:
         frame = frame[frame["volume"].fillna(0) >= MIN_VOLUME]
-        logging.info("Filtrando por volume mínimo %.0f: %s tickers", MIN_VOLUME, len(frame))
+        logging.info(
+            "Filtrando por volume mínimo %.0f: %s tickers", MIN_VOLUME, len(frame)
+        )
         if frame.empty:
             return {"status": "filtered", "reason": "volume"}
 

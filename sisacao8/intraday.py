@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
-from typing import Iterable, List, Sequence
+from typing import List, Sequence
 
 import pandas as pd  # type: ignore[import-untyped]
 
@@ -128,13 +128,15 @@ def rollup_candles(
     }.get(target_timeframe, "1H")
     aggregated: List[Candle] = []
     for ticker, group in df.groupby("ticker"):
-        resampled = group.resample(freq).agg({
-            "open": "first",
-            "high": "max",
-            "low": "min",
-            "close": "last",
-            "volume": "sum",
-        })
+        resampled = group.resample(freq).agg(
+            {
+                "open": "first",
+                "high": "max",
+                "low": "min",
+                "close": "last",
+                "volume": "sum",
+            }
+        )
         for timestamp, row in resampled.iterrows():
             if any(pd.isna(row[field]) for field in ("open", "high", "low", "close")):
                 continue

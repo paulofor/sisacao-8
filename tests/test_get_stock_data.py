@@ -35,6 +35,7 @@ def import_get_stock_module(monkeypatch):
     fake_bigquery.LoadJobConfig = DummyJobConfig
     fake_bigquery.SchemaField = DummySchemaField
     fake_bigquery.WriteDisposition = DummyWriteDisposition
+
     class DummyQueryJobConfig:
         def __init__(self, query_parameters=None):  # noqa: D401, ANN001
             self.query_parameters = query_parameters or []
