@@ -26,7 +26,7 @@ Este documento consolida as configurações necessárias para que todos os jobs 
 | Time zone | `America/Sao_Paulo` |
 | Autenticação | OIDC token com a conta `agendamentos-sisacao@<projeto>.iam.gserviceaccount.com` |
 | Cabeçalhos adicionais | `Content-Type: application/json` |
-| Logs esperados | Inserções na tabela `cotacao_intraday.cotacao_fechamento_diario` |
+| Logs esperados | Inserções na tabela `cotacao_intraday.candles_diarios` |
 | Observações | Execute manualmente após a criação para validar permissões e escrita no BigQuery. |
 
 ### 2. `google-finance-price-intraday`
@@ -42,23 +42,37 @@ Este documento consolida as configurações necessárias para que todos os jobs 
 | Cron | `0,30 10-18 * * 1-5` |
 | Time zone | `America/Sao_Paulo` |
 | Autenticação | OIDC token com a conta `agendamentos-sisacao@<projeto>.iam.gserviceaccount.com` e `--oidc-token-audience` apontando para o endpoint do serviço |
-| Logs esperados | Registros novos na tabela `cotacao_intraday.cotacao_bovespa` |
+| Logs esperados | Registros novos na tabela `cotacao_intraday.cotacao_b3` |
 | Observações | Utilize Cloud Run Invoker para autenticar e monitore latência para evitar sobrecarga. |
 
-### 3. `signals-oscilacoes`
+### 3. `intraday-candles`
 
 | Campo | Valor recomendado |
 |-------|-------------------|
-| Serviço-alvo | Scheduled Query do BigQuery |
-| Dataset/Tabela | `ingestaokraken.cotacao_intraday.signals_oscilacoes` |
-| Script SQL | [`infra/bq/signals_oscilacoes.sql`](../infra/bq/signals_oscilacoes.sql) |
-| Cron | `40 17 * * *` (Daily às 17:40) |
+| Serviço-alvo | Cloud Function `intraday_candles` |
+| Endpoint | `https://us-central1-<projeto>.cloudfunctions.net/intraday_candles` |
+| Método HTTP | `POST` (body vazio ou `{ "date": "YYYY-MM-DD" }`) |
+| Cron | `10 18 * * 1-5` |
 | Time zone | `America/Sao_Paulo` |
-| Autenticação | Conta `agendamentos-sisacao@<projeto>.iam.gserviceaccount.com` com permissão `BigQuery Job User` |
-| Estratégia de gravação | `WRITE_TRUNCATE` na partição do dia ou `WRITE_APPEND`, conforme política operacional |
-| Observações | Habilite notificações por e-mail para falhas na scheduled query. |
+| Autenticação | OIDC token com a conta `agendamentos-sisacao@<projeto>.iam.gserviceaccount.com` |
+| Logs esperados | Inserções nas tabelas `candles_intraday_15m` e `candles_intraday_1h` |
+| Observações | Reprocessamentos idempotentes podem ser feitos enviando o parâmetro `date`. |
 
-### 4. `alerts-diario`
+### 4. `eod-signals`
+
+| Campo | Valor recomendado |
+|-------|-------------------|
+| Serviço-alvo | Cloud Function `eod_signals` |
+| Endpoint | `https://us-central1-<projeto>.cloudfunctions.net/eod_signals` |
+| Método HTTP | `POST` |
+| Payload | `{ "date": "YYYY-MM-DD" }` (opcional) |
+| Cron | `30 21 * * 1-5` |
+| Time zone | `America/Sao_Paulo` |
+| Autenticação | OIDC token com a conta `agendamentos-sisacao@<projeto>.iam.gserviceaccount.com` |
+| Logs esperados | Inserções na tabela `cotacao_intraday.signals_eod_v0` |
+| Observações | Execute após a função `intraday_candles` para garantir dados completos. |
+
+### 5. `alerts-diario`
 
 | Campo | Valor recomendado |
 |-------|-------------------|
@@ -76,7 +90,7 @@ Este documento consolida as configurações necessárias para que todos os jobs 
 
 1. [ ] Todos os jobs aparecem como **Enabled** no Cloud Scheduler.
 2. [ ] Última execução de cada job finalizou como **Success** e possui log no Cloud Logging.
-3. [ ] Scheduled Query do BigQuery executou nas últimas 24 horas sem erros.
+3. [ ] Funções `intraday_candles` e `eod_signals` rodaram nas últimas 24 horas sem falhas.
 4. [ ] Alertas operacionais configurados (e-mail ou webhook) para falhas de jobs.
 5. [ ] Revisão trimestral das permissões da conta de serviço concluída.
 

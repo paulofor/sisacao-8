@@ -7,12 +7,21 @@ from .data import (
     split_time_series,
 )
 from .intraday import format_intraday_prices
-from .model import (
-    ModelConfig,
-    build_mlp_model,
-    predict_actions,
-    train_model,
-)
+
+try:
+    from .model import (
+        ModelConfig,
+        build_mlp_model,
+        predict_actions,
+        train_model,
+    )
+except ModuleNotFoundError as exc:  # pragma: no cover
+    if exc.name != "tensorflow":
+        raise
+    ModelConfig = None  # type: ignore[assignment]
+    build_mlp_model = None  # type: ignore[assignment]
+    predict_actions = None  # type: ignore[assignment]
+    train_model = None  # type: ignore[assignment]
 
 __all__ = [
     "CLASS_NAMES",

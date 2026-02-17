@@ -35,6 +35,18 @@ def import_get_stock_module(monkeypatch):
     fake_bigquery.LoadJobConfig = DummyJobConfig
     fake_bigquery.SchemaField = DummySchemaField
     fake_bigquery.WriteDisposition = DummyWriteDisposition
+    class DummyQueryJobConfig:
+        def __init__(self, query_parameters=None):  # noqa: D401, ANN001
+            self.query_parameters = query_parameters or []
+
+    class DummyScalarQueryParameter:
+        def __init__(self, name, param_type, value):  # noqa: D401, ANN001
+            self.name = name
+            self.param_type = param_type
+            self.value = value
+
+    fake_bigquery.QueryJobConfig = DummyQueryJobConfig
+    fake_bigquery.ScalarQueryParameter = DummyScalarQueryParameter
     fake_cloud = types.ModuleType("cloud")
     fake_cloud.bigquery = fake_bigquery
     fake_google = types.ModuleType("google")
@@ -50,26 +62,48 @@ def import_get_stock_module(monkeypatch):
     return importlib.import_module(module_name)
 
 
+def make_candle(module, ticker="YDUQ3", date="2025-01-01", price=10.0):
+    timestamp = datetime.datetime.strptime(date, "%Y-%m-%d").replace(
+        tzinfo=module.SAO_PAULO_TZ
+    )
+    return module.Candle(
+        ticker=ticker,
+        timestamp=timestamp,
+        open=price,
+        high=price,
+        low=price,
+        close=price,
+        volume=1.0,
+        source=module.FONTE_FECHAMENTO,
+        timeframe=module.Timeframe.DAILY,
+        ingested_at=timestamp,
+    )
+
+
 def test_get_stock_data_success(monkeypatch):
     module = import_get_stock_module(monkeypatch)
 
+    candle = make_candle(module)
     monkeypatch.setattr(
         module,
         "download_from_b3",
-        lambda tickers: {"YDUQ3": ("2025-01-01", 10.0)},
+        lambda tickers, date=None, diagnostics=None: {"YDUQ3": candle},
     )
     monkeypatch.setattr(
         module,
         "load_configured_tickers",
         lambda path=None: ["YDUQ3"],
     )
-    monkeypatch.setattr(
-        module,
-        "append_dataframe_to_bigquery",
-        lambda df: None,
-    )
+    captured = {}
+
+    def fake_append(data, reference_date):
+        captured["rows"] = data
+        captured["date"] = reference_date
+
+    monkeypatch.setattr(module, "append_dataframe_to_bigquery", fake_append)
     response = module.get_stock_data(None)
     assert response == "Success"
+    assert captured["date"] == datetime.date.today()
 
 
 def test_load_tickers_from_file(monkeypatch, tmp_path):
@@ -162,6 +196,9 @@ def test_append_dataframe_to_bigquery_without_pandas(monkeypatch):
     class FakeClient:
         project = "test-project"
 
+        def query(self, *args, **kwargs):  # noqa: D401
+            return FakeJob()
+
         def load_table_from_json(self, rows, table_id, job_config):  # noqa: D401
             captured["rows"] = rows
             captured["table_id"] = table_id
@@ -173,21 +210,27 @@ def test_append_dataframe_to_bigquery_without_pandas(monkeypatch):
     rows = [
         {
             "ticker": "YDUQ3",
-            "data_pregao": datetime.date(2024, 1, 3),
-            "preco_fechamento": 12.34,
-            "data_captura": datetime.datetime(2024, 1, 3, 15, 45),
-            "fonte": module.FONTE_FECHAMENTO,
+            "candle_datetime": datetime.datetime(2024, 1, 3, 0, 0),
+            "reference_date": datetime.date(2024, 1, 3),
+            "open": 10.0,
+            "high": 11.0,
+            "low": 9.5,
+            "close": 10.5,
+            "volume": 1000.0,
+            "source": module.FONTE_FECHAMENTO,
+            "timeframe": "1D",
+            "ingested_at": datetime.datetime(2024, 1, 3, 18, 0),
         }
     ]
 
-    module.append_dataframe_to_bigquery(rows)
+    module.append_dataframe_to_bigquery(rows, datetime.date(2024, 1, 3))
 
     assert captured["table_id"].endswith(
         f"{module.DATASET_ID}.{module.FECHAMENTO_TABLE_ID}"
     )
-    assert captured["rows"][0]["data_pregao"] == "2024-01-03"
-    row = captured["rows"][0]
-    assert row["data_captura"].startswith("2024-01-03T15:45:00")
+    normalized = captured["rows"][0]
+    assert normalized["reference_date"] == "2024-01-03"
+    assert normalized["candle_datetime"].startswith("2024-01-03")
 
 
 def test_get_stock_data_skips_on_holiday(monkeypatch):

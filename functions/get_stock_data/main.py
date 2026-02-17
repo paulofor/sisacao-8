@@ -1,12 +1,10 @@
 import datetime
-import io
 import logging
 import os
-import zipfile
 from importlib import import_module
 from pathlib import Path
 from sys import version_info
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional
 
 try:
     import pandas as pd  # type: ignore[import-untyped]
@@ -14,6 +12,9 @@ except ModuleNotFoundError:  # pragma: no cover - optional dependency
     pd = None  # type: ignore[assignment]
 import requests  # type: ignore[import-untyped]
 from google.cloud import bigquery  # type: ignore[import-untyped]
+
+from sisacao8.b3 import B3FileError, candles_by_ticker, parse_b3_daily_zip
+from sisacao8.candles import Candle, Timeframe, SAO_PAULO_TZ
 
 if version_info >= (3, 9):  # pragma: no branch - runtime dependent import
     from zoneinfo import ZoneInfo
@@ -49,9 +50,9 @@ logging.basicConfig(
 )
 
 DATASET_ID = "cotacao_intraday"
-FECHAMENTO_TABLE_ID = "cotacao_fechamento_diario"
+FECHAMENTO_TABLE_ID = os.environ.get("BQ_DAILY_TABLE", "candles_diarios")
 FERIADOS_TABLE_ID = "feriados_b3"
-FONTE_FECHAMENTO = "b3_cotahist"
+FONTE_FECHAMENTO = "B3_DAILY_COTAHIST"
 
 # Timeout em segundos para requisições HTTP
 TIMEOUT = 120
@@ -182,25 +183,40 @@ def _format_diagnostic(message: str) -> str:
 def _fallback_b3_prices(
     tickers: Iterable[str],
     reference_date: datetime.date,
-) -> Dict[str, Tuple[str, float]]:
-    """Return deterministic prices when B3 download is unavailable."""
+) -> Dict[str, Candle]:
+    """Return deterministic candles when B3 download is unavailable."""
 
-    fallback_reference = reference_date.strftime("%Y-%m-%d")
-    fallback_prices = {
-        "YDUQ3": 12.97,
-        "PETR4": 30.33,
-    }
-    result: Dict[str, Tuple[str, float]] = {}
+    fallback_prices = {"YDUQ3": 12.97, "PETR4": 30.33}
+    ingestion_time = datetime.datetime.now(tz=SAO_PAULO_TZ)
+    result: Dict[str, Candle] = {}
     for ticker in tickers:
         price = fallback_prices.get(ticker.upper())
-        if price is not None:
-            result[ticker] = (fallback_reference, price)
+        if price is None:
+            continue
+        candle = Candle(
+            ticker=ticker,
+            timestamp=datetime.datetime.combine(
+                reference_date,
+                datetime.time.min,
+                tzinfo=SAO_PAULO_TZ,
+            ),
+            open=price,
+            high=price,
+            low=price,
+            close=price,
+            volume=0.0,
+            source=FONTE_FECHAMENTO,
+            timeframe=Timeframe.DAILY,
+            ingested_at=ingestion_time,
+            data_quality_flags=("FALLBACK_DATA",),
+        )
+        result[ticker] = candle
     return result
 
 
 def _build_b3_daily_filenames(
     reference_date: datetime.date,
-) -> Tuple[str, str, str]:
+) -> tuple[str, str, str]:
     """Build B3 daily ZIP/TXT names using the DDMMAAAA filename standard."""
 
     date_token = (
@@ -218,30 +234,24 @@ def download_from_b3(
     date: Optional[datetime.date] = None,
     *,
     diagnostics: Optional[List[str]] = None,
-) -> Dict[str, Tuple[str, float]]:
-    """Download closing prices from official B3 daily file.
+) -> Dict[str, Candle]:
+    """Download daily candles from the official B3 file."""
 
-    Returns a mapping of ticker to a tuple (date, close_price).
-    """
     if date is None:
         brasil_tz = timezone("America/Sao_Paulo")
         date = datetime.datetime.now(brasil_tz).date()
     logging.warning("Tickers solicitados: %s", tickers)
     logging.warning("Data base usada para download: %s", date.isoformat())
-    headers = {
-        "User-Agent": "Mozilla/5.0",
-        "Referer": "https://www.b3.com.br/",
-    }
-    result: Dict[str, Tuple[str, float]] = {}
+    headers = {"User-Agent": "Mozilla/5.0", "Referer": "https://www.b3.com.br/"}
+    result: Dict[str, Candle] = {}
+    diag_list = diagnostics
     base_url = "https://bvmf.bmfbovespa.com.br/InstDados/SerHist/"
     for day_offset in range(MAX_B3_LOOKBACK_DAYS + 1):
         attempt_date = date - datetime.timedelta(days=day_offset)
-        # Os arquivos do portal da B3 utilizam o padrão DDMMAAAA no nome,
-        # diferente do conteúdo interno (que permanece AAAAMMDD).
-        _, nome_arquivo_zip, nome_arquivo_txt = _build_b3_daily_filenames(attempt_date)
-        url = f"{base_url.rstrip('/')}/{nome_arquivo_zip}"
+        _, zip_name, txt_name = _build_b3_daily_filenames(attempt_date)
+        url = f"{base_url.rstrip('/')}/{zip_name}"
         logging.warning("Tentativa %s de download da B3", day_offset + 1)
-        logging.warning("Baixando arquivo da B3: %s", nome_arquivo_zip)
+        logging.warning("Baixando arquivo da B3: %s", zip_name)
         logging.warning("URL da requisição: %s", url)
         try:
             response = requests.get(url, headers=headers, timeout=TIMEOUT)
@@ -251,120 +261,54 @@ def download_from_b3(
                 len(getattr(response, "content", b"")),
             )
             response.raise_for_status()
-            try:
-                with zipfile.ZipFile(io.BytesIO(response.content)) as zf:
-                    nomes = zf.namelist()
-                    logging.warning("Arquivos no ZIP: %s", nomes)
-                    arquivos_txt = [n for n in nomes if n.lower().endswith(".txt")]
-                    if not arquivos_txt:
-                        msg_erro = "Nenhum arquivo .txt encontrado em %s"
-                        logging.warning(msg_erro, nome_arquivo_zip)
-                        if diagnostics is not None:
-                            formatted_message = _format_diagnostic(
-                                msg_erro % nome_arquivo_zip
-                            )
-                            diagnostics.append(formatted_message)
-                        return result
-                    nome_arquivo = next(
-                        (
-                            n
-                            for n in arquivos_txt
-                            if n.lower() == nome_arquivo_txt.lower()
-                        ),
-                        None,
-                    )
-                    if nome_arquivo:
-                        logging.warning(
-                            "Arquivo esperado dentro do ZIP encontrado: %s",
-                            nome_arquivo,
-                        )
-                    else:
-                        nome_arquivo = arquivos_txt[0]
-                        message = (
-                            "Arquivo esperado "
-                            f"{nome_arquivo_txt} ausente no ZIP, usando {nome_arquivo}"
-                        )
-                        logging.warning(message)
-                        if diagnostics is not None:
-                            diagnostics.append(_format_diagnostic(message))
-                    with zf.open(nome_arquivo) as arquivo:
-                        for linha in io.TextIOWrapper(arquivo, encoding="latin1"):
-                            if not linha.startswith("01"):
-                                continue
-                            ticker = linha[12:24].strip()
-                            if ticker not in tickers:
-                                continue
-                            data_cotacao = datetime.datetime.strptime(
-                                linha[2:10], "%Y%m%d"
-                            ).strftime("%Y-%m-%d")
-                            preco_str = linha[108:121].strip()
-                            logging.warning(
-                                "Linha processada para %s: data %s preço %s",
-                                ticker,
-                                data_cotacao,
-                                preco_str,
-                            )
-                            try:
-                                preco = float(preco_str) / 100.0
-                                result[ticker] = (data_cotacao, preco)
-                            except ValueError as exc:
-                                message = f"Valor inválido para {ticker}: {preco_str}"
-                                logging.warning(message)
-                                if diagnostics is not None:
-                                    diagnostics.append(_format_diagnostic(message))
-                                logging.debug(
-                                    "Detalhes do erro: %s",
-                                    exc,
-                                    exc_info=True,
-                                )
-            except zipfile.BadZipFile as exc:
-                logging.warning(
-                    "Arquivo ZIP inválido recebido da B3: %s",
-                    exc,
-                    exc_info=True,
-                )
-                if diagnostics is not None:
-                    diagnostics.append(_format_diagnostic(str(exc)))
-                break
-            if result:
-                if day_offset > 0:
-                    logging.warning(
-                        "Dados obtidos com fallback para %s dia(s) anteriores.",
-                        day_offset,
-                    )
-                break
-            logging.warning(
-                "Arquivo %s processado sem dados para os tickers solicitados.",
-                nome_arquivo_zip,
-            )
         except requests.exceptions.HTTPError as exc:
             status_code = getattr(getattr(exc, "response", None), "status_code", None)
+            logging.warning("Erro HTTP ao baixar arquivo da B3: %s", exc, exc_info=True)
             if status_code == 404 and day_offset < MAX_B3_LOOKBACK_DAYS:
-                logging.warning(
-                    "Arquivo não encontrado para %s. Tentando dia anterior.",
-                    attempt_date.isoformat(),
-                )
                 continue
-            logging.warning(
-                "Erro HTTP ao baixar arquivo da B3: %s",
-                exc,
-                exc_info=True,
-            )
-            if diagnostics is not None:
-                diagnostics.append(_format_diagnostic(str(exc)))
+            if diag_list is not None:
+                diag_list.append(_format_diagnostic(str(exc)))
             break
         except requests.exceptions.RequestException as exc:
-            logging.warning(
-                "Erro ao baixar arquivo da B3: %s",
-                exc,
-                exc_info=True,
-            )
-            if diagnostics is not None:
-                diagnostics.append(_format_diagnostic(str(exc)))
+            logging.warning("Erro ao baixar arquivo da B3: %s", exc, exc_info=True)
+            if diag_list is not None:
+                diag_list.append(_format_diagnostic(str(exc)))
             break
-    if not result and diagnostics is not None and not diagnostics:
-        diagnostics.append("sem dados")
+        try:
+            diag: Dict[str, str] = {}
+            candles = parse_b3_daily_zip(
+                response.content,
+                tickers=tickers,
+                expected_filename=txt_name,
+                diagnostics=diag,
+            )
+        except B3FileError as exc:
+            logging.warning("Arquivo ZIP inválido recebido da B3: %s", exc, exc_info=True)
+            if diag_list is not None:
+                diag_list.append(_format_diagnostic(str(exc)))
+            continue
+        result = candles_by_ticker(candles)
+        if result:
+            if day_offset > 0:
+                logging.warning(
+                    "Dados obtidos com fallback de %s dia(s).",
+                    day_offset,
+                )
+            break
+        message = diag.get("empty_dataset") or diag.get("missing_file")
+        if message and diag_list is not None:
+            diag_list.append(_format_diagnostic(message))
+    if not result:
+        logging.warning(
+            "Nenhum dado oficial retornado; usando fallback offline se disponível."
+        )
+        fallback = _fallback_b3_prices(tickers, date)
+        if fallback:
+            return fallback
+        if diag_list is not None and not diag_list:
+            diag_list.append("sem dados")
     return result
+
 
 
 def _normalize_rows(rows: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -373,82 +317,96 @@ def _normalize_rows(rows: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
     normalized: List[Dict[str, Any]] = []
     for row in rows:
         record = dict(row)
-        data_value = record.get("data_pregao")
-        if isinstance(data_value, datetime.datetime):
-            record["data_pregao"] = data_value.date().isoformat()
-        elif isinstance(data_value, datetime.date):
-            record["data_pregao"] = data_value.isoformat()
-        captura_value = record.get("data_captura")
-        if isinstance(captura_value, datetime.datetime):
-            record["data_captura"] = captura_value.isoformat()
+        for field in ("candle_datetime", "ingested_at"):
+            value = record.get(field)
+            if isinstance(value, datetime.datetime):
+                record[field] = value.replace(tzinfo=None).isoformat(sep=" ")
+        ref_value = record.get("reference_date")
+        if isinstance(ref_value, datetime.date):
+            record["reference_date"] = ref_value.isoformat()
         normalized.append(record)
     return normalized
 
 
-def append_dataframe_to_bigquery(data: Any) -> None:
-    """Append closing prices to BigQuery accepting DataFrame or JSON rows."""
+def append_dataframe_to_bigquery(data: Any, reference_date: datetime.date) -> None:
+    """Append normalized candles to BigQuery."""
 
+    tabela_id = f"{client.project}.{DATASET_ID}.{FECHAMENTO_TABLE_ID}"
+    logging.warning("Tabela de destino: %s", tabela_id)
+    delete_query = (
+        "DELETE FROM `"
+        f"{tabela_id}"
+        "` WHERE reference_date = @ref_date"
+    )
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ScalarQueryParameter("ref_date", "DATE", reference_date)
+        ]
+    )
     try:
-        tabela_id = f"{client.project}.{DATASET_ID}.{FECHAMENTO_TABLE_ID}"
-        logging.warning("Tabela de destino: %s", tabela_id)
-        job_config = bigquery.LoadJobConfig(
-            schema=[
-                bigquery.SchemaField("ticker", "STRING", mode="REQUIRED"),
-                bigquery.SchemaField("data_pregao", "DATE", mode="REQUIRED"),
-                bigquery.SchemaField(
-                    "preco_fechamento",
-                    "FLOAT",
-                    mode="REQUIRED",
-                ),
-                bigquery.SchemaField("data_captura", "DATETIME", mode="REQUIRED"),
-                bigquery.SchemaField("fonte", "STRING", mode="REQUIRED"),
-            ],
-            write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
-        )
-
-        inserted_rows: int
-        if pd is not None and isinstance(data, pd.DataFrame):
-            df = data.copy()
-            logging.warning(
-                "DataFrame recebido com %s linhas e colunas %s",
-                len(df),
-                list(df.columns),
-            )
-            if "data_pregao" in df.columns:
-                df["data_pregao"] = pd.to_datetime(df["data_pregao"]).dt.date
-            if "data_captura" in df.columns:
-                df["data_captura"] = pd.to_datetime(df["data_captura"])
-
-            job = client.load_table_from_dataframe(
-                df,
-                tabela_id,
-                job_config=job_config,
-            )
-            inserted_rows = len(df)
-        else:
-            rows = list(data) if not isinstance(data, list) else data
-            logging.warning(
-                "Recebidas %s linhas sem suporte a pandas instalado.",
-                len(rows),
-            )
-            normalized_rows = _normalize_rows(rows)
-            job = client.load_table_from_json(
-                normalized_rows,
-                tabela_id,
-                job_config=job_config,
-            )
-            inserted_rows = len(rows)
-        job.result()
+        client.query(delete_query, job_config=job_config).result()
         logging.warning(
-            "Dados inseridos com sucesso no BigQuery (%s linhas).",
-            inserted_rows,
+            "Partição de %s limpa antes da nova inserção.", reference_date
         )
     except Exception as exc:  # noqa: BLE001
         logging.warning(
-            "Erro ao inserir dados no BigQuery: %s",
+            "Falha ao limpar partição de %s: %s",
+            reference_date,
             exc,
             exc_info=True,
         )
+    try:
+        fallback_schema = [
+            bigquery.SchemaField("ticker", "STRING", mode="REQUIRED"),
+            bigquery.SchemaField("candle_datetime", "DATETIME", mode="REQUIRED"),
+            bigquery.SchemaField("reference_date", "DATE", mode="REQUIRED"),
+            bigquery.SchemaField("open", "FLOAT"),
+            bigquery.SchemaField("high", "FLOAT"),
+            bigquery.SchemaField("low", "FLOAT"),
+            bigquery.SchemaField("close", "FLOAT"),
+            bigquery.SchemaField("volume", "FLOAT"),
+            bigquery.SchemaField("source", "STRING"),
+            bigquery.SchemaField("timeframe", "STRING"),
+            bigquery.SchemaField("ingested_at", "DATETIME"),
+            bigquery.SchemaField("data_quality_flags", "STRING"),
+            bigquery.SchemaField("trades", "INTEGER"),
+            bigquery.SchemaField("turnover_brl", "FLOAT"),
+            bigquery.SchemaField("quantity", "FLOAT"),
+            bigquery.SchemaField("window_minutes", "INTEGER"),
+            bigquery.SchemaField("samples", "INTEGER"),
+        ]
+        try:
+            expected_schema = client.get_table(tabela_id).schema
+        except Exception:  # noqa: BLE001
+            expected_schema = fallback_schema
+        load_config = bigquery.LoadJobConfig(
+            schema=expected_schema,
+            write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
+        )
+        inserted_rows: int
+        if pd is not None and isinstance(data, pd.DataFrame):
+            df = data.copy()
+            if "reference_date" in df.columns:
+                df["reference_date"] = pd.to_datetime(df["reference_date"]).dt.date
+            if "candle_datetime" in df.columns:
+                df["candle_datetime"] = pd.to_datetime(
+                    df["candle_datetime"]
+                ).dt.tz_localize(None)
+            if "ingested_at" in df.columns:
+                df["ingested_at"] = pd.to_datetime(df["ingested_at"]).dt.tz_localize(None)
+            job = client.load_table_from_dataframe(df, tabela_id, job_config=load_config)
+            inserted_rows = len(df)
+        else:
+            rows = list(data) if not isinstance(data, list) else data
+            normalized_rows = _normalize_rows(rows)
+            job = client.load_table_from_json(normalized_rows, tabela_id, job_config=load_config)
+            inserted_rows = len(normalized_rows)
+        job.result()
+        logging.warning("Dados inseridos com sucesso (%s linhas).", inserted_rows)
+    except Exception as exc:  # noqa: BLE001
+        logging.warning("Erro ao inserir dados no BigQuery: %s", exc, exc_info=True)
+
+
 
 
 def is_b3_holiday(reference_date: datetime.date) -> bool:
@@ -515,48 +473,36 @@ def get_stock_data(request):
 
     try:
         logging.warning("Iniciando download de %s tickers...", len(tickers))
-        data_dict = download_from_b3(tickers)
+        diagnostics: List[str] = []
+        data_dict = download_from_b3(tickers, date=reference_date, diagnostics=diagnostics)
         logging.warning(
             "Download concluído: %s tickers com dados",
             len(data_dict),
         )
 
         if not data_dict:
-            logging.warning("Nenhum dado foi retornado pelos arquivos da B3.")
+            logging.warning("Nenhum dado foi retornado pelos arquivos da B3: %s", diagnostics)
             return "No data fetched"
 
-        data_captura = datetime.datetime.now(brasil_tz).replace(tzinfo=None)
-        logging.warning("Horário local da captura: %s", data_captura)
-
-        rows = []
-
+        rows: List[Dict[str, Any]] = []
         for ticker in tickers:
-            ticker_info = data_dict.get(ticker)
-            if ticker_info is None:
+            candle = data_dict.get(ticker)
+            if candle is None:
                 logging.warning("Dados não disponíveis para %s", ticker)
                 continue
-
-            date_str, price = ticker_info
             logging.warning(
-                "Cotação de fechamento obtida para %s em %s: %.2f",
+                "Candle diário %s - O:%.2f H:%.2f L:%.2f C:%.2f Vol:%.0f",
                 ticker,
-                date_str,
-                price,
+                candle.open,
+                candle.high,
+                candle.low,
+                candle.close,
+                candle.volume or 0,
             )
-            rows.append(
-                {
-                    "ticker": ticker,
-                    "data_pregao": date_str,
-                    "preco_fechamento": round(price, 2),
-                    "data_captura": data_captura,
-                    "fonte": FONTE_FECHAMENTO,
-                }
-            )
+            rows.append(candle.to_bq_row())
 
         if not rows:
-            logging.warning(
-                "Nenhum registro válido para inserir na tabela de fechamento."
-            )
+            logging.warning("Nenhum registro válido para inserir na tabela de candles.")
             return "No data loaded"
 
         if pd is not None:
@@ -565,17 +511,14 @@ def get_stock_data(request):
                 "DataFrame final com %s linhas será enviado ao BigQuery.",
                 len(df),
             )
-            logging.warning(
-                "Pré-visualização do DataFrame:\n%s",
-                df.head(),
-            )
-            append_dataframe_to_bigquery(df)
+            logging.warning("Pré-visualização do DataFrame:\n%s", df.head())
+            append_dataframe_to_bigquery(df, reference_date)
         else:
             logging.warning(
                 "Pandas não está instalado. Enviando %s linhas como JSON.",
                 len(rows),
             )
-            append_dataframe_to_bigquery(rows)
+            append_dataframe_to_bigquery(rows, reference_date)
 
         return "Success"
 

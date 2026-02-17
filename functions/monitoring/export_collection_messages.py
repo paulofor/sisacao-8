@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Set
 
 
-DEFAULT_INTRADAY_DATASET = "cotacao_intraday.cotacao_bovespa"
+DEFAULT_INTRADAY_DATASET = "cotacao_intraday.candles_intraday_15m"
 DEFAULT_INTRADAY_TICKERS = ["PETR4", "VALE3", "IBOV"]
 
 
@@ -245,19 +245,24 @@ def _collect_b3_message() -> Dict[str, Any]:
             continue
 
         if data:
+            def _serialize(candle: Any) -> Dict[str, Any]:
+                return {
+                    "ticker": getattr(candle, "ticker", "unknown"),
+                    "dataPregao": getattr(candle, "reference_date", target_date).isoformat(),
+                    "open": round(float(getattr(candle, "open", 0)), 4),
+                    "high": round(float(getattr(candle, "high", 0)), 4),
+                    "low": round(float(getattr(candle, "low", 0)), 4),
+                    "close": round(float(getattr(candle, "close", 0)), 4),
+                    "volume": float(getattr(candle, "volume", 0) or 0),
+                    "flags": list(getattr(candle, "data_quality_flags", []) or []),
+                }
+
             metadata = {
                 "fonte": get_stock_module.FONTE_FECHAMENTO,
                 "arquivoReferencia": target_date.isoformat(),
                 "tickersSolicitados": tickers,
                 "linhasProcessadas": len(data),
-                "cotacoes": [
-                    {
-                        "ticker": ticker,
-                        "dataPregao": date_str,
-                        "precoFechamento": round(float(price), 2),
-                    }
-                    for ticker, (date_str, price) in data.items()
-                ],
+                "cotacoes": [_serialize(candle) for candle in data.values()],
             }
             summary = (
                 f"Cotações de fechamento obtidas para {len(data)} tickers "
@@ -289,7 +294,6 @@ def _collect_b3_message() -> Dict[str, Any]:
         f"{get_stock_module.DATASET_ID}."
         f"{get_stock_module.FECHAMENTO_TABLE_ID}"
     )
-    # Access internal helper for deterministic fallback data.
     fallback_loader: Callable[[List[str], dt.date], Dict[str, Any]] = getattr(
         get_stock_module,
         "_fallback_b3_prices",
@@ -299,6 +303,18 @@ def _collect_b3_message() -> Dict[str, Any]:
         today,
     )
     if fallback_data:
+        def _serialize(candle: Any) -> Dict[str, Any]:
+            return {
+                "ticker": getattr(candle, "ticker", "unknown"),
+                "dataPregao": getattr(candle, "reference_date", today).isoformat(),
+                "open": round(float(getattr(candle, "open", 0)), 4),
+                "high": round(float(getattr(candle, "high", 0)), 4),
+                "low": round(float(getattr(candle, "low", 0)), 4),
+                "close": round(float(getattr(candle, "close", 0)), 4),
+                "volume": float(getattr(candle, "volume", 0) or 0),
+                "flags": list(getattr(candle, "data_quality_flags", []) or []),
+            }
+
         summary = (
             "Cotações de fechamento simuladas com fallback offline "
             f"para {len(fallback_data)} tickers."
@@ -308,14 +324,7 @@ def _collect_b3_message() -> Dict[str, Any]:
             "arquivoReferencia": today.isoformat(),
             "tickersSolicitados": tickers,
             "linhasProcessadas": len(fallback_data),
-            "cotacoes": [
-                {
-                    "ticker": ticker,
-                    "dataPregao": date_str,
-                    "precoFechamento": price,
-                }
-                for ticker, (date_str, price) in fallback_data.items()
-            ],
+            "cotacoes": [_serialize(candle) for candle in fallback_data.values()],
             "tentativas": attempts,
         }
         return {
@@ -337,6 +346,7 @@ def _collect_b3_message() -> Dict[str, Any]:
         "Falha ao obter cotações de fechamento da B3.",
         error,
     )
+
 
 
 def _collect_google_message() -> Dict[str, Any]:
@@ -452,7 +462,7 @@ def main() -> None:
     try:
         messages.append(_collect_b3_message())
     except Exception as exc:  # noqa: BLE001
-        dataset = "cotacao_intraday.cotacao_fechamento_diario"
+        dataset = "cotacao_intraday.candles_diarios"
         messages.append(
             _error_message(
                 "get_stock_data",

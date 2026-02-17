@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd  # type: ignore[import-untyped]
+import pytest
+
+pytest.importorskip("tensorflow")
 
 from functions.pattern_detection.data import (
     WindowConfig,
