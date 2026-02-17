@@ -37,6 +37,18 @@ Coleta cotações de ações e carrega no **BigQuery** usando **Google Cloud Fun
    functions-framework --target=get_stock_data
    ```
 
+6. Gere os candles intraday consolidados executando a Cloud Function
+   `intraday_candles`. Ela lê os registros crus da tabela
+   `cotacao_intraday.cotacao_b3`, agrega em janelas de 15 minutos e grava os
+   candles normalizados nas tabelas `candles_intraday_15m` e `candles_intraday_1h`.
+   O job aceita o parâmetro opcional `date=YYYY-MM-DD` via query string para
+   reprocessamentos idempotentes.
+
+7. Após o fechamento, acione a função `eod_signals` (até 22h BRT) para gerar os
+   sinais condicionais do dia. O resultado é salvo na tabela
+   `cotacao_intraday.signals_eod_v0` e contém `entry`, `target`, `stop`,
+   `rank`, `model_version`, `source_snapshot` e `code_version` para auditoria.
+
 Consulte os comentários nos diretórios para mais detalhes.
 
 ## Deploy

@@ -16,7 +16,7 @@ logging.basicConfig(level=getattr(logging, LOG_LEVEL, logging.WARNING))
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 CHAT_ID = os.environ.get("CHAT_ID")
 BQ_SIGNALS_TABLE = os.environ.get(
-    "BQ_SIGNALS_TABLE", "ingestaokraken.cotacao_intraday.signals_oscilacoes"
+    "BQ_SIGNALS_TABLE", "ingestaokraken.cotacao_intraday.signals_eod_v0"
 )
 
 client = bigquery.Client()

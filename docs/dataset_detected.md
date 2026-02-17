@@ -1,63 +1,53 @@
 # Dataset detectado
 
-As consultas em `INFORMATION_SCHEMA` para as regiões `region-us-east1` e `region-us` identificaram um único dataset de cotações com os campos necessários para indicadores técnicos.
+As consultas em `INFORMATION_SCHEMA` para as regiões `region-us-east1` e `region-us` identificaram o dataset `cotacao_intraday` como repositório principal das séries normalizadas utilizadas pelo Sisacao-8.
 
 ## Variáveis detectadas
 
 ```text
 DATASET_NAME=cotacao_intraday
-PRICE_TABLE_INTRADAY=cotacao_bovespa
-PRICE_TABLE_FECHAMENTO=cotacao_fechamento_diario
-COL_DATE_INTRADAY=data
-COL_CLOSE_INTRADAY=valor
-COL_DATE_FECHAMENTO=data_pregao
-COL_CLOSE_FECHAMENTO=preco_fechamento
-COL_TICKER=ticker
-COL_HIGH=NULL
-COL_LOW=NULL
+PRICE_TABLE_INTRADAY_RAW=cotacao_b3
+PRICE_TABLE_INTRADAY_15M=candles_intraday_15m
+PRICE_TABLE_INTRADAY_1H=candles_intraday_1h
+PRICE_TABLE_DAILY=candles_diarios
+COL_DATETIME=candle_datetime
+COL_DATE=reference_date
+COL_OPEN=open
+COL_HIGH=high
+COL_LOW=low
+COL_CLOSE=close
+COL_VOLUME=volume
+COL_FLAGS=data_quality_flags
+COL_SOURCE=source
+COL_TIMEFRAME=timeframe
 ```
 
 ## Consultas utilizadas
 
-### Listagem de datasets por região
+### Listagem de tabelas do dataset
 
 ```sql
--- region-us-east1
-SELECT
-  schema_name
-FROM `region-us-east1`.INFORMATION_SCHEMA.SCHEMATA
-WHERE catalog_name = 'ingestaokraken';
-
--- region-us
-SELECT
-  schema_name
-FROM `region-us`.INFORMATION_SCHEMA.SCHEMATA
-WHERE catalog_name = 'ingestaokraken';
-```
-
-### Inspeção de tabelas e colunas do dataset escolhido
-
-```sql
--- Tabelas do dataset detectado
 SELECT
   table_name
 FROM `ingestaokraken.cotacao_intraday`.INFORMATION_SCHEMA.TABLES;
+```
 
--- Colunas da tabela intraday
-SELECT
-  column_name,
-  data_type
+### Inspeção das colunas relevantes
+
+```sql
+-- Candles diários
+SELECT column_name, data_type
 FROM `ingestaokraken.cotacao_intraday`.INFORMATION_SCHEMA.COLUMNS
-WHERE table_name = 'cotacao_bovespa'
+WHERE table_name = 'candles_diarios'
 ORDER BY ordinal_position;
 
--- Colunas da tabela de fechamento diário
-SELECT
-  column_name,
-  data_type
+-- Candles intraday de 15 minutos
+SELECT column_name, data_type
 FROM `ingestaokraken.cotacao_intraday`.INFORMATION_SCHEMA.COLUMNS
-WHERE table_name = 'cotacao_fechamento_diario'
+WHERE table_name = 'candles_intraday_15m'
 ORDER BY ordinal_position;
 ```
 
-As colunas `data`, `valor` e `ticker` foram usadas para montar as métricas intraday. Para a série oficial de fechamento diário a função `get_stock_data` grava em `cotacao_fechamento_diario` utilizando os campos `data_pregao`, `preco_fechamento` e `ticker`. O dataset não possui máximas e mínimas diárias, portanto os campos opcionais `COL_HIGH` e `COL_LOW` permanecem nulos e os cálculos que dependem deles (como o ATR) retornam `NULL` ou `0`.
+As colunas `open`, `high`, `low`, `close` e `volume` agora ficam disponíveis em todas as granularidades, permitindo calcular ATR, Bollinger Bands e métricas de risco sem workarounds. O campo `data_quality_flags` registra condições como `ZERO_VOLUME`, `SINGLE_QUOTE_BUCKET` ou `ROLLED_UP`, auxiliando filtros e monitoramento.
+
+A nova tabela `signals_eod_v0` armazena os sinais condicionais gerados pela função `eod_signals` com schema fixo (`reference_date`, `valid_for`, `ticker`, `side`, `entry`, `target`, `stop`, `rank`, `model_version`, `source_snapshot`, `code_version`).

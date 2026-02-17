@@ -8,7 +8,7 @@ WITH base AS (
     NULL AS px_high,
     NULL AS px_low,
     LAG(preco_fechamento) OVER (PARTITION BY ticker ORDER BY data_pregao) AS px_prev
-  FROM `ingestaokraken.cotacao_intraday.cotacao_fechamento_diario`
+  FROM `ingestaokraken.cotacao_intraday.candles_diarios`
 ),
 bb AS (
   SELECT

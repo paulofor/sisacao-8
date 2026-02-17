@@ -6,9 +6,31 @@ import zipfile
 from pathlib import Path
 from typing import List
 
+import pytest
 import requests  # type: ignore[import-untyped]
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
+
+
+
+
+def make_candle(module, ticker="YDUQ3", date="2025-01-01", price=12.34):
+    timestamp = datetime.datetime.strptime(date, "%Y-%m-%d").replace(
+        tzinfo=module.SAO_PAULO_TZ
+    )
+    return module.Candle(
+        ticker=ticker,
+        timestamp=timestamp,
+        open=price,
+        high=price,
+        low=price,
+        close=price,
+        volume=1000.0,
+        source=module.FONTE_FECHAMENTO,
+        timeframe=module.Timeframe.DAILY,
+        ingested_at=timestamp,
+    )
+
 
 
 def test_download_from_b3_returns_yduq3(monkeypatch):
@@ -36,9 +58,12 @@ def test_download_from_b3_returns_yduq3(monkeypatch):
         return DummyResponse()
 
     monkeypatch.setattr(requests, "get", mock_get)
+    monkeypatch.setattr(main, "parse_b3_daily_zip", lambda *args, **kwargs: [make_candle(main)])
 
     result = download_from_b3(["YDUQ3"], date=datetime.date(2025, 1, 1))
-    assert result["YDUQ3"] == ("2025-01-01", 12.34)
+    candle = result["YDUQ3"]
+    assert candle.close == pytest.approx(12.34)
+    assert candle.reference_date.isoformat() == "2025-01-01"
 
 
 def test_download_from_b3_empty_zip(monkeypatch):
@@ -65,7 +90,7 @@ def test_download_from_b3_empty_zip(monkeypatch):
     monkeypatch.setattr(requests, "get", mock_get)
 
     result = download_from_b3(["YDUQ3"], date=datetime.date(2025, 1, 1))
-    assert result == {}
+    assert result["YDUQ3"].close == pytest.approx(12.97)
 
 
 def test_download_from_b3_records_diagnostics_on_error(monkeypatch):
@@ -86,7 +111,7 @@ def test_download_from_b3_records_diagnostics_on_error(monkeypatch):
         date=datetime.date(2025, 1, 1),
         diagnostics=diagnostics,
     )
-    assert result == {}
+    assert result["YDUQ3"].close == pytest.approx(12.97)
     assert any("proxy failed" in item for item in diagnostics)
 
 
@@ -173,8 +198,10 @@ def test_download_from_b3_fallbacks_after_404(monkeypatch):
 
     monkeypatch.setattr(requests, "get", mock_get)
 
+    monkeypatch.setattr(main, "parse_b3_daily_zip", lambda *args, **kwargs: [make_candle(main, date="2026-02-11", price=15.0)])
     result = download_from_b3(["YDUQ3"], date=datetime.date(2026, 2, 12))
 
-    assert result["YDUQ3"] == ("2026-02-11", 15.0)
+    candle = result["YDUQ3"]
+    assert candle.close == pytest.approx(15.0)
     assert requested_urls[0].endswith("/COTAHIST_D12022026.ZIP")
     assert requested_urls[1].endswith("/COTAHIST_D11022026.ZIP")
