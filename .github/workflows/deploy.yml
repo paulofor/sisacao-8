@@ -19,72 +19,10 @@ jobs:
           project_id: 'ingestaokraken'
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
-      - name: Wait for pending Cloud Functions operations
+      - name: Warm-up wait before deployment
         run: |
-          REGION="us-central1"
-          MAX_ATTEMPTS=20
-          SLEEP_SECONDS=30
-          PENDING="pending"
-
-          list_pending_operations() {
-            local output status stable_error beta_error
-
-            output=$(gcloud functions operations list \
-              --region "$REGION" \
-              --filter="done=false" \
-              --format="value(name)" 2>&1)
-            status=$?
-            if [ "$status" -eq 0 ]; then
-              printf '%s\n' "$output"
-              return 0
-            fi
-            stable_error="$output"
-
-            output=$(gcloud beta functions operations list \
-              --region "$REGION" \
-              --filter="done=false" \
-              --format="value(name)" 2>&1)
-            status=$?
-            if [ "$status" -eq 0 ]; then
-              printf '%s\n' "$output"
-              return 0
-            fi
-            beta_error="$output"
-
-            echo "Warning: failed to list Cloud Functions operations using stable or beta commands." >&2
-            echo "Stable command output:" >&2
-            echo "$stable_error" >&2
-            echo "Beta command output:" >&2
-            echo "$beta_error" >&2
-            return 2
-          }
-
-          for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
-            list_status=0
-            PENDING=$(list_pending_operations) || list_status=$?
-            if [ "$list_status" -eq 2 ]; then
-              echo "Skipping pending operations check due to insufficient permissions or command failure."
-              PENDING=""
-              break
-            elif [ "$list_status" -ne 0 ]; then
-              exit "$list_status"
-            fi
-
-            if [ -z "$PENDING" ]; then
-              echo "No pending operations found before deployment."
-              break
-            fi
-
-            echo "Cloud Functions operations still running (attempt $attempt/$MAX_ATTEMPTS):"
-            echo "$PENDING"
-            echo "Waiting $SLEEP_SECONDS seconds before checking again..."
-            sleep "$SLEEP_SECONDS"
-          done
-
-          if [ -n "$PENDING" ]; then
-            echo "Timed out waiting for Cloud Functions operations to finish."
-            exit 1
-          fi
+          echo "Waiting 30 seconds before deployment to reduce 409 queue conflicts..."
+          sleep 30
       - name: Deploy Functions
         run: |
           set +e
@@ -94,42 +32,17 @@ jobs:
           RETRY_WAIT=90
           EXIT_CODE=1
 
-          list_pending_operations() {
-            local output status stable_error beta_error
-
-            output=$(gcloud functions operations list \
-              --region "$REGION" \
-              --filter="done=false" \
-              --format="value(name)" 2>&1)
-            status=$?
-            if [ "$status" -eq 0 ]; then
-              printf '%s\n' "$output"
+          is_queue_conflict() {
+            local message="$1"
+            if [[ "$message" == *"status=[409]"* ]] && [[ "$message" == *"unable to queue the operation"* ]]; then
               return 0
             fi
-            stable_error="$output"
-
-            output=$(gcloud beta functions operations list \
-              --region "$REGION" \
-              --filter="done=false" \
-              --format="value(name)" 2>&1)
-            status=$?
-            if [ "$status" -eq 0 ]; then
-              printf '%s\n' "$output"
-              return 0
-            fi
-            beta_error="$output"
-
-            echo "Warning: failed to list Cloud Functions operations using stable or beta commands." >&2
-            echo "Stable command output:" >&2
-            echo "$stable_error" >&2
-            echo "Beta command output:" >&2
-            echo "$beta_error" >&2
-            return 2
+            return 1
           }
 
           for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
             echo "Starting deployment attempt $attempt/$MAX_ATTEMPTS for get_stock_data"
-            gcloud functions deploy get_stock_data \
+            DEPLOY_OUTPUT=$(gcloud functions deploy get_stock_data \
               --runtime python311 \
               --trigger-http \
               --entry-point get_stock_data \
@@ -137,8 +50,9 @@ jobs:
               --allow-unauthenticated \
               --project ingestaokraken \
               --region "$REGION" \
-              --quiet
+              --quiet 2>&1)
             EXIT_CODE=$?
+            echo "$DEPLOY_OUTPUT"
 
             if [ "$EXIT_CODE" -eq 0 ]; then
               echo "Deployment succeeded on attempt $attempt."
@@ -146,23 +60,13 @@ jobs:
             fi
 
             if [ "$attempt" -lt "$MAX_ATTEMPTS" ]; then
-              echo "Deployment attempt $attempt failed with exit code $EXIT_CODE."
-              echo "Waiting $RETRY_WAIT seconds before retrying..."
-              sleep "$RETRY_WAIT"
-
-              echo "Checking for remaining Cloud Functions operations before retrying:"
-              list_status=0
-              PENDING=$(list_pending_operations) || list_status=$?
-              if [ "$list_status" -eq 2 ]; then
-                echo "Skipping pending operations check due to insufficient permissions or command failure."
-                PENDING=""
-              elif [ "$list_status" -ne 0 ]; then
-                exit "$list_status"
-              fi
-              if [ -n "$PENDING" ]; then
-                echo "$PENDING"
+              if is_queue_conflict "$DEPLOY_OUTPUT"; then
+                echo "Deployment attempt $attempt failed with transient queue conflict (409)."
+                echo "Waiting $RETRY_WAIT seconds before retrying..."
+                sleep "$RETRY_WAIT"
               else
-                echo "No pending operations detected."
+                echo "Detected non-transient deploy error; stopping retries early."
+                break
               fi
             else
               echo "Deployment failed after $MAX_ATTEMPTS attempts."
