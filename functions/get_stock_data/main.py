@@ -13,8 +13,12 @@ except ModuleNotFoundError:  # pragma: no cover - optional dependency
 import requests  # type: ignore[import-untyped]
 from google.cloud import bigquery  # type: ignore[import-untyped]
 
-from sisacao8.b3 import B3FileError, candles_by_ticker, parse_b3_daily_zip
-from sisacao8.candles import Candle, Timeframe, SAO_PAULO_TZ
+if __package__:
+    from .b3 import B3FileError, candles_by_ticker, parse_b3_daily_zip
+    from .candles import Candle, Timeframe, SAO_PAULO_TZ
+else:
+    from b3 import B3FileError, candles_by_ticker, parse_b3_daily_zip
+    from candles import Candle, Timeframe, SAO_PAULO_TZ
 
 if version_info >= (3, 9):  # pragma: no branch - runtime dependent import
     from zoneinfo import ZoneInfo
