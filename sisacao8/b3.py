@@ -47,7 +47,9 @@ def _parse_trade_date(raw: str) -> dt.datetime:
     return date_value
 
 
-def _quality_flags(high: float, low: float, volume: float, trades: int) -> Sequence[str]:
+def _quality_flags(
+    high: float, low: float, volume: float, trades: int
+) -> Sequence[str]:
     flags: List[str] = []
     if volume == 0:
         flags.append("ZERO_VOLUME")
@@ -126,7 +128,9 @@ def parse_b3_daily_zip(
     diagnostics = diagnostics or {}
     try:
         with zipfile.ZipFile(io.BytesIO(payload)) as archive:
-            text_files = [name for name in archive.namelist() if name.lower().endswith(".txt")]
+            text_files = [
+                name for name in archive.namelist() if name.lower().endswith(".txt")
+            ]
             if not text_files:
                 raise B3FileError("ZIP file does not contain .txt payload")
             target_name = expected_filename

@@ -2,17 +2,22 @@
 
 from __future__ import annotations
 
+import importlib.util
+
 import numpy as np
 import pandas as pd  # type: ignore[import-untyped]
 import pytest
 
-pytest.importorskip("tensorflow")
+pytestmark = pytest.mark.skipif(
+    importlib.util.find_spec("tensorflow") is None,
+    reason="tensorflow not installed",
+)
 
-from functions.pattern_detection.data import (
+from functions.pattern_detection.data import (  # noqa: E402
     WindowConfig,
     prepare_training_data,
 )
-from functions.pattern_detection.model import (
+from functions.pattern_detection.model import (  # noqa: E402
     ModelConfig,
     predict_actions,
     train_model,

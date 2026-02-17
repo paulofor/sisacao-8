@@ -283,7 +283,9 @@ def download_from_b3(
                 diagnostics=diag,
             )
         except B3FileError as exc:
-            logging.warning("Arquivo ZIP inválido recebido da B3: %s", exc, exc_info=True)
+            logging.warning(
+                "Arquivo ZIP inválido recebido da B3: %s", exc, exc_info=True
+            )
             if diag_list is not None:
                 diag_list.append(_format_diagnostic(str(exc)))
             continue
@@ -310,7 +312,6 @@ def download_from_b3(
     return result
 
 
-
 def _normalize_rows(rows: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Normalize payload rows for BigQuery JSON ingestion."""
 
@@ -333,11 +334,7 @@ def append_dataframe_to_bigquery(data: Any, reference_date: datetime.date) -> No
 
     tabela_id = f"{client.project}.{DATASET_ID}.{FECHAMENTO_TABLE_ID}"
     logging.warning("Tabela de destino: %s", tabela_id)
-    delete_query = (
-        "DELETE FROM `"
-        f"{tabela_id}"
-        "` WHERE reference_date = @ref_date"
-    )
+    delete_query = "DELETE FROM `" f"{tabela_id}" "` WHERE reference_date = @ref_date"
     job_config = bigquery.QueryJobConfig(
         query_parameters=[
             bigquery.ScalarQueryParameter("ref_date", "DATE", reference_date)
@@ -345,9 +342,7 @@ def append_dataframe_to_bigquery(data: Any, reference_date: datetime.date) -> No
     )
     try:
         client.query(delete_query, job_config=job_config).result()
-        logging.warning(
-            "Partição de %s limpa antes da nova inserção.", reference_date
-        )
+        logging.warning("Partição de %s limpa antes da nova inserção.", reference_date)
     except Exception as exc:  # noqa: BLE001
         logging.warning(
             "Falha ao limpar partição de %s: %s",
@@ -393,20 +388,24 @@ def append_dataframe_to_bigquery(data: Any, reference_date: datetime.date) -> No
                     df["candle_datetime"]
                 ).dt.tz_localize(None)
             if "ingested_at" in df.columns:
-                df["ingested_at"] = pd.to_datetime(df["ingested_at"]).dt.tz_localize(None)
-            job = client.load_table_from_dataframe(df, tabela_id, job_config=load_config)
+                df["ingested_at"] = pd.to_datetime(df["ingested_at"]).dt.tz_localize(
+                    None
+                )
+            job = client.load_table_from_dataframe(
+                df, tabela_id, job_config=load_config
+            )
             inserted_rows = len(df)
         else:
             rows = list(data) if not isinstance(data, list) else data
             normalized_rows = _normalize_rows(rows)
-            job = client.load_table_from_json(normalized_rows, tabela_id, job_config=load_config)
+            job = client.load_table_from_json(
+                normalized_rows, tabela_id, job_config=load_config
+            )
             inserted_rows = len(normalized_rows)
         job.result()
         logging.warning("Dados inseridos com sucesso (%s linhas).", inserted_rows)
     except Exception as exc:  # noqa: BLE001
         logging.warning("Erro ao inserir dados no BigQuery: %s", exc, exc_info=True)
-
-
 
 
 def is_b3_holiday(reference_date: datetime.date) -> bool:
@@ -474,14 +473,18 @@ def get_stock_data(request):
     try:
         logging.warning("Iniciando download de %s tickers...", len(tickers))
         diagnostics: List[str] = []
-        data_dict = download_from_b3(tickers, date=reference_date, diagnostics=diagnostics)
+        data_dict = download_from_b3(
+            tickers, date=reference_date, diagnostics=diagnostics
+        )
         logging.warning(
             "Download concluído: %s tickers com dados",
             len(data_dict),
         )
 
         if not data_dict:
-            logging.warning("Nenhum dado foi retornado pelos arquivos da B3: %s", diagnostics)
+            logging.warning(
+                "Nenhum dado foi retornado pelos arquivos da B3: %s", diagnostics
+            )
             return "No data fetched"
 
         rows: List[Dict[str, Any]] = []

@@ -12,8 +12,6 @@ import requests  # type: ignore[import-untyped]
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 
-
-
 def make_candle(module, ticker="YDUQ3", date="2025-01-01", price=12.34):
     timestamp = datetime.datetime.strptime(date, "%Y-%m-%d").replace(
         tzinfo=module.SAO_PAULO_TZ
@@ -30,7 +28,6 @@ def make_candle(module, ticker="YDUQ3", date="2025-01-01", price=12.34):
         timeframe=module.Timeframe.DAILY,
         ingested_at=timestamp,
     )
-
 
 
 def test_download_from_b3_returns_yduq3(monkeypatch):
@@ -58,7 +55,9 @@ def test_download_from_b3_returns_yduq3(monkeypatch):
         return DummyResponse()
 
     monkeypatch.setattr(requests, "get", mock_get)
-    monkeypatch.setattr(main, "parse_b3_daily_zip", lambda *args, **kwargs: [make_candle(main)])
+    monkeypatch.setattr(
+        main, "parse_b3_daily_zip", lambda *args, **kwargs: [make_candle(main)]
+    )
 
     result = download_from_b3(["YDUQ3"], date=datetime.date(2025, 1, 1))
     candle = result["YDUQ3"]
@@ -198,7 +197,11 @@ def test_download_from_b3_fallbacks_after_404(monkeypatch):
 
     monkeypatch.setattr(requests, "get", mock_get)
 
-    monkeypatch.setattr(main, "parse_b3_daily_zip", lambda *args, **kwargs: [make_candle(main, date="2026-02-11", price=15.0)])
+    monkeypatch.setattr(
+        main,
+        "parse_b3_daily_zip",
+        lambda *args, **kwargs: [make_candle(main, date="2026-02-11", price=15.0)],
+    )
     result = download_from_b3(["YDUQ3"], date=datetime.date(2026, 2, 12))
 
     candle = result["YDUQ3"]

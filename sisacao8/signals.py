@@ -102,7 +102,9 @@ def compute_source_snapshot(rows: Sequence[Mapping[str, object]]) -> str:
         }
         for row in rows
     ]
-    payload = json.dumps(sorted(serializable, key=lambda item: item["ticker"]), separators=(",", ":"))
+    payload = json.dumps(
+        sorted(serializable, key=lambda item: item["ticker"]), separators=(",", ":")
+    )
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
@@ -186,7 +188,9 @@ def generate_conditional_signals(
         ticker = row["ticker"]
         close_price = float(row["close"])
         open_price = row.get("open")
-        preferred = _preferred_side(close_price, float(open_price) if pd.notna(open_price) else None)
+        preferred = _preferred_side(
+            close_price, float(open_price) if pd.notna(open_price) else None
+        )
         score = float(row["score"])
         volume = float(row["volume"])
         for side in ("BUY", "SELL"):
