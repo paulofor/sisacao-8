@@ -53,6 +53,7 @@ DATASET_ID = "cotacao_intraday"
 FECHAMENTO_TABLE_ID = os.environ.get("BQ_DAILY_TABLE", "candles_diarios")
 FERIADOS_TABLE_ID = "feriados_b3"
 FONTE_FECHAMENTO = "B3_DAILY_COTAHIST"
+LOAD_STRATEGY = os.environ.get("BQ_DAILY_LOAD_STRATEGY", "DELETE_PARTITION_APPEND")
 
 # Timeout em segundos para requisições HTTP
 TIMEOUT = 120
@@ -330,7 +331,7 @@ def _normalize_rows(rows: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 
 def append_dataframe_to_bigquery(data: Any, reference_date: datetime.date) -> None:
-    """Append normalized candles to BigQuery."""
+    """Load normalized candles to BigQuery with idempotent strategies."""
 
     tabela_id = f"{client.project}.{DATASET_ID}.{FECHAMENTO_TABLE_ID}"
     logging.warning("Tabela de destino: %s", tabela_id)
@@ -340,16 +341,20 @@ def append_dataframe_to_bigquery(data: Any, reference_date: datetime.date) -> No
             bigquery.ScalarQueryParameter("ref_date", "DATE", reference_date)
         ]
     )
-    try:
-        client.query(delete_query, job_config=job_config).result()
-        logging.warning("Partição de %s limpa antes da nova inserção.", reference_date)
-    except Exception as exc:  # noqa: BLE001
-        logging.warning(
-            "Falha ao limpar partição de %s: %s",
-            reference_date,
-            exc,
-            exc_info=True,
-        )
+    strategy = LOAD_STRATEGY.strip().upper()
+    if strategy == "DELETE_PARTITION_APPEND":
+        try:
+            client.query(delete_query, job_config=job_config).result()
+            logging.warning(
+                "Partição de %s limpa antes da nova inserção.", reference_date
+            )
+        except Exception as exc:  # noqa: BLE001
+            logging.warning(
+                "Falha ao limpar partição de %s: %s",
+                reference_date,
+                exc,
+                exc_info=True,
+            )
     try:
         fallback_schema = [
             bigquery.SchemaField("ticker", "STRING", mode="REQUIRED"),
@@ -378,6 +383,10 @@ def append_dataframe_to_bigquery(data: Any, reference_date: datetime.date) -> No
             schema=expected_schema,
             write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
         )
+        target_table_id = tabela_id
+        if strategy == "MERGE":
+            target_table_id = f"{tabela_id}_staging"
+            load_config.write_disposition = bigquery.WriteDisposition.WRITE_TRUNCATE
         inserted_rows: int
         if pd is not None and isinstance(data, pd.DataFrame):
             df = data.copy()
@@ -392,17 +401,81 @@ def append_dataframe_to_bigquery(data: Any, reference_date: datetime.date) -> No
                     None
                 )
             job = client.load_table_from_dataframe(
-                df, tabela_id, job_config=load_config
+                df, target_table_id, job_config=load_config
             )
             inserted_rows = len(df)
         else:
             rows = list(data) if not isinstance(data, list) else data
             normalized_rows = _normalize_rows(rows)
             job = client.load_table_from_json(
-                normalized_rows, tabela_id, job_config=load_config
+                normalized_rows, target_table_id, job_config=load_config
             )
             inserted_rows = len(normalized_rows)
         job.result()
+        if strategy == "MERGE":
+            merge_sql = f"""
+            MERGE `{tabela_id}` target
+            USING `{target_table_id}` source
+            ON target.ticker = source.ticker
+              AND target.reference_date = source.reference_date
+            WHEN MATCHED THEN UPDATE SET
+              candle_datetime = source.candle_datetime,
+              open = source.open,
+              high = source.high,
+              low = source.low,
+              close = source.close,
+              volume = source.volume,
+              source = source.source,
+              timeframe = source.timeframe,
+              ingested_at = source.ingested_at,
+              data_quality_flags = source.data_quality_flags,
+              trades = source.trades,
+              turnover_brl = source.turnover_brl,
+              quantity = source.quantity,
+              window_minutes = source.window_minutes,
+              samples = source.samples
+            WHEN NOT MATCHED THEN INSERT (
+              ticker,
+              candle_datetime,
+              reference_date,
+              open,
+              high,
+              low,
+              close,
+              volume,
+              source,
+              timeframe,
+              ingested_at,
+              data_quality_flags,
+              trades,
+              turnover_brl,
+              quantity,
+              window_minutes,
+              samples
+            ) VALUES (
+              source.ticker,
+              source.candle_datetime,
+              source.reference_date,
+              source.open,
+              source.high,
+              source.low,
+              source.close,
+              source.volume,
+              source.source,
+              source.timeframe,
+              source.ingested_at,
+              source.data_quality_flags,
+              source.trades,
+              source.turnover_brl,
+              source.quantity,
+              source.window_minutes,
+              source.samples
+            )
+            """
+            client.query(merge_sql).result()
+            logging.warning(
+                "MERGE concluído com chave lógica (ticker, reference_date)."
+            )
         logging.warning("Dados inseridos com sucesso (%s linhas).", inserted_rows)
     except Exception as exc:  # noqa: BLE001
         logging.warning("Erro ao inserir dados no BigQuery: %s", exc, exc_info=True)

@@ -1,5 +1,6 @@
 -- Cria a tabela de feriados da B3 usada para bloquear coletas em dias sem pregão.
 -- Ajuste o projeto/dataset conforme necessário antes de executar.
+-- Processo recomendado: atualizar este script anualmente com o próximo calendário oficial da B3.
 
 CREATE SCHEMA IF NOT EXISTS `ingestaokraken.cotacao_intraday`;
 
@@ -30,6 +31,18 @@ USING (
   UNION ALL SELECT DATE '2026-11-02', 'Finados'
   UNION ALL SELECT DATE '2026-11-15', 'Proclamação da República'
   UNION ALL SELECT DATE '2026-12-25', 'Natal'
+  UNION ALL SELECT DATE '2027-01-01', 'Confraternização Universal'
+  UNION ALL SELECT DATE '2027-02-08', 'Carnaval'
+  UNION ALL SELECT DATE '2027-02-09', 'Carnaval'
+  UNION ALL SELECT DATE '2027-03-26', 'Sexta-feira Santa'
+  UNION ALL SELECT DATE '2027-04-21', 'Tiradentes'
+  UNION ALL SELECT DATE '2027-06-03', 'Corpus Christi'
+  UNION ALL SELECT DATE '2027-09-07', 'Independência do Brasil'
+  UNION ALL SELECT DATE '2027-10-12', 'Nossa Senhora Aparecida'
+  UNION ALL SELECT DATE '2027-11-02', 'Finados'
+  UNION ALL SELECT DATE '2027-11-15', 'Proclamação da República'
+  UNION ALL SELECT DATE '2027-12-24', 'Véspera de Natal'
+  UNION ALL SELECT DATE '2027-12-31', 'Véspera de Ano Novo'
 ) source
 ON target.data_feriado = source.data_feriado
   AND target.mercado = 'B3'
