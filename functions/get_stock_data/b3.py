@@ -42,7 +42,9 @@ def _parse_int(segment: str) -> int:
     return int(segment.strip() or "0")
 
 
-def parse_b3_daily_lines(lines: Iterable[str], *, tickers: Sequence[str] | None = None) -> List[Candle]:
+def parse_b3_daily_lines(
+    lines: Iterable[str], *, tickers: Sequence[str] | None = None
+) -> List[Candle]:
     allowed = {ticker.strip().upper() for ticker in tickers or [] if ticker.strip()}
     normalize_all = not allowed
     ingestion_time = dt.datetime.now(tz=SAO_PAULO_TZ)
@@ -103,14 +105,23 @@ def parse_b3_daily_zip(
     diagnostics = diagnostics or {}
     try:
         with zipfile.ZipFile(io.BytesIO(payload)) as archive:
-            text_files = [name for name in archive.namelist() if name.lower().endswith(".txt")]
+            text_files = [
+                name for name in archive.namelist() if name.lower().endswith(".txt")
+            ]
             if not text_files:
                 raise B3FileError("ZIP file does not contain .txt payload")
             if expected_filename and expected_filename not in text_files:
                 diagnostics["missing_file"] = expected_filename
-            filename = expected_filename if expected_filename in text_files else text_files[0]
+            filename = (
+                expected_filename
+                if expected_filename in text_files
+                else text_files[0]
+            )
             with archive.open(filename) as handle:
-                lines = [line.rstrip("\r\n") for line in io.TextIOWrapper(handle, encoding="latin1")]
+                lines = [
+                    line.rstrip("\r\n")
+                    for line in io.TextIOWrapper(handle, encoding="latin1")
+                ]
             candles = parse_b3_daily_lines(lines, tickers=tickers)
             if not candles:
                 diagnostics["empty_dataset"] = filename
