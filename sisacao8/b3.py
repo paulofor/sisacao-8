@@ -43,7 +43,6 @@ def _parse_int(segment: str) -> int:
     return int(segment)
 
 
-
 def _parse_factor(segment: str) -> int:
     value = _parse_int(segment)
     return max(value, 1)

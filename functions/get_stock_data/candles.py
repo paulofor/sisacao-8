@@ -49,11 +49,6 @@ class Candle:
     def to_bq_row(self) -> dict[str, Any]:
         candle_dt = self.timestamp.astimezone(SAO_PAULO_TZ).replace(tzinfo=None)
         ingested_dt = self.ingested_at.astimezone(SAO_PAULO_TZ).replace(tzinfo=None)
-        timeframe = (
-            self.timeframe.value
-            if isinstance(self.timeframe, Timeframe)
-            else str(self.timeframe)
-        )
         metadata = self.metadata or {}
         turnover = metadata.get("turnover_brl")
         quantity = (
@@ -76,5 +71,9 @@ class Candle:
             "fonte": self.source,
             "atualizado_em": ingested_dt,
             "data_quality_flags": self.quality_flag_string(),
-            "fator_cotacao": int(fator_cotacao) if isinstance(fator_cotacao, int) else fator_cotacao,
+            "fator_cotacao": (
+                int(fator_cotacao)
+                if isinstance(fator_cotacao, int)
+                else fator_cotacao
+            ),
         }
