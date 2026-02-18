@@ -17,6 +17,7 @@ from sisacao8.backtest import (
     run_backtest,
 )
 from sisacao8.candles import SAO_PAULO_TZ
+from sisacao8.observability import StructuredLogger
 
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
 logging.basicConfig(level=getattr(logging, LOG_LEVEL, logging.INFO))
@@ -30,6 +31,7 @@ BACKTEST_METRICS_TABLE_ID = os.environ.get(
 )
 FERIADOS_TABLE_ID = os.environ.get("BQ_HOLIDAYS_TABLE", "feriados_b3")
 METRICS_LOOKBACK_DAYS = int(os.environ.get("BACKTEST_METRICS_LOOKBACK_DAYS", "60"))
+JOB_NAME = os.environ.get("JOB_NAME", "backtest_daily")
 
 client = bigquery.Client()
 
@@ -168,15 +170,20 @@ def _as_naive_datetime(value: dt.datetime) -> dt.datetime:
 def backtest_daily(request: Any) -> Dict[str, Any]:
     """Run the deterministic daily backtest for stored signals."""
 
+    run_logger = StructuredLogger(JOB_NAME)
     reference_date = _parse_request_date(request)
+    run_logger.update_context(date_ref=reference_date.isoformat())
+    run_logger.started()
     if not _is_trading_day(reference_date):
         message = f"{reference_date} não é dia útil para backtest"
+        run_logger.warn(message, reason="non_trading_day")
         logging.warning(message)
         return {"status": "skipped", "reason": message}
 
     signals_df = _fetch_signals(reference_date)
     if signals_df.empty:
         message = f"Nenhum sinal encontrado para {reference_date}"
+        run_logger.warn(message, reason="missing_signals")
         logging.warning(message)
         return {"status": "empty", "reason": message}
 
@@ -215,10 +222,19 @@ def backtest_daily(request: Any) -> Dict[str, Any]:
         metric_rows.append(payload)
     _load_table(metrics_table, metric_rows)
 
-    return {
+    result = {
         "status": "ok",
         "date_ref": reference_date.isoformat(),
         "processed_signals": len(signals),
         "trades": len(trade_rows),
         "metrics": len(metric_rows),
     }
+    run_logger.ok(
+        "Backtest diário atualizado",
+        processed_signals=len(signals),
+        trades=len(trade_rows),
+        metrics=len(metric_rows),
+        trades_table=_table_ref(BACKTEST_TRADES_TABLE_ID),
+        metrics_table=_table_ref(BACKTEST_METRICS_TABLE_ID),
+    )
+    return result

@@ -11,6 +11,7 @@ import pandas as pd  # type: ignore[import-untyped]
 from google.cloud import bigquery  # type: ignore[import-untyped]
 
 from sisacao8.candles import SAO_PAULO_TZ
+from sisacao8.observability import StructuredLogger
 from sisacao8.signals import (
     DEFAULT_HORIZON_DAYS,
     DEFAULT_RANKING_KEY,
@@ -45,6 +46,7 @@ MAX_SIGNALS = min(
 ALLOW_SELL = os.environ.get("ALLOW_SELL_SIGNALS", "true").lower() == "true"
 HORIZON_DAYS = int(os.environ.get("SIGNAL_HORIZON_DAYS", str(DEFAULT_HORIZON_DAYS)))
 RANKING_KEY = os.environ.get("SIGNAL_RANKING_KEY", DEFAULT_RANKING_KEY)
+JOB_NAME = os.environ.get("JOB_NAME", "eod_signals")
 
 client = bigquery.Client()
 
@@ -183,21 +185,35 @@ def _persist_signals(
     logging.info("%s sinais gravados em %s", len(rows), table_id)
 
 
+
 def generate_eod_signals(request: Any) -> Dict[str, Any]:
     """HTTP handler executed by Cloud Functions."""
 
+    run_logger = StructuredLogger(JOB_NAME)
+    run_logger.update_context(
+        model_version=MODEL_VERSION,
+        ranking_key=RANKING_KEY,
+        horizon_days=HORIZON_DAYS,
+    )
+
     if not _ensure_after_cutoff():
         message = "Execução bloqueada antes do cutoff (18:00 BRT)."
+        run_logger.warn(message, reason="before_cutoff")
         logging.warning(message)
         return {"status": "skipped", "reason": message}, 400
 
     reference_date = _parse_request_date(request)
+    run_logger.update_context(date_ref=reference_date.isoformat())
+    run_logger.started()
+
     if not _is_trading_day(reference_date):
         message = f"{reference_date} não é dia útil da B3 (feriado/fim de semana)."
+        run_logger.warn(message, reason="non_trading_day")
         logging.warning(message)
         return {"status": "skipped", "reason": message}
 
     valid_for = _next_business_day(reference_date)
+    run_logger.update_context(valid_for=valid_for.isoformat())
     logging.info(
         (
             "Gerando sinais para %s válidos em %s | modelo=%s | X=%.2f%% | TP=%.2f%% | "
@@ -214,8 +230,10 @@ def generate_eod_signals(request: Any) -> Dict[str, Any]:
     )
 
     frame = _fetch_daily_frame(reference_date)
+    initial_rows = len(frame)
     if frame.empty:
         message = f"Sem candles disponíveis para {reference_date}"
+        run_logger.warn(message, reason="empty_daily_frame")
         logging.warning(message)
         return {"status": "empty", "reason": message}
 
@@ -228,8 +246,15 @@ def generate_eod_signals(request: Any) -> Dict[str, Any]:
             len(frame),
         )
         if frame.empty:
+            run_logger.warn(
+                "Nenhum ticker passou no filtro de volume",
+                reason="volume_filter",
+                min_volume=MIN_VOLUME,
+                requested=post_filter_rows,
+            )
             return {"status": "filtered", "reason": "volume"}
 
+    post_filter_rows = len(frame)
     limit = min(MAX_SIGNALS, MAX_SIGNALS_PER_DAY)
     metrics_df = _fetch_latest_metrics()
     signals = generate_conditional_signals(
@@ -261,7 +286,7 @@ def generate_eod_signals(request: Any) -> Dict[str, Any]:
             )
             for signal in signals
         ],
-        "requested": len(frame),
+        "requested": initial_rows,
         "generated": len(signals),
         "ranking_key": RANKING_KEY,
         "horizon_days": HORIZON_DAYS,
@@ -281,4 +306,18 @@ def generate_eod_signals(request: Any) -> Dict[str, Any]:
 
     response["stored"] = len(signals)
     response["max_signals"] = limit
+    if signals:
+        run_logger.ok(
+            "Sinais EOD armazenados",
+            generated=len(signals),
+            requested=initial_rows,
+            table=table_id,
+        )
+    else:
+        run_logger.warn(
+            "Nenhum sinal gerado",
+            requested=initial_rows,
+            table=table_id,
+        )
     return response
+

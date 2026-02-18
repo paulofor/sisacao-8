@@ -22,7 +22,7 @@ def format_intraday_prices(
     Parameters
     ----------
     data:
-        Raw DataFrame fetched from ``cotacao_intraday.cotacao_bovespa`` or a
+        Raw DataFrame fetched from ``cotacao_intraday.cotacao_b3`` or a
         similar source containing the ``date``/``time`` columns.
     date_column:
         Name of the column containing the trade date (``YYYY-MM-DD``).

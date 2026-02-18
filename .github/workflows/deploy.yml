@@ -7,81 +7,66 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+env:
+  PROJECT_ID: ingestaokraken
+  REGION: us-central1
+
 jobs:
-  deploy:
+  deploy-cloud-functions:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: get_stock_data
+            entry_point: get_stock_data
+            source: functions/get_stock_data
+            env: BQ_INTRADAY_DATASET=cotacao_intraday,BQ_DAILY_TABLE=cotacao_ohlcv_diario,BQ_HOLIDAYS_TABLE=feriados_b3
+          - name: intraday_candles
+            entry_point: generate_intraday_candles
+            source: functions/intraday_candles
+            env: BQ_INTRADAY_DATASET=cotacao_intraday,BQ_INTRADAY_RAW_TABLE=cotacao_b3,BQ_INTRADAY_15M_TABLE=candles_intraday_15m,BQ_INTRADAY_1H_TABLE=candles_intraday_1h
+          - name: eod_signals
+            entry_point: generate_eod_signals
+            source: functions/eod_signals
+            env: BQ_INTRADAY_DATASET=cotacao_intraday,BQ_DAILY_TABLE=cotacao_ohlcv_diario,BQ_SIGNALS_TABLE=sinais_eod,BQ_HOLIDAYS_TABLE=feriados_b3,BQ_BACKTEST_METRICS_TABLE=backtest_metrics
+          - name: backtest_daily
+            entry_point: backtest_daily
+            source: functions/backtest_daily
+            env: BQ_INTRADAY_DATASET=cotacao_intraday,BQ_DAILY_TABLE=cotacao_ohlcv_diario,BQ_SIGNALS_TABLE=sinais_eod,BQ_BACKTEST_TRADES_TABLE=backtest_trades,BQ_BACKTEST_METRICS_TABLE=backtest_metrics,BQ_HOLIDAYS_TABLE=feriados_b3
+          - name: alerts
+            entry_point: alerts
+            source: functions/alerts
+            env: BQ_INTRADAY_DATASET=cotacao_intraday,BQ_SIGNALS_TABLE=sinais_eod
+          - name: dq_checks
+            entry_point: dq_checks
+            source: functions/dq_checks
+            env: BQ_INTRADAY_DATASET=cotacao_intraday,BQ_DAILY_TABLE=cotacao_ohlcv_diario,BQ_INTRADAY_RAW_TABLE=cotacao_b3,BQ_SIGNALS_TABLE=sinais_eod,BQ_BACKTEST_METRICS_TABLE=backtest_metrics,BQ_HOLIDAYS_TABLE=feriados_b3,BQ_DQ_CHECKS_TABLE=dq_checks_daily,BQ_DQ_INCIDENTS_TABLE=dq_incidents,BQ_TICKERS_TABLE=acao_bovespa
     steps:
       - uses: actions/checkout@v4
       - name: Auth GCP
         uses: google-github-actions/auth@v2
         with:
           credentials_json: '${{ secrets.GCP_SA_KEY }}'
-          project_id: 'ingestaokraken'
+          project_id: '${{ env.PROJECT_ID }}'
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
-      - name: Warm-up wait before deployment
+      - name: Deploy ${{ matrix.name }}
         run: |
-          echo "Waiting 30 seconds before deployment to reduce 409 queue conflicts..."
-          sleep 30
-      - name: Deploy Functions
+          gcloud functions deploy ${{ matrix.name }}             --runtime python311             --trigger-http             --allow-unauthenticated             --entry-point ${{ matrix.entry_point }}             --source ${{ matrix.source }}             --project ${PROJECT_ID}             --region ${REGION}             --set-env-vars="${{ matrix.env }}"             --quiet
+
+  deploy-cloud-run:
+    runs-on: ubuntu-latest
+    needs: deploy-cloud-functions
+    steps:
+      - uses: actions/checkout@v4
+      - name: Auth GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: '${{ secrets.GCP_SA_KEY }}'
+          project_id: '${{ env.PROJECT_ID }}'
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+      - name: Deploy google_finance_price
         run: |
-          set +e
-
-          REGION="us-central1"
-          MAX_ATTEMPTS=5
-          RETRY_WAIT=90
-          EXIT_CODE=1
-
-          is_queue_conflict() {
-            local message="$1"
-            if [[ "$message" == *"status=[409]"* ]] && [[ "$message" == *"unable to queue the operation"* ]]; then
-              return 0
-            fi
-            return 1
-          }
-
-          for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
-            echo "Starting deployment attempt $attempt/$MAX_ATTEMPTS for get_stock_data"
-            DEPLOY_OUTPUT=$(gcloud functions deploy get_stock_data \
-              --runtime python311 \
-              --trigger-http \
-              --entry-point get_stock_data \
-              --source functions/get_stock_data \
-              --allow-unauthenticated \
-              --project ingestaokraken \
-              --region "$REGION" \
-              --quiet 2>&1)
-            EXIT_CODE=$?
-            echo "$DEPLOY_OUTPUT"
-
-            if [ "$EXIT_CODE" -eq 0 ]; then
-              echo "Deployment succeeded on attempt $attempt."
-              break
-            fi
-
-            if [ "$attempt" -lt "$MAX_ATTEMPTS" ]; then
-              if is_queue_conflict "$DEPLOY_OUTPUT"; then
-                echo "Deployment attempt $attempt failed with transient queue conflict (409)."
-                echo "Waiting $RETRY_WAIT seconds before retrying..."
-                sleep "$RETRY_WAIT"
-              else
-                echo "Detected non-transient deploy error; stopping retries early."
-                break
-              fi
-            else
-              echo "Deployment failed after $MAX_ATTEMPTS attempts."
-            fi
-          done
-
-          if [ "$EXIT_CODE" -ne 0 ]; then
-            exit "$EXIT_CODE"
-          fi
-      - name: Deploy Cloud Run function
-        run: |
-          gcloud run deploy google-finance-price \
-            --source functions/google_finance_price \
-            --allow-unauthenticated \
-            --project ingestaokraken \
-            --region us-central1 \
-            --set-env-vars FUNCTION_TARGET=google_finance_price,FUNCTION_SIGNATURE_TYPE=http \
-            --quiet
+          gcloud run deploy google-finance-price             --source functions/google_finance_price             --allow-unauthenticated             --project ${PROJECT_ID}             --region ${REGION}             --set-env-vars=FUNCTION_TARGET=google_finance_price,FUNCTION_SIGNATURE_TYPE=http,BQ_INTRADAY_DATASET=cotacao_intraday,BQ_INTRADAY_RAW_TABLE=cotacao_b3,BQ_HOLIDAYS_TABLE=feriados_b3             --quiet

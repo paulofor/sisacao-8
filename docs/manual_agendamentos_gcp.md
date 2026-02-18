@@ -66,7 +66,7 @@ Os exemplos acima já utilizam o projeto `ingestaokraken` na região `us-central
 2. Crie um job no Cloud Scheduler com frequência `0,30 10-18 * * 1-5` para rodar de segunda a sexta a cada 30 minutos.
 3. Configure o método `POST` e o payload esperado (ex.: `{ "limit": 50 }`).
 4. Caso utilize Cloud Run, selecione **Add OIDC token** e aponte para o serviço (`--oidc-token-audience=https://google_finance_price-<hash>-<region>-a.run.app`).
-5. Verifique nos logs do Cloud Run se há retorno `200 OK` e registros novos na tabela `cotacao_bovespa`.
+5. Verifique nos logs do Cloud Run se há retorno `200 OK` e registros novos na tabela `cotacao_b3`.
 
 ## 5. Agendamento da função `eod_signals`
 
@@ -102,3 +102,24 @@ Os exemplos acima já utilizam o projeto `ingestaokraken` na região `us-central
 7. [ ] Alertas operacionais ativados no Cloud Monitoring.
 
 Seguindo estes passos você garante que todas as automações do projeto são executadas de forma confiável no GCP, reduzindo o trabalho manual e mantendo a base de dados e alertas sempre atualizados.
+
+
+## 7. Agendamento do `backtest_daily`
+
+1. Após confirmar que o job `eod-signals` está concluído, crie um novo Cloud Scheduler
+   chamado `backtest-daily`.
+2. Frequência sugerida: `15 19 * * 1-5` (logo após a geração dos sinais).
+3. Endpoint: `https://us-central1-<projeto>.cloudfunctions.net/backtest_daily`.
+4. Método `POST`, corpo opcional `{ "date": "YYYY-MM-DD" }` para reprocessos.
+5. Autenticação OIDC com a mesma conta de serviço usada nos demais jobs.
+6. Verifique no Cloud Logging o log `job_name="backtest_daily" status="OK"` e as tabelas
+   `backtest_trades`/`backtest_metrics` com `as_of_date` igual ao dia corrente.
+
+## 8. Agendamento do `dq_checks`
+
+1. Crie o job `dq-checks` para rodar após o backtest (`30 19 * * 1-5`).
+2. Endpoint: `https://us-central1-<projeto>.cloudfunctions.net/dq_checks`.
+3. Método `POST` (sem corpo) e autenticação OIDC.
+4. A execução grava `dq_checks_daily` e `dq_incidents`. Confirme a presença de um
+   log `job_name="dq_checks" status="OK"` e revise a tabela para garantir que todos os
+   `check_name` estejam com `status='PASS'` ou `WARN` em caso de feriado.

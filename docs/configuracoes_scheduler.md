@@ -95,3 +95,28 @@ Este documento consolida as configurações necessárias para que todos os jobs 
 5. [ ] Revisão trimestral das permissões da conta de serviço concluída.
 
 Mantendo este documento atualizado você garante que as rotinas automáticas do projeto continuem executando sem intervenção manual.
+
+
+### 6. `backtest-daily`
+
+| Campo | Valor recomendado |
+|-------|-------------------|
+| Serviço-alvo | Cloud Function `backtest_daily` |
+| Endpoint | `https://us-central1-<projeto>.cloudfunctions.net/backtest_daily` |
+| Método HTTP | `POST` (corpo vazio ou `{ "date": "YYYY-MM-DD" }`) |
+| Cron | `15 19 * * 1-5` |
+| Time zone | `America/Sao_Paulo` |
+| Autenticação | OIDC com `agendamentos-sisacao@<projeto>.iam.gserviceaccount.com` |
+| Dependências | Deve rodar após `eod-signals` para reutilizar os sinais recém gravados. |
+
+### 7. `dq-checks`
+
+| Campo | Valor recomendado |
+|-------|-------------------|
+| Serviço-alvo | Cloud Function `dq_checks` |
+| Endpoint | `https://us-central1-<projeto>.cloudfunctions.net/dq_checks` |
+| Método HTTP | `POST` |
+| Cron | `30 19 * * 1-5` (logo após o backtest) |
+| Time zone | `America/Sao_Paulo` |
+| Autenticação | OIDC com a mesma conta dedicada aos agendamentos |
+| Observações | Persiste resultados em `dq_checks_daily`/`dq_incidents` e deve sempre rodar após o pipeline completo. |
