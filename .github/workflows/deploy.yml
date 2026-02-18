@@ -54,16 +54,25 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
       - name: Deploy ${{ matrix.name }}
         run: |
+          set +e
+
           for attempt in 1 2 3; do
-            output=$(gcloud functions deploy ${{ matrix.name }}               --runtime python311               --trigger-http               --allow-unauthenticated               --entry-point ${{ matrix.entry_point }}               --source ${{ matrix.source }}               --project ${PROJECT_ID}               --region ${REGION}               --set-env-vars="${{ matrix.env }}"               --quiet 2>&1)
+            echo "=== Deploy attempt ${attempt}/3 for '${{ matrix.name }}' ==="
+            output=$(gcloud functions deploy ${{ matrix.name }}               --runtime python311               --trigger-http               --allow-unauthenticated               --entry-point ${{ matrix.entry_point }}               --source ${{ matrix.source }}               --project ${PROJECT_ID}               --region ${REGION}               --set-env-vars="${{ matrix.env }}"               --verbosity=debug 2>&1)
             status=$?
 
             if [ $status -eq 0 ]; then
               echo "$output"
+              echo "Deploy concluído com sucesso para '${{ matrix.name }}'."
               break
             fi
 
             echo "$output"
+
+            echo "Coletando diagnóstico complementar para '${{ matrix.name }}'..."
+            gcloud functions operations list               --project ${PROJECT_ID}               --region ${REGION}               --limit 10               --format="table(name,operationType,status,error.message,target)" 2>&1 || true
+            gcloud functions describe ${{ matrix.name }}               --project ${PROJECT_ID}               --region ${REGION}               --format="yaml(name,status,updateTime,httpsTrigger.url,labels,buildId,versionId,environmentVariables)" 2>&1 || true
+
             if echo "$output" | grep -q "unable to queue the operation" && [ $attempt -lt 3 ]; then
               wait_seconds=$((attempt * 30))
               echo "Deploy returned 409 queue conflict. Retrying in ${wait_seconds}s (attempt ${attempt}/3)."
