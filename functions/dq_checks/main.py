@@ -283,7 +283,13 @@ def _check_signals(reference_date: dt.date, trading_day: bool) -> CheckResult:
     invalid_buy_stop = int(getattr(row, "invalid_buy_stop", 0) or 0)
     invalid_sell = int(getattr(row, "invalid_sell", 0) or 0)
     invalid_sell_stop = int(getattr(row, "invalid_sell_stop", 0) or 0)
-    issues = invalid_side + invalid_buy + invalid_buy_stop + invalid_sell + invalid_sell_stop
+    issues = (
+        invalid_side
+        + invalid_buy
+        + invalid_buy_stop
+        + invalid_sell
+        + invalid_sell_stop
+    )
     if total == 0:
         status = "FAIL"
     elif total > SIGNAL_LIMIT or issues > 0:
@@ -373,7 +379,9 @@ def _persist_incidents(
     for result in results:
         payloads.append(
             {
-                "incident_id": f"{reference_date.isoformat()}_{result.name}_{run_logger.run_id}",
+                "incident_id": (
+                    f"{reference_date.isoformat()}_{result.name}_{run_logger.run_id}"
+                ),
                 "check_name": result.name,
                 "check_date": reference_date,
                 "status": result.status,
@@ -410,7 +418,10 @@ def dq_checks(request: Any) -> Dict[str, Any]:
         ("daily_uniqueness", lambda: _check_daily_uniqueness(reference_date)),
         ("ohlc_validity", lambda: _check_ohlc_validity(reference_date)),
         ("signals_limits", lambda: _check_signals(reference_date, trading_day)),
-        ("backtest_metrics", lambda: _check_backtest_metrics(reference_date, trading_day)),
+        (
+            "backtest_metrics",
+            lambda: _check_backtest_metrics(reference_date, trading_day),
+        ),
     ]
 
     for name, check_fn in check_functions:
