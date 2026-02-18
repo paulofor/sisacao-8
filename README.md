@@ -58,7 +58,14 @@ Coleta cotações de ações e carrega no **BigQuery** usando **Google Cloud Fun
    sinais condicionais do dia. O resultado é salvo na tabela
    `cotacao_intraday.sinais_eod` e contém `entry`, `target`, `stop`,
    `x_rule`, `y_target_pct`, `y_stop_pct`, `rank`, `model_version`,
-   `source_snapshot` e `code_version` para auditoria.
+   `source_snapshot`, `ranking_key`, `score`, `horizon_days` e
+   `code_version` para auditoria.
+
+9. Em seguida, execute a função `backtest_daily`. Ela lê os sinais armazenados,
+   consulta os candles em `cotacao_intraday.cotacao_ohlcv_diario`, simula a
+   janela configurada (`horizon_days`) e grava resultados em
+   `cotacao_intraday.backtest_trades` e `cotacao_intraday.backtest_metrics`. As
+   métricas (win rate, profit factor etc.) alimentam o ranking `score_v1`.
 
 Consulte os comentários nos diretórios para mais detalhes.
 

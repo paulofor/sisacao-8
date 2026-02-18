@@ -18,7 +18,10 @@ CREATE TABLE IF NOT EXISTS `ingestaokraken.cotacao_intraday.sinais_eod`
   source_snapshot STRING,
   code_version STRING,
   volume FLOAT64,
-  close FLOAT64
+  close FLOAT64,
+  ranking_key STRING,
+  score FLOAT64,
+  horizon_days INT64
 )
 PARTITION BY date_ref
 CLUSTER BY ticker

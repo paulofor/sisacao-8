@@ -5,7 +5,11 @@ import pytest
 
 from sisacao8.b3 import parse_b3_daily_lines
 from sisacao8.intraday import build_intraday_candles
-from sisacao8.signals import generate_conditional_signals
+from sisacao8.signals import (
+    DEFAULT_HORIZON_DAYS,
+    DEFAULT_RANKING_KEY,
+    generate_conditional_signals,
+)
 
 
 def test_parse_b3_daily_lines_extracts_ohlcv() -> None:
@@ -22,7 +26,7 @@ def test_parse_b3_daily_lines_extracts_ohlcv() -> None:
     assert candle.high == pytest.approx(17.51)
     assert candle.low == pytest.approx(17.12)
     assert candle.close == pytest.approx(17.27)
-    assert candle.volume == pytest.approx(5800800)
+    assert candle.volume == pytest.approx(5_800_800)
     assert candle.metadata["trades"] == 15390
 
 
@@ -53,13 +57,17 @@ def test_generate_conditional_signals_limits_top5() -> None:
                 "ticker": f"TICK{idx}",
                 "open": 10 + idx,
                 "close": 9 + idx,
-                "volume": 1_000_000 - idx * 10,
+                "volume_financeiro": 1_000_000 - idx * 10,
             }
         )
     df = pd.DataFrame(rows)
     signals = generate_conditional_signals(df)
     assert len(signals) == 5
     assert len({signal.ticker for signal in signals}) == 5
+    for signal in signals:
+        assert 0 <= signal.score <= 1
+        assert signal.horizon_days == DEFAULT_HORIZON_DAYS
+        assert signal.ranking_key == DEFAULT_RANKING_KEY
 
 
 def test_generate_conditional_signals_chooses_sell_for_green_day() -> None:
@@ -69,7 +77,7 @@ def test_generate_conditional_signals_chooses_sell_for_green_day() -> None:
                 "ticker": "GREEN",
                 "open": 10.0,
                 "close": 11.0,
-                "volume": 1000,
+                "volume_financeiro": 1000,
             }
         ]
     )
@@ -103,7 +111,7 @@ def test_generate_conditional_signals_applies_x_and_y_pct() -> None:
                 "ticker": "ALFA3",
                 "open": 99.0,
                 "close": 100.0,
-                "volume": 1_000_000,
+                "volume_financeiro": 1_000_000,
             }
         ]
     )
@@ -123,3 +131,26 @@ def test_generate_conditional_signals_applies_x_and_y_pct() -> None:
     assert signal.x_rule == "close(D)*1.0500"
     assert signal.y_target_pct == pytest.approx(0.2)
     assert signal.y_stop_pct == pytest.approx(0.1)
+
+
+def test_generate_conditional_signals_uses_backtest_metrics_for_score() -> None:
+    df = pd.DataFrame(
+        [
+            {"ticker": "AAA", "open": 10.0, "close": 10.0, "volume_financeiro": 1_000_000},
+            {"ticker": "BBB", "open": 10.0, "close": 10.0, "volume_financeiro": 1_000_000},
+        ]
+    )
+    metrics = pd.DataFrame(
+        [
+            {"ticker": "BBB", "side": "BUY", "win_rate": 0.8, "profit_factor": 2.0},
+            {"ticker": "AAA", "side": "BUY", "win_rate": 0.2, "profit_factor": 0.5},
+        ]
+    )
+    signals = generate_conditional_signals(
+        df,
+        top_n=2,
+        allow_sell=False,
+        backtest_metrics=metrics,
+    )
+    assert signals[0].ticker == "BBB"
+    assert signals[0].score > signals[1].score

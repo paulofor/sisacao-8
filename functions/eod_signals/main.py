@@ -12,6 +12,8 @@ from google.cloud import bigquery  # type: ignore[import-untyped]
 
 from sisacao8.candles import SAO_PAULO_TZ
 from sisacao8.signals import (
+    DEFAULT_HORIZON_DAYS,
+    DEFAULT_RANKING_KEY,
     MODEL_VERSION,
     MAX_SIGNALS_PER_DAY,
     ConditionalSignal,
@@ -26,6 +28,9 @@ DATASET_ID = os.environ.get("BQ_INTRADAY_DATASET", "cotacao_intraday")
 DAILY_TABLE_ID = os.environ.get("BQ_DAILY_TABLE", "cotacao_ohlcv_diario")
 SIGNALS_TABLE_ID = os.environ.get("BQ_SIGNALS_TABLE", "sinais_eod")
 FERIADOS_TABLE_ID = os.environ.get("BQ_HOLIDAYS_TABLE", "feriados_b3")
+BACKTEST_METRICS_TABLE_ID = os.environ.get(
+    "BQ_BACKTEST_METRICS_TABLE", "backtest_metrics"
+)
 MIN_VOLUME = float(os.environ.get("MIN_SIGNAL_VOLUME", "0"))
 EARLY_RUN = os.environ.get("ALLOW_EARLY_SIGNAL", "false").lower() == "true"
 X_PCT = float(os.environ.get("SIGNAL_X_PCT", os.environ.get("X_PCT", "0.02")))
@@ -37,6 +42,9 @@ MAX_SIGNALS = min(
     MAX_SIGNALS_PER_DAY,
     max(1, int(os.environ.get("MAX_SIGNALS", str(MAX_SIGNALS_PER_DAY))))
 )
+ALLOW_SELL = os.environ.get("ALLOW_SELL_SIGNALS", "true").lower() == "true"
+HORIZON_DAYS = int(os.environ.get("SIGNAL_HORIZON_DAYS", str(DEFAULT_HORIZON_DAYS)))
+RANKING_KEY = os.environ.get("SIGNAL_RANKING_KEY", DEFAULT_RANKING_KEY)
 
 client = bigquery.Client()
 
@@ -65,7 +73,11 @@ def _table_ref(table_id: str) -> str:
 
 
 def _holidays_table() -> str:
-    return f"{client.project}.{DATASET_ID}.{FERIADOS_TABLE_ID}"
+    return _table_ref(FERIADOS_TABLE_ID)
+
+
+def _metrics_table() -> str:
+    return _table_ref(BACKTEST_METRICS_TABLE_ID)
 
 
 def _is_b3_holiday(date_value: dt.date) -> bool:
@@ -102,7 +114,7 @@ def _next_business_day(date_value: dt.date) -> dt.date:
 
 def _fetch_daily_frame(reference_date: dt.date) -> pd.DataFrame:
     query = (
-        "SELECT ticker, data_pregao, open, close, high, low, volume, qtd_negociada "
+        "SELECT ticker, data_pregao, open, close, high, low, volume_financeiro, qtd_negociada "
         f"FROM `{_table_ref(DAILY_TABLE_ID)}` "
         "WHERE data_pregao = @ref_date"
     )
@@ -111,6 +123,23 @@ def _fetch_daily_frame(reference_date: dt.date) -> pd.DataFrame:
     df = client.query(query, job_config=job_config).to_dataframe()
     df.sort_values("ticker", inplace=True)
     return df
+
+
+def _fetch_latest_metrics() -> pd.DataFrame:
+    table = _metrics_table()
+    query = f"""
+        WITH latest AS (
+            SELECT MAX(as_of_date) AS as_of_date FROM `{table}`
+        )
+        SELECT ticker, side, win_rate, profit_factor
+        FROM `{table}`
+        WHERE as_of_date = (SELECT as_of_date FROM latest WHERE as_of_date IS NOT NULL)
+    """
+    try:
+        return client.query(query).to_dataframe()
+    except Exception as exc:  # noqa: BLE001
+        logging.info("Backtest metrics indisponíveis: %s", exc)
+        return pd.DataFrame()
 
 
 def _delete_partition(table_id: str, reference_date: dt.date) -> None:
@@ -176,8 +205,8 @@ def generate_eod_signals(request: Any) -> Dict[str, Any]:
     valid_for = _next_business_day(reference_date)
     logging.info(
         (
-            "Gerando sinais para %s válidos em %s | modelo=%s | X=%.2f%% | "
-            "TP=%.2f%% | SL=%.2f%%"
+            "Gerando sinais para %s válidos em %s | modelo=%s | X=%.2f%% | TP=%.2f%% | "
+            "SL=%.2f%% | horizon=%sd | ranking=%s"
         ),
         reference_date,
         valid_for,
@@ -185,6 +214,8 @@ def generate_eod_signals(request: Any) -> Dict[str, Any]:
         X_PCT * 100,
         TARGET_PCT * 100,
         STOP_PCT * 100,
+        HORIZON_DAYS,
+        RANKING_KEY,
     )
 
     frame = _fetch_daily_frame(reference_date)
@@ -194,21 +225,28 @@ def generate_eod_signals(request: Any) -> Dict[str, Any]:
         return {"status": "empty", "reason": message}
 
     frame = frame.fillna(0)
-    if MIN_VOLUME > 0:
-        frame = frame[frame["volume"].fillna(0) >= MIN_VOLUME]
+    if MIN_VOLUME > 0 and "volume_financeiro" in frame.columns:
+        frame = frame[frame["volume_financeiro"].fillna(0) >= MIN_VOLUME]
         logging.info(
-            "Filtrando por volume mínimo %.0f: %s tickers", MIN_VOLUME, len(frame)
+            "Filtrando por volume financeiro mínimo %.0f: %s tickers",
+            MIN_VOLUME,
+            len(frame),
         )
         if frame.empty:
             return {"status": "filtered", "reason": "volume"}
 
     limit = min(MAX_SIGNALS, MAX_SIGNALS_PER_DAY)
+    metrics_df = _fetch_latest_metrics()
     signals = generate_conditional_signals(
         frame,
         top_n=limit,
         x_pct=X_PCT,
         target_pct=TARGET_PCT,
         stop_pct=STOP_PCT,
+        allow_sell=ALLOW_SELL,
+        horizon_days=HORIZON_DAYS,
+        ranking_key=RANKING_KEY,
+        backtest_metrics=metrics_df,
     )
     created_at = _now_sp()
     source_snapshot = compute_source_snapshot(frame.to_dict("records"))
@@ -230,6 +268,8 @@ def generate_eod_signals(request: Any) -> Dict[str, Any]:
         ],
         "requested": len(frame),
         "generated": len(signals),
+        "ranking_key": RANKING_KEY,
+        "horizon_days": HORIZON_DAYS,
     }
 
     table_id = _table_ref(SIGNALS_TABLE_ID)

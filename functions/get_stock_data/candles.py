@@ -65,7 +65,7 @@ class Candle:
             "high": float(self.high),
             "low": float(self.low),
             "close": float(self.close),
-            "volume": float(turnover) if turnover is not None else None,
+            "volume_financeiro": float(turnover) if turnover is not None else None,
             "qtd_negociada": quantity,
             "num_negocios": int(trades) if trades is not None else None,
             "fonte": self.source,

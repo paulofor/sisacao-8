@@ -184,9 +184,9 @@ class Candle:
         if "trades" in metadata:
             row["trades"] = metadata["trades"]
         if "turnover_brl" in metadata:
-            row["turnover_brl"] = metadata["turnover_brl"]
+            row["volume_financeiro"] = metadata["turnover_brl"]
         if "quantity" in metadata:
-            row["quantity"] = metadata["quantity"]
+            row["qtd_negociada"] = metadata["quantity"]
         if "window_minutes" in metadata:
             row["window_minutes"] = metadata["window_minutes"]
         if "samples" in metadata:
