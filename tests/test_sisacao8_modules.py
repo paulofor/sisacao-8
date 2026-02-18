@@ -136,8 +136,18 @@ def test_generate_conditional_signals_applies_x_and_y_pct() -> None:
 def test_generate_conditional_signals_uses_backtest_metrics_for_score() -> None:
     df = pd.DataFrame(
         [
-            {"ticker": "AAA", "open": 10.0, "close": 10.0, "volume_financeiro": 1_000_000},
-            {"ticker": "BBB", "open": 10.0, "close": 10.0, "volume_financeiro": 1_000_000},
+            {
+                "ticker": "AAA",
+                "open": 10.0,
+                "close": 10.0,
+                "volume_financeiro": 1_000_000,
+            },
+            {
+                "ticker": "BBB",
+                "open": 10.0,
+                "close": 10.0,
+                "volume_financeiro": 1_000_000,
+            },
         ]
     )
     metrics = pd.DataFrame(

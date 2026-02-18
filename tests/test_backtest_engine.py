@@ -131,4 +131,6 @@ def test_calendar_next_trading_day_skips_weekend_and_holiday() -> None:
     holidays = {dt.date(2024, 1, 1), dt.date(2024, 1, 2)}
     friday = dt.date(2023, 12, 29)
     assert calendar.next_trading_day(friday, holidays) == dt.date(2024, 1, 3)
-    assert calendar.previous_trading_day(dt.date(2024, 1, 1), holidays) == dt.date(2023, 12, 29)
+    assert calendar.previous_trading_day(dt.date(2024, 1, 1), holidays) == dt.date(
+        2023, 12, 29
+    )

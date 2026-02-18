@@ -40,7 +40,7 @@ TARGET_PCT = float(
 STOP_PCT = float(os.environ.get("SIGNAL_STOP_PCT", os.environ.get("STOP_PCT", "0.07")))
 MAX_SIGNALS = min(
     MAX_SIGNALS_PER_DAY,
-    max(1, int(os.environ.get("MAX_SIGNALS", str(MAX_SIGNALS_PER_DAY))))
+    max(1, int(os.environ.get("MAX_SIGNALS", str(MAX_SIGNALS_PER_DAY)))),
 )
 ALLOW_SELL = os.environ.get("ALLOW_SELL_SIGNALS", "true").lower() == "true"
 HORIZON_DAYS = int(os.environ.get("SIGNAL_HORIZON_DAYS", str(DEFAULT_HORIZON_DAYS)))
@@ -87,9 +87,7 @@ def _is_b3_holiday(date_value: dt.date) -> bool:
         "` WHERE data_feriado = @ref_date LIMIT 1"
     )
     job_config = bigquery.QueryJobConfig(
-        query_parameters=[
-            bigquery.ScalarQueryParameter("ref_date", "DATE", date_value)
-        ]
+        query_parameters=[bigquery.ScalarQueryParameter("ref_date", "DATE", date_value)]
     )
     try:
         rows = list(client.query(query, job_config=job_config).result())
@@ -114,7 +112,8 @@ def _next_business_day(date_value: dt.date) -> dt.date:
 
 def _fetch_daily_frame(reference_date: dt.date) -> pd.DataFrame:
     query = (
-        "SELECT ticker, data_pregao, open, close, high, low, volume_financeiro, qtd_negociada "
+        "SELECT ticker, data_pregao, open, close, high, low, "
+        "volume_financeiro, qtd_negociada "
         f"FROM `{_table_ref(DAILY_TABLE_ID)}` "
         "WHERE data_pregao = @ref_date"
     )
@@ -143,11 +142,7 @@ def _fetch_latest_metrics() -> pd.DataFrame:
 
 
 def _delete_partition(table_id: str, reference_date: dt.date) -> None:
-    query = (
-        "DELETE FROM `"
-        f"{table_id}"
-        "` WHERE date_ref = @ref_date"
-    )
+    query = "DELETE FROM `" f"{table_id}" "` WHERE date_ref = @ref_date"
     job_config = bigquery.QueryJobConfig(
         query_parameters=[
             bigquery.ScalarQueryParameter("ref_date", "DATE", reference_date)

@@ -23,7 +23,9 @@ class DailyBar:
         ticker = str(row.get("ticker", "")).strip().upper()
         if not ticker:
             raise ValueError("ticker não pode ser vazio nos candles do backtest")
-        raw_date = row.get("data_pregao") or row.get("date") or row.get("reference_date")
+        raw_date = (
+            row.get("data_pregao") or row.get("date") or row.get("reference_date")
+        )
         if isinstance(raw_date, dt.datetime):
             trade_date = raw_date.date()
         elif isinstance(raw_date, dt.date):
@@ -131,7 +133,9 @@ class BacktestTrade:
         }
 
 
-def build_candle_lookup(rows: Iterable[Mapping[str, object]]) -> Mapping[str, Mapping[dt.date, DailyBar]]:
+def build_candle_lookup(
+    rows: Iterable[Mapping[str, object]],
+) -> Mapping[str, Mapping[dt.date, DailyBar]]:
     """Return candles grouped by ticker/date for quick access."""
 
     grouped: MutableMapping[str, MutableMapping[dt.date, DailyBar]] = {}
@@ -293,7 +297,9 @@ def _compute_return(side: str, entry: float, exit_price: float) -> float:
     return (exit_price - entry) / entry
 
 
-def compute_metrics(rows: Sequence[Mapping[str, object]], as_of_date: dt.date) -> List[Mapping[str, object]]:
+def compute_metrics(
+    rows: Sequence[Mapping[str, object]], as_of_date: dt.date
+) -> List[Mapping[str, object]]:
     """Aggregate rolling metrics per ticker/side for ranking."""
 
     if not rows:
@@ -303,7 +309,9 @@ def compute_metrics(rows: Sequence[Mapping[str, object]], as_of_date: dt.date) -
         return []
     frame["entry_hit"] = frame["entry_hit"].fillna(False)
     frame["return_pct"] = pd.to_numeric(frame["return_pct"], errors="coerce")
-    frame["horizon_days"] = pd.to_numeric(frame["horizon_days"], errors="coerce").astype("Int64")
+    frame["horizon_days"] = pd.to_numeric(
+        frame["horizon_days"], errors="coerce"
+    ).astype("Int64")
     frame["ticker"] = frame["ticker"].astype(str).str.upper()
     frame["side"] = frame["side"].astype(str).str.upper()
     frame["entry_fill_date"] = pd.to_datetime(frame["entry_fill_date"])
@@ -326,7 +334,11 @@ def _compute_metrics_for_groups(
     combos.extend([(None, side) for side in sorted(frame["side"].unique())])
     combos.extend([(ticker, None) for ticker in sorted(frame["ticker"].unique())])
     combos.extend(
-        [(ticker, side) for ticker in sorted(frame["ticker"].unique()) for side in sorted(frame["side"].unique())]
+        [
+            (ticker, side)
+            for ticker in sorted(frame["ticker"].unique())
+            for side in sorted(frame["side"].unique())
+        ]
     )
     for ticker, side in combos:
         subset = frame
