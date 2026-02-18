@@ -16,11 +16,11 @@ séries de preços sem necessidade de serviços adicionais.
   solicitadas e insere os dados na tabela dedicada `cotacao_intraday.cotacao_ohlcv_diario` usando o cliente do BigQuery.
 - `functions/google_finance_price/`: função HTTP pensada para Cloud Run que consulta a lista de tickers ativos no BigQuery,
   busca o último preço no Google Finance via *scraping* e grava os resultados na tabela intraday
-  `cotacao_intraday.cotacao_bovespa`.
+  `cotacao_intraday.cotacao_b3`.
 - `functions/alerts/`: função HTTP que consulta a tabela `sinais_eod` e, se configurada com `BOT_TOKEN` e
   `CHAT_ID`, envia um resumo para um bot do Telegram.
 - `infra/bq/`: scripts SQL de apoio, incluindo `cotacao_fechamento_diario.sql` (candles) e `signals_oscilacoes.sql` (criação de `sinais_eod`).
-- `docs/dataset_detected.md`: documentação sobre o dataset `cotacao_intraday`, destacando as tabelas `cotacao_bovespa`
+- `docs/dataset_detected.md`: documentação sobre o dataset `cotacao_intraday`, destacando as tabelas `cotacao_b3`
   (intraday) e `cotacao_ohlcv_diario` (oficial de fechamento) mapeadas no projeto `ingestaokraken`.
 - `docs/monitoramento.md`: instruções para configurar a *scheduled query* diária e montar o painel no Looker Studio.
 - `scripts/local_test.py`: guia rápido para executar as funções localmente com o `functions-framework`.
@@ -34,7 +34,7 @@ séries de preços sem necessidade de serviços adicionais.
 2. **Atualização intradiária opcional:** a função `google_finance_price` pode ser implantada como serviço HTTP para complementar
    as cotações oficiais com preços próximos ao tempo real. Ela consulta a lista de ativos marcada como `ativo = TRUE` na tabela
    `cotacao_intraday.acao_bovespa`, busca os preços no Google Finance e insere os registros na tabela
-   `cotacao_intraday.cotacao_bovespa`.
+   `cotacao_intraday.cotacao_b3`.
 3. **Derivação de sinais:** execute as funções `intraday_candles` e `eod_signals` (conforme `docs/monitoramento.md`)
    para gerar os candles de 15m/1h e a tabela `sinais_eod`.
 4. **Alertas e monitoramento:** a função `alerts` resume os sinais do dia corrente e pode publicar mensagens no Telegram. O painel

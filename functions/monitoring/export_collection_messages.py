@@ -386,7 +386,7 @@ def _collect_google_message() -> Dict[str, Any]:
 
     dataset = (
         f"{getattr(google_module, 'DATASET_ID', 'cotacao_intraday')}"
-        f".{getattr(google_module, 'TABELA_ID', 'cotacao_bovespa')}"
+        f".{getattr(google_module, 'TABELA_ID', 'cotacao_b3')}"
     )
 
     try:
@@ -474,7 +474,7 @@ def main() -> None:
     try:
         messages.append(_collect_google_message())
     except Exception as exc:  # noqa: BLE001
-        dataset = "cotacao_intraday.cotacao_bovespa"
+        dataset = "cotacao_intraday.cotacao_b3"
         messages.append(
             _error_message(
                 "google_finance_price",

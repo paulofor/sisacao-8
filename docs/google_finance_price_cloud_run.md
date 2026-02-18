@@ -1,6 +1,6 @@
 # Validação do agendamento `google_finance_price` (Cloud Run)
 
-Este guia documenta como confirmar se o serviço `google_finance_price` está publicado no **Cloud Run**, ajustar o job `Intraday` do **Cloud Scheduler** para apontar para o endpoint correto com autenticação OIDC e validar a ingestão na tabela `cotacao_intraday.cotacao_bovespa`.
+Este guia documenta como confirmar se o serviço `google_finance_price` está publicado no **Cloud Run**, ajustar o job `Intraday` do **Cloud Scheduler** para apontar para o endpoint correto com autenticação OIDC e validar a ingestão na tabela `cotacao_intraday.cotacao_b3`.
 
 > 🛈 Caso você opte por expor `google_finance_price` como **Cloud Function HTTP**, os comandos são equivalentes, alterando apenas as flags de invocação (principalmente o papel `Cloud Functions Invoker` e o endpoint `cloudfunctions.net`).
 
@@ -71,12 +71,12 @@ Para Cloud Functions, use `roles/cloudfunctions.invoker` e o comando `gcloud fun
 
 2. No **Cloud Logging**, filtre pelos recursos **Cloud Run Revision** (ou **Cloud Function**) e pelo rótulo `service=google-finance-price` para confirmar o retorno `200`.
 
-3. Valide a ingestão na tabela `cotacao_intraday.cotacao_bovespa` conferindo os logs de escrita ou consultando o BigQuery:
+3. Valide a ingestão na tabela `cotacao_intraday.cotacao_b3` conferindo os logs de escrita ou consultando o BigQuery:
 
    ```bash
    bq query --project_id=ingestaokraken """
    SELECT COUNT(*) AS registros_hoje
-   FROM `ingestaokraken.cotacao_intraday.cotacao_bovespa`
+   FROM `ingestaokraken.cotacao_intraday.cotacao_b3`
    WHERE DATE(inserted_at) = CURRENT_DATE('America/Sao_Paulo');
    """
    ```

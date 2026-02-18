@@ -131,3 +131,5 @@ gcloud functions deploy get_stock_data \
 
 Passos para agendar a consulta diária e montar um painel no Looker Studio
 estão descritos em [docs/monitoramento.md](docs/monitoramento.md).
+
+Consulte também [`docs/observabilidade.md`](docs/observabilidade.md) e o [`RUNBOOK`](RUNBOOK.md) para o checklist diário e configuração de alertas.

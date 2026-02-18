@@ -11,6 +11,7 @@ import pandas as pd  # type: ignore[import-untyped]
 from google.cloud import bigquery  # type: ignore[import-untyped]
 
 from sisacao8 import build_intraday_candles, rollup_candles
+from sisacao8.observability import StructuredLogger
 from sisacao8.candles import SAO_PAULO_TZ
 
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
@@ -21,6 +22,7 @@ RAW_TABLE_ID = os.environ.get("BQ_INTRADAY_RAW_TABLE", "cotacao_b3")
 CANDLES_15M_TABLE_ID = os.environ.get("BQ_INTRADAY_15M_TABLE", "candles_intraday_15m")
 CANDLES_1H_TABLE_ID = os.environ.get("BQ_INTRADAY_1H_TABLE", "candles_intraday_1h")
 AGGREGATE_HOURLY = os.environ.get("INTRADAY_ENABLE_HOURLY", "true").lower() == "true"
+JOB_NAME = os.environ.get("JOB_NAME", "intraday_candles")
 
 client = bigquery.Client()
 
@@ -74,10 +76,14 @@ def _load_rows(table_id: str, rows: List[Dict[str, Any]]) -> None:
     logging.info("%s linhas inseridas em %s", len(rows), table_id)
 
 
+
 def generate_intraday_candles(request: Any) -> Dict[str, Any]:
     """HTTP entrypoint expected by Cloud Functions."""
 
     reference_date = _parse_request_date(request)
+    run_logger = StructuredLogger(JOB_NAME)
+    run_logger.update_context(date_ref=reference_date.isoformat())
+    run_logger.started()
     logging.info("Gerando candles intraday para %s", reference_date)
 
     query = (
@@ -90,6 +96,10 @@ def generate_intraday_candles(request: Any) -> Dict[str, Any]:
         [bigquery.ScalarQueryParameter("ref_date", "DATE", reference_date)],
     )
     if df.empty:
+        run_logger.warn(
+            "Nenhum dado intraday encontrado",
+            reason="empty_source",
+        )
         logging.warning("Nenhum dado intraday encontrado para %s", reference_date)
         return {"status": "empty", "reference_date": reference_date.isoformat()}
 
@@ -112,5 +122,16 @@ def generate_intraday_candles(request: Any) -> Dict[str, Any]:
         _delete_partition(hourly_table, reference_date)
         _load_rows(hourly_table, hourly_rows)
         response["candles_1h"] = len(hourly_rows)
+    else:
+        hourly_rows = []
+        hourly_table = None
 
+    run_logger.ok(
+        "Candles intraday gravados",
+        candles_15m=len(rows),
+        candles_1h=response.get("candles_1h", 0),
+        table_15m=target_table,
+        table_1h=hourly_table,
+    )
     return response
+

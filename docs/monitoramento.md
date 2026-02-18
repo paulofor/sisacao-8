@@ -1,39 +1,73 @@
-# Monitoramento
+# Monitoramento operacional (Sprint 4)
 
-Este guia descreve como automatizar a geração de sinais e como visualizar os resultados.
+O monitoramento da Sprint 4 combina **logs estruturados**, **views no BigQuery**
+ e **data-quality checks** automáticos.
 
-## Função diária de sinais
+## 1. Visão consolidada no BigQuery
 
-1. Implante `functions/eod_signals` e configure o Cloud Scheduler conforme o [manual](manual_agendamentos_gcp.md).
-2. Verifique no Cloud Logging se a execução registrou a mensagem "stored" com o número de sinais enviados ao BigQuery.
-3. Acompanhe a tabela `ingestaokraken.cotacao_intraday.sinais_eod` para confirmar a inserção.
-4. Em caso de reprocessamento, invoque a função com `{ "date": "YYYY-MM-DD" }`.
+A view `cotacao_intraday.vw_pipeline_status` resume o status diário:
 
-## Dashboard no Looker Studio
+```sql
+SELECT *
+FROM `ingestaokraken.cotacao_intraday.vw_pipeline_status`
+ORDER BY component;
+```
 
-1. Acesse [Looker Studio](https://lookerstudio.google.com/) e crie um novo relatório.
-2. Selecione **BigQuery** como fonte de dados e a tabela `ingestaokraken.cotacao_intraday.sinais_eod`.
-3. Autorize o acesso e carregue os campos.
-4. Monte visualizações filtrando por `date_ref` e `ticker`.
-5. Salve o relatório para acompanhar os sinais diariamente.
+| Componente | Interpretação |
+|------------|---------------|
+| `cotacao_ohlcv_diario` | Último pregão disponível via `get_stock_data`. |
+| `cotacao_b3` | Última hora capturada pelo `google_finance_price`. |
+| `sinais_eod` | Data e quantidade de sinais gerados. |
+| `backtest_metrics` | `as_of_date` mais recente após o backtest diário. |
+| `dq_checks_daily` | Última execução dos checks automáticos. |
 
-## (Opcional) Função de alertas
+Use a view em dashboards Looker Studio para alimentar gráficos de status.
 
-1. Implante a Cloud Function de HTTP em `functions/alerts`:
+## 2. Data Quality
 
-   ```bash
-   gcloud functions deploy alerts \
-       --runtime=python311 \
-       --trigger-http \
-       --allow-unauthenticated \
-       --set-secrets=BOT_TOKEN=bot-token:latest,CHAT_ID=chat-id:latest \
-       --set-env-vars=BQ_SIGNALS_TABLE=ingestaokraken.cotacao_intraday.sinais_eod
-   ```
+A função `dq_checks` grava resultados em `dq_checks_daily` e abre incidentes
+em `dq_incidents` quando `status = FAIL`.
 
-2. Teste enviando uma requisição:
+```sql
+SELECT check_name, status, details
+FROM `ingestaokraken.cotacao_intraday.dq_checks_daily`
+WHERE check_date = CURRENT_DATE('America/Sao_Paulo')
+ORDER BY check_name;
+```
 
-   ```bash
-   curl -X POST "https://us-central1-ingestaokraken.cloudfunctions.net/alerts"
-   ```
+Checks implementados:
+- `daily_freshness`: cobertura de tickers no diário oficial.
+- `intraday_freshness`: hora mais recente por ticker no intraday.
+- `daily_uniqueness` e `ohlc_validity`: validações de integridade.
+- `signals_limits`: máximo de 5 sinais e consistência de target/stop.
+- `backtest_metrics`: garante métricas do dia.
 
-A função consulta os sinais do dia corrente na tabela `sinais_eod`, registra a contagem por ticker e envia um resumo para o Telegram quando `BOT_TOKEN` e `CHAT_ID` estão configurados.
+## 3. Logs estruturados
+
+Consulte `docs/observabilidade.md` para o formato completo. Exemplos de filtros
+no Cloud Logging:
+
+- Falhas de qualquer job:
+  ```
+  resource.type=("cloud_function" OR "cloud_run_revision")
+  AND textPayload:"\"status\": \"ERROR\""
+  ```
+- Execuções bem-sucedidas do backtest:
+  ```
+  textPayload:"job_name\": \"backtest_daily\""
+  AND textPayload:"\"status\": \"OK\""
+  ```
+
+## 4. Checklists e runbook
+
+Consulte [`RUNBOOK.md`](../RUNBOOK.md) para o checklist diário, procedimentos de
+reprocessamento e ações recomendadas quando um alerta dispara.
+
+## 5. Alertas sugeridos
+
+1. **Falha de execução:** log-based metric em `status="ERROR"`.  
+2. **Pipeline silencioso:** métrica de `status="OK"` ausente por >24h.  
+3. **DQ FAIL:** scheduled query em `dq_checks_daily` + notificação.
+
+Com essas peças publicadas, um operador consegue validar o dia em poucos
+minutos e agir rapidamente em caso de incidentes.

@@ -20,6 +20,7 @@ from .backtest import (
     compute_metrics as compute_backtest_metrics,
     run_backtest,
 )
+from .observability import StructuredLogger
 
 __all__ = [
     "Candle",
@@ -43,4 +44,5 @@ __all__ = [
     "build_signal_payloads",
     "run_backtest",
     "compute_backtest_metrics",
+    "StructuredLogger",
 ]

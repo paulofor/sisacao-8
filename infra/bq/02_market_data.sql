@@ -1,9 +1,24 @@
--- Criação das tabelas padronizadas de candles diários e intraday.
--- Ajuste o nome do projeto conforme necessário antes de executar.
+-- Tabelas de ingestão e consolidação de preços (intraday + diário).
 
-CREATE SCHEMA IF NOT EXISTS `ingestaokraken.cotacao_intraday`;
+CREATE TABLE IF NOT EXISTS `@@PROJECT_ID@@.cotacao_intraday.cotacao_b3`
+(
+  ticker STRING NOT NULL,
+  data DATE NOT NULL,
+  hora TIME NOT NULL,
+  valor FLOAT64 NOT NULL,
+  hora_atual TIME,
+  data_hora_atual DATETIME,
+  ingested_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP(),
+  fonte STRING,
+  job_run_id STRING
+)
+PARTITION BY data
+CLUSTER BY ticker
+OPTIONS (
+  description = "Coletas intraday vindas do Google Finance"
+);
 
-CREATE TABLE IF NOT EXISTS `ingestaokraken.cotacao_intraday.cotacao_ohlcv_diario`
+CREATE TABLE IF NOT EXISTS `@@PROJECT_ID@@.cotacao_intraday.cotacao_ohlcv_diario`
 (
   ticker STRING NOT NULL,
   data_pregao DATE NOT NULL,
@@ -17,15 +32,16 @@ CREATE TABLE IF NOT EXISTS `ingestaokraken.cotacao_intraday.cotacao_ohlcv_diario
   fonte STRING NOT NULL,
   atualizado_em DATETIME NOT NULL,
   data_quality_flags STRING,
-  fator_cotacao INT64
+  fator_cotacao INT64,
+  ingestion_run_id STRING
 )
 PARTITION BY data_pregao
 CLUSTER BY ticker
 OPTIONS (
-  description = "Candles diários OHLCV ingeridos a partir do COTAHIST (Sisacao-8)"
+  description = "Candles diários ingeridos via arquivo oficial da B3"
 );
 
-CREATE TABLE IF NOT EXISTS `ingestaokraken.cotacao_intraday.candles_intraday_15m`
+CREATE TABLE IF NOT EXISTS `@@PROJECT_ID@@.cotacao_intraday.candles_intraday_15m`
 (
   ticker STRING NOT NULL,
   candle_datetime DATETIME NOT NULL,
@@ -45,10 +61,10 @@ CREATE TABLE IF NOT EXISTS `ingestaokraken.cotacao_intraday.candles_intraday_15m
 PARTITION BY reference_date
 CLUSTER BY ticker
 OPTIONS (
-  description = "Candles intraday de 15 minutos gerados a partir da coleta do Google Finance"
+  description = "Candles intraday agregados em janelas de 15 minutos"
 );
 
-CREATE TABLE IF NOT EXISTS `ingestaokraken.cotacao_intraday.candles_intraday_1h`
+CREATE TABLE IF NOT EXISTS `@@PROJECT_ID@@.cotacao_intraday.candles_intraday_1h`
 (
   ticker STRING NOT NULL,
   candle_datetime DATETIME NOT NULL,
@@ -68,5 +84,5 @@ CREATE TABLE IF NOT EXISTS `ingestaokraken.cotacao_intraday.candles_intraday_1h`
 PARTITION BY reference_date
 CLUSTER BY ticker
 OPTIONS (
-  description = "Candles intraday de 1 hora derivados da série de 15 minutos"
+  description = "Candles agregados em 1 hora a partir da série de 15m"
 );

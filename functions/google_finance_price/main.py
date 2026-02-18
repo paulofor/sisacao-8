@@ -17,6 +17,7 @@ try:
 except ModuleNotFoundError:  # pragma: no cover - optional dependency
     pd = None  # type: ignore[assignment]
 from google.cloud import bigquery  # type: ignore[import-untyped]
+from sisacao8.observability import StructuredLogger
 
 try:
     from flask import Response as FlaskResponse  # type: ignore[import-untyped]
@@ -93,9 +94,10 @@ except ImportError:  # pragma: no cover - fallback when imported as a package
 
 logger = logging.getLogger(__name__)
 
-DATASET_ID = "cotacao_intraday"
-TABELA_ID = "cotacao_b3"
-FERIADOS_TABLE_ID = "feriados_b3"
+DATASET_ID = os.environ.get("BQ_INTRADAY_DATASET", "cotacao_intraday")
+TABELA_ID = os.environ.get("BQ_INTRADAY_RAW_TABLE", "cotacao_b3")
+FERIADOS_TABLE_ID = os.environ.get("BQ_HOLIDAYS_TABLE", "feriados_b3")
+JOB_NAME = os.environ.get("JOB_NAME", "google_finance_price")
 
 client = bigquery.Client()
 
@@ -549,20 +551,25 @@ def _build_price_row(
     }
 
 
+
 def google_finance_price(request: Any) -> Response:
-    """HTTP Cloud Run entry point returning latest prices for active
-    tickers."""
+    """HTTP Cloud Run entry point returning latest prices for active tickers."""
 
     brasil_tz = timezone("America/Sao_Paulo")
     now = datetime.datetime.now(brasil_tz)
     data_atual = now.strftime("%Y-%m-%d")
     hora_atual = now.strftime("%H:%M")
     data_hora_atual = now
+    run_logger = StructuredLogger(JOB_NAME)
+    run_logger.update_context(date_ref=data_atual)
+    run_logger.started()
+    table_path = f"{client.project}.{DATASET_ID}.{TABELA_ID}"
 
     if is_b3_holiday(now.date()):
-        logger.warning(
-            "Intraday collection skipped: %s is configured as B3 holiday.",
-            data_atual,
+        run_logger.warn(
+            "Coleta intraday ignorada por feriado",
+            reason="holiday",
+            holidays_table=FERIADOS_TABLE_ID,
         )
         return _build_response(
             {
@@ -576,8 +583,10 @@ def google_finance_price(request: Any) -> Response:
     try:
         tickers = fetch_active_tickers()
     except Exception as exc:  # noqa: BLE001
+        run_logger.exception(exc, stage="load_tickers")
         return _build_response({"error": str(exc)}, 500)
 
+    run_logger.update_context(configured_tickers=len(tickers))
     rows: List[Dict[str, Any]] = []
     batch_rows: List[Dict[str, Any]] = []
     error_messages: List[str] = []
@@ -681,6 +690,14 @@ def google_finance_price(request: Any) -> Response:
         if error_details:
             response["errors"] = error_details
         status = 200 if not error_details else 207
+        log_method = run_logger.ok if not error_details else run_logger.warn
+        log_method(
+            "Preços intraday gravados",
+            processed=len(rows),
+            failed=len(error_details),
+            table=table_path,
+            timed_out=timed_out,
+        )
         return _build_response(response, status)
 
     payload: Dict[str, Any] = {
@@ -688,8 +705,12 @@ def google_finance_price(request: Any) -> Response:
     }
     if error_details:
         payload["errors"] = error_details
+    run_logger.error(
+        "Nenhum ticker processado",
+        errors=len(error_details),
+        timed_out=timed_out,
+    )
     return _build_response(payload, 500)
-
 
 def _create_flask_app() -> Any:
     """Return a lightweight Flask app that proxies to the function."""

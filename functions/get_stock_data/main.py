@@ -12,6 +12,7 @@ except ModuleNotFoundError:  # pragma: no cover - optional dependency
     pd = None  # type: ignore[assignment]
 import requests  # type: ignore[import-untyped]
 from google.cloud import bigquery  # type: ignore[import-untyped]
+from sisacao8.observability import StructuredLogger
 
 if __package__:
     from .b3 import B3FileError, candles_by_ticker, parse_b3_daily_zip
@@ -53,17 +54,26 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(message)s",
 )
 
-DATASET_ID = "cotacao_intraday"
+DATASET_ID = os.environ.get("BQ_INTRADAY_DATASET", "cotacao_intraday")
 FECHAMENTO_TABLE_ID = os.environ.get("BQ_DAILY_TABLE", "cotacao_ohlcv_diario")
-FERIADOS_TABLE_ID = "feriados_b3"
+FERIADOS_TABLE_ID = os.environ.get("BQ_HOLIDAYS_TABLE", "feriados_b3")
 FONTE_FECHAMENTO = "B3_DAILY_COTAHIST"
 LOAD_STRATEGY = os.environ.get("BQ_DAILY_LOAD_STRATEGY", "MERGE")
+JOB_NAME = os.environ.get("JOB_NAME", "get_stock_data")
 
 # Timeout em segundos para requisições HTTP
 TIMEOUT = 120
 MAX_B3_LOOKBACK_DAYS = int(os.environ.get("MAX_B3_LOOKBACK_DAYS", "5"))
 
+
 client = bigquery.Client()
+
+
+def _project_id() -> str:
+        project = getattr(client, "project", None)
+        if project:
+            return project
+        return os.environ.get("BQ_PROJECT", "local")
 
 
 DEFAULT_TICKERS_FILE = Path(__file__).with_name("tickers.txt")
@@ -336,7 +346,7 @@ def _normalize_rows(rows: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
 def append_dataframe_to_bigquery(data: Any, reference_date: datetime.date) -> None:
     """Load normalized candles to BigQuery with idempotent strategies."""
 
-    tabela_id = f"{client.project}.{DATASET_ID}.{FECHAMENTO_TABLE_ID}"
+    tabela_id = f"{_project_id()}.{DATASET_ID}.{FECHAMENTO_TABLE_ID}"
     logging.warning("Tabela de destino: %s", tabela_id)
     delete_query = (
         "DELETE FROM `"
@@ -508,42 +518,55 @@ def is_b3_holiday(reference_date: datetime.date) -> bool:
         return False
 
 
+
 def get_stock_data(request):
     """Entry point for the Cloud Function that stores daily closing prices."""
     brasil_tz = timezone("America/Sao_Paulo")
     reference_date = datetime.datetime.now(brasil_tz).date()
+    run_logger = StructuredLogger(JOB_NAME)
+    run_logger.update_context(date_ref=reference_date.isoformat())
+    run_logger.started()
+
     if is_b3_holiday(reference_date):
-        logging.warning(
-            "Coleta de fechamento ignorada: %s é feriado cadastrado na tabela %s.",
-            reference_date,
-            FERIADOS_TABLE_ID,
+        run_logger.warn(
+            "Coleta ignorada por feriado da B3",
+            reason="holiday",
+            holidays_table=FERIADOS_TABLE_ID,
         )
         return "Skipped holiday"
 
     tickers = load_configured_tickers()
+    run_logger.update_context(configured_tickers=len(tickers))
     if not tickers:
-        logging.warning("Nenhum ticker configurado para processamento.")
+        run_logger.warn("Nenhum ticker configurado", reason="missing_tickers")
         return "No tickers configured"
 
     logging.warning(
         "Iniciando processamento de %s tickers configurados.",
         len(tickers),
     )
+    diagnostics: List[str] = []
+    dataset_path = f"{_project_id()}.{DATASET_ID}.{FECHAMENTO_TABLE_ID}"
 
     try:
         logging.warning("Iniciando download de %s tickers...", len(tickers))
-        diagnostics: List[str] = []
         data_dict = download_from_b3(
-            tickers, date=reference_date, diagnostics=diagnostics
+            tickers,
+            date=reference_date,
+            diagnostics=diagnostics,
         )
-        logging.warning(
-            "Download concluído: %s tickers com dados",
-            len(data_dict),
+        run_logger.ok(
+            "Download concluído",
+            stage="download",
+            tickers_with_data=len(data_dict),
+            diagnostics=diagnostics[:5],
         )
 
         if not data_dict:
-            logging.warning(
-                "Nenhum dado foi retornado pelos arquivos da B3: %s", diagnostics
+            run_logger.warn(
+                "Nenhum dado oficial retornado",
+                reason="empty_source",
+                diagnostics=diagnostics,
             )
             return "No data fetched"
 
@@ -565,7 +588,10 @@ def get_stock_data(request):
             rows.append(candle.to_bq_row())
 
         if not rows:
-            logging.warning("Nenhum registro válido para inserir na tabela de candles.")
+            run_logger.warn(
+                "Nenhum registro válido para inserir na tabela de candles",
+                reason="no_rows",
+            )
             return "No data loaded"
 
         if pd is not None:
@@ -583,8 +609,13 @@ def get_stock_data(request):
             )
             append_dataframe_to_bigquery(rows, reference_date)
 
+        run_logger.ok(
+            "Candles diários armazenados",
+            rows_inserted=len(rows),
+            table=dataset_path,
+        )
         return "Success"
 
     except Exception as exc:  # noqa: BLE001
-        logging.warning("Erro geral: %s", exc, exc_info=True)
-        return f"Erro geral: {exc}"
+            run_logger.exception(exc, stage="daily_ingestion")
+            return f"Erro geral: {exc}"
