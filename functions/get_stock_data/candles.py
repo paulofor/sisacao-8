@@ -55,28 +55,26 @@ class Candle:
             else str(self.timeframe)
         )
         metadata = self.metadata or {}
+        turnover = metadata.get("turnover_brl")
+        quantity = (
+            float(metadata["quantity"])
+            if "quantity" in metadata
+            else (None if self.volume is None else float(self.volume))
+        )
+        trades = metadata.get("trades")
+        fator_cotacao = metadata.get("fator_cotacao")
         return {
             "ticker": self.ticker,
-            "candle_datetime": candle_dt,
-            "reference_date": candle_dt.date(),
+            "data_pregao": candle_dt.date(),
             "open": float(self.open),
             "high": float(self.high),
             "low": float(self.low),
             "close": float(self.close),
-            "volume": None if self.volume is None else float(self.volume),
-            "source": self.source,
-            "timeframe": timeframe,
-            "ingested_at": ingested_dt,
+            "volume": float(turnover) if turnover is not None else None,
+            "qtd_negociada": quantity,
+            "num_negocios": int(trades) if trades is not None else None,
+            "fonte": self.source,
+            "atualizado_em": ingested_dt,
             "data_quality_flags": self.quality_flag_string(),
-            "trades": int(metadata["trades"]) if "trades" in metadata else None,
-            "turnover_brl": (
-                float(metadata["turnover_brl"])
-                if "turnover_brl" in metadata
-                else None
-            ),
-            "quantity": (
-                float(metadata["quantity"]) if "quantity" in metadata else None
-            ),
-            "window_minutes": None,
-            "samples": None,
+            "fator_cotacao": int(fator_cotacao) if isinstance(fator_cotacao, int) else fator_cotacao,
         }

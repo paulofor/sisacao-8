@@ -1,16 +1,16 @@
 # Manual de agendamentos no GCP
 
-Este manual descreve os agendamentos necessários para manter o fluxo de ingestão, processamento e alerta do projeto **sisacao-8** operando de forma totalmente automatizada no Google Cloud Platform (GCP). Ele assume que você já implantou as funções disponíveis no repositório (`get_stock_data`, `google_finance_price`, `intraday_candles`, `eod_signals` e `alerts`) e possui um dataset BigQuery com as tabelas `cotacao_intraday.candles_diarios`, `cotacao_intraday.candles_intraday_15m`, `cotacao_intraday.candles_intraday_1h` e `cotacao_intraday.signals_eod_v0`.
+Este manual descreve os agendamentos necessários para manter o fluxo de ingestão, processamento e alerta do projeto **sisacao-8** operando de forma totalmente automatizada no Google Cloud Platform (GCP). Ele assume que você já implantou as funções disponíveis no repositório (`get_stock_data`, `google_finance_price`, `intraday_candles`, `eod_signals` e `alerts`) e possui um dataset BigQuery com as tabelas `cotacao_intraday.cotacao_ohlcv_diario`, `cotacao_intraday.candles_intraday_15m`, `cotacao_intraday.candles_intraday_1h` e `cotacao_intraday.sinais_eod`.
 
 ## 1. Visão geral dos agendamentos
 
 | Agendamento | Serviço GCP | Frequência sugerida | Objetivo | Recursos envolvidos |
 |-------------|-------------|---------------------|----------|----------------------|
-| Ingestão diária oficial | Cloud Scheduler → Cloud Functions | Todo dia útil às 20:00 (America/Sao_Paulo) | Invocar a função `get_stock_data` para baixar o arquivo oficial da B3 e gravar os candles diários. | Cloud Function `get_stock_data`, tabela `cotacao_intraday.candles_diarios` |
+| Ingestão diária oficial | Cloud Scheduler → Cloud Functions | Todo dia útil às 20:00 (America/Sao_Paulo) | Invocar a função `get_stock_data` para baixar o arquivo oficial da B3 e gravar os candles diários. | Cloud Function `get_stock_data`, tabela `cotacao_intraday.cotacao_ohlcv_diario` |
 | Complemento intraday opcional | Cloud Scheduler → Cloud Run | A cada 30 minutos entre 10:00 e 18:00 (America/Sao_Paulo) | Acionar o serviço `google_finance_price` para buscar preços recentes. | Serviço HTTP `google_finance_price`, tabela `cotacao_intraday.cotacao_b3` |
 | Agregação intraday | Cloud Scheduler → Cloud Functions | Todo dia útil às 18:10 (America/Sao_Paulo) | Rodar `intraday_candles` para consolidar os dados em 15m/1h. | Cloud Function `intraday_candles`, tabelas `candles_intraday_15m` e `candles_intraday_1h` |
-| Geração de sinais EOD | Cloud Scheduler → Cloud Functions | Todo dia útil às 21:30 (America/Sao_Paulo) | Invocar `eod_signals` para publicar os sinais condicionais do dia seguinte. | Cloud Function `eod_signals`, tabela `cotacao_intraday.signals_eod_v0` |
-| Notificações | Cloud Scheduler → Cloud Functions | Todo dia às 22:00 (America/Sao_Paulo) | Enviar requisição para a função `alerts` e publicar resumo no Telegram. | Cloud Function `alerts`, tabela `cotacao_intraday.signals_eod_v0` |
+| Geração de sinais EOD | Cloud Scheduler → Cloud Functions | Todo dia útil às 19:00 (America/Sao_Paulo) | Invocar `eod_signals` para publicar os sinais condicionais do dia seguinte. | Cloud Function `eod_signals`, tabela `cotacao_intraday.sinais_eod` |
+| Notificações | Cloud Scheduler → Cloud Functions | Todo dia às 22:00 (America/Sao_Paulo) | Enviar requisição para a função `alerts` e publicar resumo no Telegram. | Cloud Function `alerts`, tabela `cotacao_intraday.sinais_eod` |
 
 ## 2. Pré-requisitos gerais
 
@@ -71,11 +71,11 @@ Os exemplos acima já utilizam o projeto `ingestaokraken` na região `us-central
 ## 5. Agendamento da função `eod_signals`
 
 1. Implante a função `functions/eod_signals` no Cloud Functions ou Cloud Run.
-2. Crie um job no Cloud Scheduler com cron `30 21 * * 1-5` (21:30 em dias úteis).
+2. Crie um job no Cloud Scheduler com cron `0 19 * * 1-5` (19:00 em dias úteis).
 3. Configure método `POST` para o endpoint publicado (`https://us-central1-<projeto>.cloudfunctions.net/eod_signals`).
 4. Opcionalmente envie `{ "date": "YYYY-MM-DD" }` no corpo para reprocessar um dia específico.
 5. Utilize a conta de serviço `agendamentos-sisacao` com permissão `Cloud Functions Invoker`.
-6. Verifique nos logs se a função gravou registros na tabela `cotacao_intraday.signals_eod_v0`.
+6. Verifique nos logs se a função gravou registros na tabela `cotacao_intraday.sinais_eod`.
 
 ## 6. Agendamento da função `alerts`
 

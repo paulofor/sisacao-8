@@ -76,3 +76,51 @@ def test_generate_conditional_signals_chooses_sell_for_green_day() -> None:
     signals = generate_conditional_signals(df, top_n=1)
     assert signals[0].side == "SELL"
     assert signals[0].entry > df.iloc[0]["close"]
+
+
+def test_parse_b3_daily_lines_applies_fatcot() -> None:
+    line = (
+        "012024050602NTCO3       010GRUPO NATURAON      NM   R$  "
+        "000000000171600000000017510000000001712000000000173300000000017270"
+        "000000001725000000000172815390000000000005800800000000010053902100"
+        "000000000000009999123100000010000000000000BRNTCOACNOR5106"
+    )
+    line_chars = list(line)
+    line_chars[210:217] = list("0000010")
+    scaled_line = "".join(line_chars)
+    candles = parse_b3_daily_lines([scaled_line], tickers=["NTCO3"])
+    assert len(candles) == 1
+    candle = candles[0]
+    assert candle.open == pytest.approx(1.716)
+    assert candle.close == pytest.approx(1.727)
+    assert candle.metadata["fator_cotacao"] == 10
+
+
+def test_generate_conditional_signals_applies_x_and_y_pct() -> None:
+    df = pd.DataFrame(
+        [
+            {
+                "ticker": "ALFA3",
+                "open": 99.0,
+                "close": 100.0,
+                "volume": 1_000_000,
+            }
+        ]
+    )
+    signals = generate_conditional_signals(
+        df,
+        top_n=1,
+        x_pct=0.05,
+        target_pct=0.2,
+        stop_pct=0.1,
+    )
+    assert len(signals) == 1
+    signal = signals[0]
+    assert signal.side == "SELL"  # dia de alta privilegia SELL
+    assert signal.entry == pytest.approx(105.0)
+    assert signal.target == pytest.approx(84.0)
+    assert signal.stop == pytest.approx(115.5)
+    assert signal.x_rule == "close(D)*1.0500"
+    assert signal.y_target_pct == pytest.approx(0.2)
+    assert signal.y_stop_pct == pytest.approx(0.1)
+

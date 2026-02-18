@@ -461,7 +461,7 @@ def main() -> None:
     try:
         messages.append(_collect_b3_message())
     except Exception as exc:  # noqa: BLE001
-        dataset = "cotacao_intraday.candles_diarios"
+        dataset = "cotacao_intraday.cotacao_ohlcv_diario"
         messages.append(
             _error_message(
                 "get_stock_data",

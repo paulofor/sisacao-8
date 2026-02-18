@@ -31,6 +31,7 @@ _SLICE_MAP = {
     "trades": slice(147, 152),
     "quantity": slice(152, 170),
     "turnover": slice(170, 188),
+    "factor": slice(210, 217),
 }
 
 
@@ -40,6 +41,12 @@ def _parse_price(segment: str, *, scale: float = PRICE_SCALE) -> float:
 
 def _parse_int(segment: str) -> int:
     return int(segment.strip() or "0")
+
+
+
+def _parse_factor(segment: str) -> int:
+    value = _parse_int(segment)
+    return max(value, 1)
 
 
 def parse_b3_daily_lines(
@@ -58,10 +65,11 @@ def parse_b3_daily_lines(
         trade_date = dt.datetime.strptime(
             line[_SLICE_MAP["trade_date"]], "%Y%m%d"
         ).replace(tzinfo=SAO_PAULO_TZ)
-        open_price = _parse_price(line[_SLICE_MAP["open"]])
-        high_price = _parse_price(line[_SLICE_MAP["high"]])
-        low_price = _parse_price(line[_SLICE_MAP["low"]])
-        close_price = _parse_price(line[_SLICE_MAP["close"]])
+        factor = _parse_factor(line[_SLICE_MAP["factor"]])
+        open_price = _parse_price(line[_SLICE_MAP["open"]]) / factor
+        high_price = _parse_price(line[_SLICE_MAP["high"]]) / factor
+        low_price = _parse_price(line[_SLICE_MAP["low"]]) / factor
+        close_price = _parse_price(line[_SLICE_MAP["close"]]) / factor
         trades = _parse_int(line[_SLICE_MAP["trades"]])
         quantity = float(_parse_int(line[_SLICE_MAP["quantity"]]))
         turnover = _parse_price(line[_SLICE_MAP["turnover"]], scale=TURNOVER_SCALE)
@@ -89,6 +97,7 @@ def parse_b3_daily_lines(
                     "trades": trades,
                     "turnover_brl": turnover,
                     "quantity": quantity,
+                    "fator_cotacao": factor,
                 },
             )
         )

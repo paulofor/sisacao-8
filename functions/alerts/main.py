@@ -16,7 +16,7 @@ logging.basicConfig(level=getattr(logging, LOG_LEVEL, logging.WARNING))
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 CHAT_ID = os.environ.get("CHAT_ID")
 BQ_SIGNALS_TABLE = os.environ.get(
-    "BQ_SIGNALS_TABLE", "ingestaokraken.cotacao_intraday.signals_eod_v0"
+    "BQ_SIGNALS_TABLE", "ingestaokraken.cotacao_intraday.sinais_eod"
 )
 
 client = bigquery.Client()
@@ -29,7 +29,7 @@ def alerts(request: Any) -> Tuple[Dict[str, Any], int]:
     query = f"""
         SELECT ticker, COUNT(*) AS qtd
         FROM `{BQ_SIGNALS_TABLE}`
-        WHERE dt = @dt
+        WHERE date_ref = @dt
         GROUP BY ticker
     """
     job_config = bigquery.QueryJobConfig(

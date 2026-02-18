@@ -26,7 +26,7 @@ Este documento consolida as configurações necessárias para que todos os jobs 
 | Time zone | `America/Sao_Paulo` |
 | Autenticação | OIDC token com a conta `agendamentos-sisacao@<projeto>.iam.gserviceaccount.com` |
 | Cabeçalhos adicionais | `Content-Type: application/json` |
-| Logs esperados | Inserções na tabela `cotacao_intraday.candles_diarios` |
+| Logs esperados | Inserções na tabela `cotacao_intraday.cotacao_ohlcv_diario` |
 | Observações | Execute manualmente após a criação para validar permissões e escrita no BigQuery. |
 
 ### 2. `google-finance-price-intraday`
@@ -66,10 +66,10 @@ Este documento consolida as configurações necessárias para que todos os jobs 
 | Endpoint | `https://us-central1-<projeto>.cloudfunctions.net/eod_signals` |
 | Método HTTP | `POST` |
 | Payload | `{ "date": "YYYY-MM-DD" }` (opcional) |
-| Cron | `30 21 * * 1-5` |
+| Cron | `0 19 * * 1-5` |
 | Time zone | `America/Sao_Paulo` |
 | Autenticação | OIDC token com a conta `agendamentos-sisacao@<projeto>.iam.gserviceaccount.com` |
-| Logs esperados | Inserções na tabela `cotacao_intraday.signals_eod_v0` |
+| Logs esperados | Inserções na tabela `cotacao_intraday.sinais_eod` |
 | Observações | Execute após a função `intraday_candles` para garantir dados completos. |
 
 ### 5. `alerts-diario`
