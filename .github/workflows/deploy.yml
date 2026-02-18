@@ -54,8 +54,21 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
       - name: Deploy ${{ matrix.name }}
         run: |
+          deploy_cmd=(
+            gcloud functions deploy "${{ matrix.name }}"
+            --runtime python311
+            --trigger-http
+            --allow-unauthenticated
+            --entry-point "${{ matrix.entry_point }}"
+            --source "${{ matrix.source }}"
+            --project "${PROJECT_ID}"
+            --region "${REGION}"
+            --set-env-vars="${{ matrix.env }}"
+            --quiet
+          )
+
           for attempt in 1 2 3; do
-            output=$(gcloud functions deploy ${{ matrix.name }}               --runtime python311               --trigger-http               --allow-unauthenticated               --entry-point ${{ matrix.entry_point }}               --source ${{ matrix.source }}               --project ${PROJECT_ID}               --region ${REGION}               --set-env-vars="${{ matrix.env }}"               --quiet 2>&1)
+            output=$("${deploy_cmd[@]}" --verbosity=debug --log-http 2>&1)
             status=$?
 
             if [ $status -eq 0 ]; then
@@ -70,6 +83,23 @@ jobs:
               sleep $wait_seconds
               continue
             fi
+
+            echo "Collecting additional diagnostics for ${{ matrix.name }}..."
+            gcloud functions operations list \
+              --project "${PROJECT_ID}" \
+              --region "${REGION}" \
+              --limit=10 \
+              --format='table(name,status,type,insertTime,error.message)'
+
+            gcloud functions describe "${{ matrix.name }}" \
+              --project "${PROJECT_ID}" \
+              --region "${REGION}" \
+              --format=yaml || true
+
+            gcloud functions logs read "${{ matrix.name }}" \
+              --project "${PROJECT_ID}" \
+              --region "${REGION}" \
+              --limit=100 || true
 
             exit $status
           done
