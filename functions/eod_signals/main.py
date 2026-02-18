@@ -13,6 +13,7 @@ from google.cloud import bigquery  # type: ignore[import-untyped]
 from sisacao8.candles import SAO_PAULO_TZ
 from sisacao8.signals import (
     MODEL_VERSION,
+    MAX_SIGNALS_PER_DAY,
     ConditionalSignal,
     compute_source_snapshot,
     generate_conditional_signals,
@@ -22,10 +23,20 @@ LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
 logging.basicConfig(level=getattr(logging, LOG_LEVEL, logging.INFO))
 
 DATASET_ID = os.environ.get("BQ_INTRADAY_DATASET", "cotacao_intraday")
-DAILY_TABLE_ID = os.environ.get("BQ_DAILY_TABLE", "candles_diarios")
-SIGNALS_TABLE_ID = os.environ.get("BQ_SIGNALS_TABLE", "signals_eod_v0")
+DAILY_TABLE_ID = os.environ.get("BQ_DAILY_TABLE", "cotacao_ohlcv_diario")
+SIGNALS_TABLE_ID = os.environ.get("BQ_SIGNALS_TABLE", "sinais_eod")
+FERIADOS_TABLE_ID = os.environ.get("BQ_HOLIDAYS_TABLE", "feriados_b3")
 MIN_VOLUME = float(os.environ.get("MIN_SIGNAL_VOLUME", "0"))
 EARLY_RUN = os.environ.get("ALLOW_EARLY_SIGNAL", "false").lower() == "true"
+X_PCT = float(os.environ.get("SIGNAL_X_PCT", os.environ.get("X_PCT", "0.02")))
+TARGET_PCT = float(
+    os.environ.get("SIGNAL_TARGET_PCT", os.environ.get("TARGET_PCT", "0.07"))
+)
+STOP_PCT = float(os.environ.get("SIGNAL_STOP_PCT", os.environ.get("STOP_PCT", "0.07")))
+MAX_SIGNALS = min(
+    MAX_SIGNALS_PER_DAY,
+    max(1, int(os.environ.get("MAX_SIGNALS", str(MAX_SIGNALS_PER_DAY))))
+)
 
 client = bigquery.Client()
 
@@ -53,11 +64,47 @@ def _table_ref(table_id: str) -> str:
     return f"{client.project}.{DATASET_ID}.{table_id}"
 
 
+def _holidays_table() -> str:
+    return f"{client.project}.{DATASET_ID}.{FERIADOS_TABLE_ID}"
+
+
+def _is_b3_holiday(date_value: dt.date) -> bool:
+    query = (
+        "SELECT 1 FROM `"
+        f"{_holidays_table()}"
+        "` WHERE data_feriado = @ref_date LIMIT 1"
+    )
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ScalarQueryParameter("ref_date", "DATE", date_value)
+        ]
+    )
+    try:
+        rows = list(client.query(query, job_config=job_config).result())
+    except Exception as exc:  # noqa: BLE001
+        logging.warning("Falha ao consultar feriados B3: %s", exc, exc_info=True)
+        return False
+    return bool(rows)
+
+
+def _is_trading_day(date_value: dt.date) -> bool:
+    if date_value.weekday() >= 5:
+        return False
+    return not _is_b3_holiday(date_value)
+
+
+def _next_business_day(date_value: dt.date) -> dt.date:
+    next_day = date_value + dt.timedelta(days=1)
+    while not _is_trading_day(next_day):
+        next_day += dt.timedelta(days=1)
+    return next_day
+
+
 def _fetch_daily_frame(reference_date: dt.date) -> pd.DataFrame:
     query = (
-        "SELECT ticker, candle_datetime, open, close, high, low, volume, turnover_brl "
+        "SELECT ticker, data_pregao, open, close, high, low, volume, qtd_negociada "
         f"FROM `{_table_ref(DAILY_TABLE_ID)}` "
-        "WHERE reference_date = @ref_date"
+        "WHERE data_pregao = @ref_date"
     )
     params = [bigquery.ScalarQueryParameter("ref_date", "DATE", reference_date)]
     job_config = bigquery.QueryJobConfig(query_parameters=params)
@@ -67,7 +114,11 @@ def _fetch_daily_frame(reference_date: dt.date) -> pd.DataFrame:
 
 
 def _delete_partition(table_id: str, reference_date: dt.date) -> None:
-    query = "DELETE FROM `" f"{table_id}" "` WHERE reference_date = @ref_date"
+    query = (
+        "DELETE FROM `"
+        f"{table_id}"
+        "` WHERE date_ref = @ref_date"
+    )
     job_config = bigquery.QueryJobConfig(
         query_parameters=[
             bigquery.ScalarQueryParameter("ref_date", "DATE", reference_date)
@@ -75,13 +126,6 @@ def _delete_partition(table_id: str, reference_date: dt.date) -> None:
     )
     client.query(query, job_config=job_config).result()
     logging.info("Partição de %s removida em %s", reference_date, table_id)
-
-
-def _next_business_day(date_value: dt.date) -> dt.date:
-    next_day = date_value + dt.timedelta(days=1)
-    while next_day.weekday() >= 5:
-        next_day += dt.timedelta(days=1)
-    return next_day
 
 
 def _persist_signals(
@@ -124,8 +168,21 @@ def generate_eod_signals(request: Any) -> Dict[str, Any]:
         return {"status": "skipped", "reason": message}, 400
 
     reference_date = _parse_request_date(request)
+    if not _is_trading_day(reference_date):
+        message = f"{reference_date} não é dia útil da B3 (feriado/fim de semana)."
+        logging.warning(message)
+        return {"status": "skipped", "reason": message}
+
     valid_for = _next_business_day(reference_date)
-    logging.info("Gerando sinais para %s válidos em %s", reference_date, valid_for)
+    logging.info(
+        "Gerando sinais para %s válidos em %s | modelo=%s | X=%.2f%% | TP=%.2f%% | SL=%.2f%%",
+        reference_date,
+        valid_for,
+        MODEL_VERSION,
+        X_PCT * 100,
+        TARGET_PCT * 100,
+        STOP_PCT * 100,
+    )
 
     frame = _fetch_daily_frame(reference_date)
     if frame.empty:
@@ -142,7 +199,14 @@ def generate_eod_signals(request: Any) -> Dict[str, Any]:
         if frame.empty:
             return {"status": "filtered", "reason": "volume"}
 
-    signals = generate_conditional_signals(frame)
+    limit = min(MAX_SIGNALS, MAX_SIGNALS_PER_DAY)
+    signals = generate_conditional_signals(
+        frame,
+        top_n=limit,
+        x_pct=X_PCT,
+        target_pct=TARGET_PCT,
+        stop_pct=STOP_PCT,
+    )
     created_at = _now_sp()
     source_snapshot = compute_source_snapshot(frame.to_dict("records"))
     code_version = os.environ.get("CODE_VERSION", "local")
@@ -161,6 +225,8 @@ def generate_eod_signals(request: Any) -> Dict[str, Any]:
             )
             for signal in signals
         ],
+        "requested": len(frame),
+        "generated": len(signals),
     }
 
     table_id = _table_ref(SIGNALS_TABLE_ID)
@@ -176,4 +242,5 @@ def generate_eod_signals(request: Any) -> Dict[str, Any]:
     )
 
     response["stored"] = len(signals)
+    response["max_signals"] = limit
     return response

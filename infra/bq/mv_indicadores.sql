@@ -2,12 +2,12 @@ CREATE OR REPLACE VIEW `ingestaokraken.cotacao_intraday.mv_indicadores` AS
 WITH base AS (
   SELECT
     ticker,
-    reference_date AS dt,
+    data_pregao AS dt,
     close AS px_close,
     high AS px_high,
     low AS px_low,
-    LAG(close) OVER (PARTITION BY ticker ORDER BY reference_date) AS px_prev
-  FROM `ingestaokraken.cotacao_intraday.candles_diarios`
+    LAG(close) OVER (PARTITION BY ticker ORDER BY data_pregao) AS px_prev
+  FROM `ingestaokraken.cotacao_intraday.cotacao_ohlcv_diario`
 ),
 bb AS (
   SELECT

@@ -54,10 +54,10 @@ logging.basicConfig(
 )
 
 DATASET_ID = "cotacao_intraday"
-FECHAMENTO_TABLE_ID = os.environ.get("BQ_DAILY_TABLE", "candles_diarios")
+FECHAMENTO_TABLE_ID = os.environ.get("BQ_DAILY_TABLE", "cotacao_ohlcv_diario")
 FERIADOS_TABLE_ID = "feriados_b3"
 FONTE_FECHAMENTO = "B3_DAILY_COTAHIST"
-LOAD_STRATEGY = os.environ.get("BQ_DAILY_LOAD_STRATEGY", "DELETE_PARTITION_APPEND")
+LOAD_STRATEGY = os.environ.get("BQ_DAILY_LOAD_STRATEGY", "MERGE")
 
 # Timeout em segundos para requisições HTTP
 TIMEOUT = 120
@@ -323,13 +323,12 @@ def _normalize_rows(rows: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
     normalized: List[Dict[str, Any]] = []
     for row in rows:
         record = dict(row)
-        for field in ("candle_datetime", "ingested_at"):
-            value = record.get(field)
-            if isinstance(value, datetime.datetime):
-                record[field] = value.replace(tzinfo=None).isoformat(sep=" ")
-        ref_value = record.get("reference_date")
-        if isinstance(ref_value, datetime.date):
-            record["reference_date"] = ref_value.isoformat()
+        value = record.get("atualizado_em")
+        if isinstance(value, datetime.datetime):
+            record["atualizado_em"] = value.replace(tzinfo=None).isoformat(sep=" ")
+        trade_date = record.get("data_pregao")
+        if isinstance(trade_date, datetime.date):
+            record["data_pregao"] = trade_date.isoformat()
         normalized.append(record)
     return normalized
 
@@ -339,7 +338,11 @@ def append_dataframe_to_bigquery(data: Any, reference_date: datetime.date) -> No
 
     tabela_id = f"{client.project}.{DATASET_ID}.{FECHAMENTO_TABLE_ID}"
     logging.warning("Tabela de destino: %s", tabela_id)
-    delete_query = "DELETE FROM `" f"{tabela_id}" "` WHERE reference_date = @ref_date"
+    delete_query = (
+        "DELETE FROM `"
+        f"{tabela_id}"
+        "` WHERE data_pregao = @ref_date"
+    )
     job_config = bigquery.QueryJobConfig(
         query_parameters=[
             bigquery.ScalarQueryParameter("ref_date", "DATE", reference_date)
@@ -362,22 +365,18 @@ def append_dataframe_to_bigquery(data: Any, reference_date: datetime.date) -> No
     try:
         fallback_schema = [
             bigquery.SchemaField("ticker", "STRING", mode="REQUIRED"),
-            bigquery.SchemaField("candle_datetime", "DATETIME", mode="REQUIRED"),
-            bigquery.SchemaField("reference_date", "DATE", mode="REQUIRED"),
+            bigquery.SchemaField("data_pregao", "DATE", mode="REQUIRED"),
             bigquery.SchemaField("open", "FLOAT"),
             bigquery.SchemaField("high", "FLOAT"),
             bigquery.SchemaField("low", "FLOAT"),
             bigquery.SchemaField("close", "FLOAT"),
             bigquery.SchemaField("volume", "FLOAT"),
-            bigquery.SchemaField("source", "STRING"),
-            bigquery.SchemaField("timeframe", "STRING"),
-            bigquery.SchemaField("ingested_at", "DATETIME"),
+            bigquery.SchemaField("qtd_negociada", "FLOAT"),
+            bigquery.SchemaField("num_negocios", "INTEGER"),
+            bigquery.SchemaField("fonte", "STRING"),
+            bigquery.SchemaField("atualizado_em", "DATETIME"),
             bigquery.SchemaField("data_quality_flags", "STRING"),
-            bigquery.SchemaField("trades", "INTEGER"),
-            bigquery.SchemaField("turnover_brl", "FLOAT"),
-            bigquery.SchemaField("quantity", "FLOAT"),
-            bigquery.SchemaField("window_minutes", "INTEGER"),
-            bigquery.SchemaField("samples", "INTEGER"),
+            bigquery.SchemaField("fator_cotacao", "INTEGER"),
         ]
         try:
             expected_schema = client.get_table(tabela_id).schema
@@ -394,14 +393,10 @@ def append_dataframe_to_bigquery(data: Any, reference_date: datetime.date) -> No
         inserted_rows: int
         if pd is not None and isinstance(data, pd.DataFrame):
             df = data.copy()
-            if "reference_date" in df.columns:
-                df["reference_date"] = pd.to_datetime(df["reference_date"]).dt.date
-            if "candle_datetime" in df.columns:
-                df["candle_datetime"] = pd.to_datetime(
-                    df["candle_datetime"]
-                ).dt.tz_localize(None)
-            if "ingested_at" in df.columns:
-                df["ingested_at"] = pd.to_datetime(df["ingested_at"]).dt.tz_localize(
+            if "data_pregao" in df.columns:
+                df["data_pregao"] = pd.to_datetime(df["data_pregao"]).dt.date
+            if "atualizado_em" in df.columns:
+                df["atualizado_em"] = pd.to_datetime(df["atualizado_em"]).dt.tz_localize(
                     None
                 )
             job = client.load_table_from_dataframe(
@@ -421,69 +416,56 @@ def append_dataframe_to_bigquery(data: Any, reference_date: datetime.date) -> No
             MERGE `{tabela_id}` target
             USING `{target_table_id}` source
             ON target.ticker = source.ticker
-              AND target.reference_date = source.reference_date
+              AND target.data_pregao = source.data_pregao
             WHEN MATCHED THEN UPDATE SET
-              candle_datetime = source.candle_datetime,
               open = source.open,
               high = source.high,
               low = source.low,
               close = source.close,
               volume = source.volume,
-              source = source.source,
-              timeframe = source.timeframe,
-              ingested_at = source.ingested_at,
+              qtd_negociada = source.qtd_negociada,
+              num_negocios = source.num_negocios,
+              fonte = source.fonte,
+              atualizado_em = source.atualizado_em,
               data_quality_flags = source.data_quality_flags,
-              trades = source.trades,
-              turnover_brl = source.turnover_brl,
-              quantity = source.quantity,
-              window_minutes = source.window_minutes,
-              samples = source.samples
+              fator_cotacao = source.fator_cotacao
             WHEN NOT MATCHED THEN INSERT (
               ticker,
-              candle_datetime,
-              reference_date,
+              data_pregao,
               open,
               high,
               low,
               close,
               volume,
-              source,
-              timeframe,
-              ingested_at,
+              qtd_negociada,
+              num_negocios,
+              fonte,
+              atualizado_em,
               data_quality_flags,
-              trades,
-              turnover_brl,
-              quantity,
-              window_minutes,
-              samples
+              fator_cotacao
             ) VALUES (
               source.ticker,
-              source.candle_datetime,
-              source.reference_date,
+              source.data_pregao,
               source.open,
               source.high,
               source.low,
               source.close,
               source.volume,
-              source.source,
-              source.timeframe,
-              source.ingested_at,
+              source.qtd_negociada,
+              source.num_negocios,
+              source.fonte,
+              source.atualizado_em,
               source.data_quality_flags,
-              source.trades,
-              source.turnover_brl,
-              source.quantity,
-              source.window_minutes,
-              source.samples
+              source.fator_cotacao
             )
             """
             client.query(merge_sql).result()
             logging.warning(
-                "MERGE concluído com chave lógica (ticker, reference_date)."
+                "MERGE concluído com chave lógica (ticker, data_pregao)."
             )
         logging.warning("Dados inseridos com sucesso (%s linhas).", inserted_rows)
     except Exception as exc:  # noqa: BLE001
         logging.warning("Erro ao inserir dados no BigQuery: %s", exc, exc_info=True)
-
 
 def is_b3_holiday(reference_date: datetime.date) -> bool:
     """Return ``True`` when ``reference_date`` is configured as B3 holiday."""

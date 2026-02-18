@@ -1,4 +1,4 @@
-"""Signal generation helpers for Sprint 1."""
+"""Signal generation helpers for sprint 2 (EOD baseline)."""
 
 from __future__ import annotations
 
@@ -10,7 +10,8 @@ from typing import Iterable, List, Mapping, Sequence
 
 import pandas as pd  # type: ignore[import-untyped]
 
-MODEL_VERSION = "X_rule_v0"
+MODEL_VERSION = "signals_v0"
+MAX_SIGNALS_PER_DAY = 5
 
 
 @dataclass(frozen=True)
@@ -23,7 +24,9 @@ class ConditionalSignal:
     target: float
     stop: float
     rank: int
-    reason: str
+    x_rule: str
+    y_target_pct: float
+    y_stop_pct: float
     volume: float
     close: float
 
@@ -38,7 +41,7 @@ class ConditionalSignal:
         code_version: str | None = None,
     ) -> Mapping[str, object]:
         return {
-            "reference_date": reference_date.isoformat(),
+            "date_ref": reference_date.isoformat(),
             "valid_for": valid_for.isoformat(),
             "ticker": self.ticker,
             "side": self.side,
@@ -46,7 +49,9 @@ class ConditionalSignal:
             "target": round(self.target, 4),
             "stop": round(self.stop, 4),
             "rank": self.rank,
-            "reason": self.reason,
+            "x_rule": self.x_rule,
+            "y_target_pct": round(self.y_target_pct, 6),
+            "y_stop_pct": round(self.y_stop_pct, 6),
             "model_version": model_version,
             "created_at": created_at.isoformat(timespec="seconds"),
             "source_snapshot": source_snapshot,
@@ -66,7 +71,7 @@ class ConditionalSignal:
         code_version: str | None = None,
     ) -> Mapping[str, object]:
         return {
-            "reference_date": reference_date,
+            "date_ref": reference_date,
             "valid_for": valid_for,
             "ticker": self.ticker,
             "side": self.side,
@@ -74,7 +79,9 @@ class ConditionalSignal:
             "target": self.target,
             "stop": self.stop,
             "rank": self.rank,
-            "reason": self.reason,
+            "x_rule": self.x_rule,
+            "y_target_pct": self.y_target_pct,
+            "y_stop_pct": self.y_stop_pct,
             "model_version": model_version,
             "created_at": created_at,
             "source_snapshot": source_snapshot,
@@ -82,13 +89,6 @@ class ConditionalSignal:
             "volume": self.volume,
             "close": self.close,
         }
-
-
-def _next_business_day(date_value: dt.date) -> dt.date:
-    next_day = date_value + dt.timedelta(days=1)
-    while next_day.weekday() >= 5:  # Saturday/Sunday
-        next_day += dt.timedelta(days=1)
-    return next_day
 
 
 def compute_source_snapshot(rows: Sequence[Mapping[str, object]]) -> str:
@@ -119,24 +119,24 @@ def _build_candidate(
     side: str,
     close_price: float,
     *,
-    buy_multiplier: float,
-    sell_multiplier: float,
-    target_gain: float,
-    stop_loss: float,
+    x_pct: float,
+    target_pct: float,
+    stop_pct: float,
     preferred_side: str,
     score: float,
     volume: float,
 ) -> Mapping[str, object]:
     if side == "BUY":
-        entry = close_price * buy_multiplier
-        target = entry * (1 + target_gain)
-        stop = entry * (1 - stop_loss)
-        reason = "close(D) * 0.98"
+        multiplier = 1 - x_pct
+        entry = close_price * multiplier
+        target = entry * (1 + target_pct)
+        stop = entry * (1 - stop_pct)
     else:
-        entry = close_price * sell_multiplier
-        target = entry * (1 - target_gain)
-        stop = entry * (1 + stop_loss)
-        reason = "close(D) * 1.02"
+        multiplier = 1 + x_pct
+        entry = close_price * multiplier
+        target = entry * (1 - target_pct)
+        stop = entry * (1 + stop_pct)
+    x_rule = f"close(D)*{multiplier:.4f}"
     priority = 0 if side == preferred_side else 1
     return {
         "ticker": ticker,
@@ -144,24 +144,33 @@ def _build_candidate(
         "entry": entry,
         "target": target,
         "stop": stop,
-        "reason": reason,
+        "x_rule": x_rule,
         "score": score,
         "priority": priority,
         "volume": volume,
         "close": close_price,
+        "y_target_pct": target_pct,
+        "y_stop_pct": stop_pct,
     }
 
 
 def generate_conditional_signals(
     rows: Iterable[Mapping[str, object]] | pd.DataFrame,
     *,
-    top_n: int = 5,
-    buy_multiplier: float = 0.98,
-    sell_multiplier: float = 1.02,
-    target_gain: float = 0.07,
-    stop_loss: float = 0.07,
+    top_n: int = MAX_SIGNALS_PER_DAY,
+    x_pct: float = 0.02,
+    target_pct: float = 0.07,
+    stop_pct: float = 0.07,
 ) -> List[ConditionalSignal]:
     """Generate conditional entries limited to ``top_n`` tickers."""
+
+    limit = min(max(0, int(top_n)), MAX_SIGNALS_PER_DAY)
+    if limit == 0:
+        return []
+    if x_pct < 0:
+        raise ValueError("x_pct deve ser não negativo")
+    if target_pct <= 0 or stop_pct <= 0:
+        raise ValueError("target_pct e stop_pct devem ser positivos")
 
     if isinstance(rows, pd.DataFrame):
         df = rows.copy()
@@ -199,10 +208,9 @@ def generate_conditional_signals(
                     ticker,
                     side,
                     close_price,
-                    buy_multiplier=buy_multiplier,
-                    sell_multiplier=sell_multiplier,
-                    target_gain=target_gain,
-                    stop_loss=stop_loss,
+                    x_pct=x_pct,
+                    target_pct=target_pct,
+                    stop_pct=stop_pct,
                     preferred_side=preferred,
                     score=score,
                     volume=volume,
@@ -231,12 +239,14 @@ def generate_conditional_signals(
             target=float(candidate["target"]),
             stop=float(candidate["stop"]),
             rank=len(selected) + 1,
-            reason=str(candidate["reason"]),
+            x_rule=str(candidate["x_rule"]),
+            y_target_pct=float(candidate["y_target_pct"]),
+            y_stop_pct=float(candidate["y_stop_pct"]),
             volume=float(candidate["volume"]),
             close=float(candidate["close"]),
         )
         selected.append(signal)
         used.add(ticker)
-        if len(selected) >= top_n:
+        if len(selected) >= limit:
             break
     return selected

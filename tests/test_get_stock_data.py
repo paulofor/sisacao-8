@@ -31,6 +31,7 @@ def import_get_stock_module(monkeypatch):
 
     class DummyWriteDisposition:
         WRITE_APPEND = "WRITE_APPEND"
+        WRITE_TRUNCATE = "WRITE_TRUNCATE"
 
     fake_bigquery.LoadJobConfig = DummyJobConfig
     fake_bigquery.SchemaField = DummySchemaField
@@ -212,27 +213,28 @@ def test_append_dataframe_to_bigquery_without_pandas(monkeypatch):
     rows = [
         {
             "ticker": "YDUQ3",
-            "candle_datetime": datetime.datetime(2024, 1, 3, 0, 0),
-            "reference_date": datetime.date(2024, 1, 3),
+            "data_pregao": datetime.date(2024, 1, 3),
             "open": 10.0,
             "high": 11.0,
             "low": 9.5,
             "close": 10.5,
-            "volume": 1000.0,
-            "source": module.FONTE_FECHAMENTO,
-            "timeframe": "1D",
-            "ingested_at": datetime.datetime(2024, 1, 3, 18, 0),
+            "volume": 12345.0,
+            "qtd_negociada": 1000.0,
+            "num_negocios": 200,
+            "fonte": module.FONTE_FECHAMENTO,
+            "atualizado_em": datetime.datetime(2024, 1, 3, 18, 0),
         }
     ]
 
     module.append_dataframe_to_bigquery(rows, datetime.date(2024, 1, 3))
 
-    assert captured["table_id"].endswith(
-        f"{module.DATASET_ID}.{module.FECHAMENTO_TABLE_ID}"
-    )
+    expected_suffix = f"{module.DATASET_ID}.{module.FECHAMENTO_TABLE_ID}"
+    if module.LOAD_STRATEGY.strip().upper() == "MERGE":
+        expected_suffix += "_staging"
+    assert captured["table_id"].endswith(expected_suffix)
     normalized = captured["rows"][0]
-    assert normalized["reference_date"] == "2024-01-03"
-    assert normalized["candle_datetime"].startswith("2024-01-03")
+    assert normalized["data_pregao"] == "2024-01-03"
+    assert normalized["atualizado_em"].startswith("2024-01-03")
 
 
 def test_get_stock_data_skips_on_holiday(monkeypatch):
@@ -301,21 +303,21 @@ def test_append_dataframe_to_bigquery_merge_strategy(monkeypatch):
     rows = [
         {
             "ticker": "YDUQ3",
-            "candle_datetime": datetime.datetime(2024, 1, 3, 0, 0),
-            "reference_date": datetime.date(2024, 1, 3),
+            "data_pregao": datetime.date(2024, 1, 3),
             "open": 10.0,
             "high": 11.0,
             "low": 9.5,
             "close": 10.5,
-            "volume": 1000.0,
-            "source": module.FONTE_FECHAMENTO,
-            "timeframe": "1D",
-            "ingested_at": datetime.datetime(2024, 1, 3, 18, 0),
+            "volume": 12345.0,
+            "qtd_negociada": 1000.0,
+            "num_negocios": 200,
+            "fonte": module.FONTE_FECHAMENTO,
+            "atualizado_em": datetime.datetime(2024, 1, 3, 18, 0),
         }
     ]
 
     module.append_dataframe_to_bigquery(rows, datetime.date(2024, 1, 3))
 
-    assert captured["table_id"].endswith("candles_diarios_staging")
+    assert captured["table_id"].endswith("cotacao_ohlcv_diario_staging")
     assert captured["write_disposition"] == "WRITE_TRUNCATE"
     assert any("MERGE `" in query for query in captured["queries"])

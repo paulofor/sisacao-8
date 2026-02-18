@@ -33,10 +33,12 @@ Coleta cotações de ações e carrega no **BigQuery** usando **Google Cloud Fun
    O script já inclui os calendários de 2026 e 2027; no início de cada ano,
    atualize com os próximos feriados oficiais da B3 para manter a automação.
 
-5. A função `get_stock_data` já grava candles diários em formato OHLCV (`open`,
-   `high`, `low`, `close`, `volume`). Para idempotência em reprocessamentos,
-   configure `BQ_DAILY_LOAD_STRATEGY` com `DELETE_PARTITION_APPEND` (padrão)
-   ou `MERGE` (staging + chave lógica `ticker`+`reference_date`).
+5. A função `get_stock_data` grava candles diários completos (OHLCV +
+   quantidade negociada e número de negócios) na tabela
+   `cotacao_intraday.cotacao_ohlcv_diario`, já normalizados pelo `FATCOT`.
+   Para garantir idempotência em reprocessamentos, mantenha o
+   `BQ_DAILY_LOAD_STRATEGY` como `MERGE` (staging + chave lógica
+   `ticker`/`data_pregao`).
 
 6. Teste localmente a Cloud Function `get_stock_data`:
 
@@ -54,8 +56,9 @@ Coleta cotações de ações e carrega no **BigQuery** usando **Google Cloud Fun
 
 8. Após o fechamento, acione a função `eod_signals` (até 22h BRT) para gerar os
    sinais condicionais do dia. O resultado é salvo na tabela
-   `cotacao_intraday.signals_eod_v0` e contém `entry`, `target`, `stop`,
-   `rank`, `model_version`, `source_snapshot` e `code_version` para auditoria.
+   `cotacao_intraday.sinais_eod` e contém `entry`, `target`, `stop`,
+   `x_rule`, `y_target_pct`, `y_stop_pct`, `rank`, `model_version`,
+   `source_snapshot` e `code_version` para auditoria.
 
 Consulte os comentários nos diretórios para mais detalhes.
 
