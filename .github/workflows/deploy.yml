@@ -16,6 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix:
         include:
           - name: get_stock_data
@@ -53,7 +54,25 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
       - name: Deploy ${{ matrix.name }}
         run: |
-          gcloud functions deploy ${{ matrix.name }}             --runtime python311             --trigger-http             --allow-unauthenticated             --entry-point ${{ matrix.entry_point }}             --source ${{ matrix.source }}             --project ${PROJECT_ID}             --region ${REGION}             --set-env-vars="${{ matrix.env }}"             --quiet
+          for attempt in 1 2 3; do
+            output=$(gcloud functions deploy ${{ matrix.name }}               --runtime python311               --trigger-http               --allow-unauthenticated               --entry-point ${{ matrix.entry_point }}               --source ${{ matrix.source }}               --project ${PROJECT_ID}               --region ${REGION}               --set-env-vars="${{ matrix.env }}"               --quiet 2>&1)
+            status=$?
+
+            if [ $status -eq 0 ]; then
+              echo "$output"
+              break
+            fi
+
+            echo "$output"
+            if echo "$output" | grep -q "unable to queue the operation" && [ $attempt -lt 3 ]; then
+              wait_seconds=$((attempt * 30))
+              echo "Deploy returned 409 queue conflict. Retrying in ${wait_seconds}s (attempt ${attempt}/3)."
+              sleep $wait_seconds
+              continue
+            fi
+
+            exit $status
+          done
 
   deploy-cloud-run:
     runs-on: ubuntu-latest
