@@ -104,7 +104,8 @@ def test_get_stock_data_success(monkeypatch):
     monkeypatch.setattr(module, "append_dataframe_to_bigquery", fake_append)
     response = module.get_stock_data(None)
     assert response == "Success"
-    assert captured["date"] == datetime.date.today()
+    expected_reference = datetime.datetime.now(module.SAO_PAULO_TZ).date()
+    assert captured["date"] == expected_reference
 
 
 def test_load_tickers_from_file(monkeypatch, tmp_path):
