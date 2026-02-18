@@ -12,14 +12,15 @@ except ModuleNotFoundError:  # pragma: no cover - optional dependency
     pd = None  # type: ignore[assignment]
 import requests  # type: ignore[import-untyped]
 from google.cloud import bigquery  # type: ignore[import-untyped]
-from sisacao8.observability import StructuredLogger
 
 if __package__:
     from .b3 import B3FileError, candles_by_ticker, parse_b3_daily_zip
     from .candles import Candle, Timeframe, SAO_PAULO_TZ
+    from .observability import StructuredLogger
 else:
     from b3 import B3FileError, candles_by_ticker, parse_b3_daily_zip
     from candles import Candle, Timeframe, SAO_PAULO_TZ
+    from observability import StructuredLogger
 
 if version_info >= (3, 9):  # pragma: no branch - runtime dependent import
     from zoneinfo import ZoneInfo
