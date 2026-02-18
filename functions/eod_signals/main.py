@@ -185,7 +185,6 @@ def _persist_signals(
     logging.info("%s sinais gravados em %s", len(rows), table_id)
 
 
-
 def generate_eod_signals(request: Any) -> Dict[str, Any]:
     """HTTP handler executed by Cloud Functions."""
 
@@ -250,11 +249,10 @@ def generate_eod_signals(request: Any) -> Dict[str, Any]:
                 "Nenhum ticker passou no filtro de volume",
                 reason="volume_filter",
                 min_volume=MIN_VOLUME,
-                requested=post_filter_rows,
+                requested=initial_rows,
             )
             return {"status": "filtered", "reason": "volume"}
 
-    post_filter_rows = len(frame)
     limit = min(MAX_SIGNALS, MAX_SIGNALS_PER_DAY)
     metrics_df = _fetch_latest_metrics()
     signals = generate_conditional_signals(
@@ -320,4 +318,3 @@ def generate_eod_signals(request: Any) -> Dict[str, Any]:
             table=table_id,
         )
     return response
-

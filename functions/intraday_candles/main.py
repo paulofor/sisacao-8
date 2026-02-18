@@ -76,7 +76,6 @@ def _load_rows(table_id: str, rows: List[Dict[str, Any]]) -> None:
     logging.info("%s linhas inseridas em %s", len(rows), table_id)
 
 
-
 def generate_intraday_candles(request: Any) -> Dict[str, Any]:
     """HTTP entrypoint expected by Cloud Functions."""
 
@@ -134,4 +133,3 @@ def generate_intraday_candles(request: Any) -> Dict[str, Any]:
         table_1h=hourly_table,
     )
     return response
-

@@ -50,7 +50,12 @@ class StructuredLogger:
                 continue
             self._context[key] = _normalize_value(value)
 
-    def _build_payload(self, status: str, message: str, **fields: Any) -> Dict[str, Any]:
+    def _build_payload(
+        self,
+        status: str,
+        message: str,
+        **fields: Any,
+    ) -> Dict[str, Any]:
         payload: Dict[str, Any] = {
             "timestamp": dt.datetime.now(dt.timezone.utc).isoformat(),
             **self._context,
@@ -98,4 +103,9 @@ class StructuredLogger:
         if cause is not None:
             details["cause"] = f"{cause.__class__.__name__}: {cause}"
         merged_fields = {**fields, "exception": details}
-        return self.log("ERROR", "Unhandled exception", level=logging.ERROR, **merged_fields)
+        return self.log(
+            "ERROR",
+            "Unhandled exception",
+            level=logging.ERROR,
+            **merged_fields,
+        )

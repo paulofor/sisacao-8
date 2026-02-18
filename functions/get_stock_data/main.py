@@ -70,10 +70,10 @@ client = bigquery.Client()
 
 
 def _project_id() -> str:
-        project = getattr(client, "project", None)
-        if project:
-            return project
-        return os.environ.get("BQ_PROJECT", "local")
+    project = getattr(client, "project", None)
+    if project:
+        return project
+    return os.environ.get("BQ_PROJECT", "local")
 
 
 DEFAULT_TICKERS_FILE = Path(__file__).with_name("tickers.txt")
@@ -518,7 +518,6 @@ def is_b3_holiday(reference_date: datetime.date) -> bool:
         return False
 
 
-
 def get_stock_data(request):
     """Entry point for the Cloud Function that stores daily closing prices."""
     brasil_tz = timezone("America/Sao_Paulo")
@@ -617,5 +616,5 @@ def get_stock_data(request):
         return "Success"
 
     except Exception as exc:  # noqa: BLE001
-            run_logger.exception(exc, stage="daily_ingestion")
-            return f"Erro geral: {exc}"
+        run_logger.exception(exc, stage="daily_ingestion")
+        return f"Erro geral: {exc}"

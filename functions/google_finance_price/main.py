@@ -551,7 +551,6 @@ def _build_price_row(
     }
 
 
-
 def google_finance_price(request: Any) -> Response:
     """HTTP Cloud Run entry point returning latest prices for active tickers."""
 
@@ -711,6 +710,7 @@ def google_finance_price(request: Any) -> Response:
         timed_out=timed_out,
     )
     return _build_response(payload, 500)
+
 
 def _create_flask_app() -> Any:
     """Return a lightweight Flask app that proxies to the function."""

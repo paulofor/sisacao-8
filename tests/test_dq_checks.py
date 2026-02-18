@@ -20,7 +20,17 @@ def test_coverage_status_fail_when_below_threshold():
 
 
 def test_check_result_severity_mapping():
-    result = dq_main.CheckResult(name="demo", component="table", status="FAIL", details={})
+    result = dq_main.CheckResult(
+        name="demo",
+        component="table",
+        status="FAIL",
+        details={},
+    )
     assert result.severity == "CRITICAL"
-    result_pass = dq_main.CheckResult(name="demo", component="table", status="PASS", details={})
+    result_pass = dq_main.CheckResult(
+        name="demo",
+        component="table",
+        status="PASS",
+        details={},
+    )
     assert result_pass.severity == "INFO"
