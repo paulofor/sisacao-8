@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS `ingestaokraken.cotacao_intraday.cotacao_ohlcv_diario
   high FLOAT64 NOT NULL,
   low FLOAT64 NOT NULL,
   close FLOAT64 NOT NULL,
-  volume FLOAT64,
+  volume_financeiro FLOAT64,
   qtd_negociada FLOAT64,
   num_negocios INT64,
   fonte STRING NOT NULL,
