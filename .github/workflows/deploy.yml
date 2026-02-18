@@ -54,6 +54,8 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
       - name: Deploy ${{ matrix.name }}
         run: |
+          set -o pipefail
+
           deploy_cmd=(
             gcloud functions deploy "${{ matrix.name }}"
             --runtime python311
@@ -68,21 +70,29 @@ jobs:
           )
 
           for attempt in 1 2 3; do
-            output=$("${deploy_cmd[@]}" --verbosity=debug --log-http 2>&1)
-            status=$?
+            log_file=$(mktemp)
+
+            set +e
+            "${deploy_cmd[@]}" --verbosity=debug --log-http 2>&1 | tee "$log_file"
+            status=${PIPESTATUS[0]}
+            set -e
 
             if [ $status -eq 0 ]; then
-              echo "$output"
+              rm -f "$log_file"
               break
             fi
 
-            echo "$output"
-            if echo "$output" | grep -q "unable to queue the operation" && [ $attempt -lt 3 ]; then
+            if grep -q "unable to queue the operation" "$log_file" && [ $attempt -lt 3 ]; then
               wait_seconds=$((attempt * 30))
               echo "Deploy returned 409 queue conflict. Retrying in ${wait_seconds}s (attempt ${attempt}/3)."
+              rm -f "$log_file"
               sleep $wait_seconds
               continue
             fi
+
+            echo "Deploy command failed with status $status. Last 200 lines of gcloud output:"
+            tail -n 200 "$log_file"
+            rm -f "$log_file"
 
             echo "Collecting additional diagnostics for ${{ matrix.name }}..."
             gcloud functions operations list \
