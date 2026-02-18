@@ -24,9 +24,7 @@ logging.basicConfig(level=getattr(logging, LOG_LEVEL, logging.INFO))
 DATASET_ID = os.environ.get("BQ_INTRADAY_DATASET", "cotacao_intraday")
 DAILY_TABLE_ID = os.environ.get("BQ_DAILY_TABLE", "cotacao_ohlcv_diario")
 SIGNALS_TABLE_ID = os.environ.get("BQ_SIGNALS_TABLE", "sinais_eod")
-BACKTEST_TRADES_TABLE_ID = os.environ.get(
-    "BQ_BACKTEST_TRADES_TABLE", "backtest_trades"
-)
+BACKTEST_TRADES_TABLE_ID = os.environ.get("BQ_BACKTEST_TRADES_TABLE", "backtest_trades")
 BACKTEST_METRICS_TABLE_ID = os.environ.get(
     "BQ_BACKTEST_METRICS_TABLE", "backtest_metrics"
 )
@@ -55,9 +53,7 @@ def _is_b3_holiday(date_value: dt.date) -> bool:
         "` WHERE data_feriado = @ref_date LIMIT 1"
     )
     job_config = bigquery.QueryJobConfig(
-        query_parameters=[
-            bigquery.ScalarQueryParameter("ref_date", "DATE", date_value)
-        ]
+        query_parameters=[bigquery.ScalarQueryParameter("ref_date", "DATE", date_value)]
     )
     try:
         rows = list(client.query(query, job_config=job_config).result())
@@ -143,15 +139,9 @@ def _load_table(table_id: str, rows: List[Dict[str, object]]) -> None:
 
 
 def _delete_by_date(table_id: str, column: str, date_value: dt.date) -> None:
-    query = (
-        "DELETE FROM `"
-        f"{table_id}"
-        f"` WHERE {column} = @ref_date"
-    )
+    query = "DELETE FROM `" f"{table_id}" f"` WHERE {column} = @ref_date"
     job_config = bigquery.QueryJobConfig(
-        query_parameters=[
-            bigquery.ScalarQueryParameter("ref_date", "DATE", date_value)
-        ]
+        query_parameters=[bigquery.ScalarQueryParameter("ref_date", "DATE", date_value)]
     )
     client.query(query, job_config=job_config).result()
 
@@ -195,7 +185,11 @@ def backtest_daily(request: Any) -> Dict[str, Any]:
     max_valid = max(signal.valid_for for signal in signals)
     max_horizon = max(signal.horizon_days for signal in signals)
     end_date = max_valid + dt.timedelta(days=max_horizon * 2)
-    candles_df = _fetch_candles([signal.ticker for signal in signals], min_valid, end_date)
+    candles_df = _fetch_candles(
+        [signal.ticker for signal in signals],
+        min_valid,
+        end_date,
+    )
     candles = build_candle_lookup(candles_df.to_dict("records"))
     trades = run_backtest(signals, candles)
 

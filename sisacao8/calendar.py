@@ -32,7 +32,9 @@ def normalize_holidays(values: Iterable[DateLike] | None) -> Set[dt.date]:
     return normalized
 
 
-def is_trading_day(date_value: dt.date, holidays: Iterable[DateLike] | None = None) -> bool:
+def is_trading_day(
+    date_value: dt.date, holidays: Iterable[DateLike] | None = None
+) -> bool:
     """Return ``True`` when ``date_value`` is a weekday and not in ``holidays``."""
 
     if date_value.weekday() >= 5:
@@ -77,7 +79,11 @@ def add_trading_days(
     """Advance ``date_value`` by ``delta`` trading sessions (positive or negative)."""
 
     if delta == 0:
-        return date_value if is_trading_day(date_value, holidays) else next_trading_day(date_value, holidays)
+        return (
+            date_value
+            if is_trading_day(date_value, holidays)
+            else next_trading_day(date_value, holidays)
+        )
     holiday_set = normalize_holidays(holidays)
     step = 1 if delta > 0 else -1
     remaining = abs(delta)
