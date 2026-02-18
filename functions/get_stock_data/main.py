@@ -396,8 +396,8 @@ def append_dataframe_to_bigquery(data: Any, reference_date: datetime.date) -> No
             if "data_pregao" in df.columns:
                 df["data_pregao"] = pd.to_datetime(df["data_pregao"]).dt.date
             if "atualizado_em" in df.columns:
-                df["atualizado_em"] = pd.to_datetime(df["atualizado_em"]).dt.tz_localize(
-                    None
+                df["atualizado_em"] = (
+                    pd.to_datetime(df["atualizado_em"]).dt.tz_localize(None)
                 )
             job = client.load_table_from_dataframe(
                 df, target_table_id, job_config=load_config
@@ -466,6 +466,7 @@ def append_dataframe_to_bigquery(data: Any, reference_date: datetime.date) -> No
         logging.warning("Dados inseridos com sucesso (%s linhas).", inserted_rows)
     except Exception as exc:  # noqa: BLE001
         logging.warning("Erro ao inserir dados no BigQuery: %s", exc, exc_info=True)
+
 
 def is_b3_holiday(reference_date: datetime.date) -> bool:
     """Return ``True`` when ``reference_date`` is configured as B3 holiday."""

@@ -175,7 +175,10 @@ def generate_eod_signals(request: Any) -> Dict[str, Any]:
 
     valid_for = _next_business_day(reference_date)
     logging.info(
-        "Gerando sinais para %s válidos em %s | modelo=%s | X=%.2f%% | TP=%.2f%% | SL=%.2f%%",
+        (
+            "Gerando sinais para %s válidos em %s | modelo=%s | X=%.2f%% | "
+            "TP=%.2f%% | SL=%.2f%%"
+        ),
         reference_date,
         valid_for,
         MODEL_VERSION,

@@ -123,4 +123,3 @@ def test_generate_conditional_signals_applies_x_and_y_pct() -> None:
     assert signal.x_rule == "close(D)*1.0500"
     assert signal.y_target_pct == pytest.approx(0.2)
     assert signal.y_stop_pct == pytest.approx(0.1)
-
