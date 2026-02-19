@@ -10,17 +10,30 @@ from typing import Any, Dict, List
 import pandas as pd  # type: ignore[import-untyped]
 from google.cloud import bigquery  # type: ignore[import-untyped]
 
-from sisacao8.candles import SAO_PAULO_TZ
-from sisacao8.observability import StructuredLogger
-from sisacao8.signals import (
-    DEFAULT_HORIZON_DAYS,
-    DEFAULT_RANKING_KEY,
-    MODEL_VERSION,
-    MAX_SIGNALS_PER_DAY,
-    ConditionalSignal,
-    compute_source_snapshot,
-    generate_conditional_signals,
-)
+if __package__:
+    from .candles import SAO_PAULO_TZ
+    from .observability import StructuredLogger
+    from .signals import (
+        DEFAULT_HORIZON_DAYS,
+        DEFAULT_RANKING_KEY,
+        MODEL_VERSION,
+        MAX_SIGNALS_PER_DAY,
+        ConditionalSignal,
+        compute_source_snapshot,
+        generate_conditional_signals,
+    )
+else:
+    from candles import SAO_PAULO_TZ
+    from observability import StructuredLogger
+    from signals import (
+        DEFAULT_HORIZON_DAYS,
+        DEFAULT_RANKING_KEY,
+        MODEL_VERSION,
+        MAX_SIGNALS_PER_DAY,
+        ConditionalSignal,
+        compute_source_snapshot,
+        generate_conditional_signals,
+    )
 
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
 logging.basicConfig(level=getattr(logging, LOG_LEVEL, logging.INFO))
@@ -48,7 +61,14 @@ HORIZON_DAYS = int(os.environ.get("SIGNAL_HORIZON_DAYS", str(DEFAULT_HORIZON_DAY
 RANKING_KEY = os.environ.get("SIGNAL_RANKING_KEY", DEFAULT_RANKING_KEY)
 JOB_NAME = os.environ.get("JOB_NAME", "eod_signals")
 
-client = bigquery.Client()
+client: bigquery.Client | None = None
+
+
+def _get_client() -> bigquery.Client:
+    global client
+    if client is None:
+        client = bigquery.Client()
+    return client
 
 
 def _now_sp() -> dt.datetime:
@@ -71,7 +91,8 @@ def _ensure_after_cutoff() -> bool:
 
 
 def _table_ref(table_id: str) -> str:
-    return f"{client.project}.{DATASET_ID}.{table_id}"
+    bq_client = _get_client()
+    return f"{bq_client.project}.{DATASET_ID}.{table_id}"
 
 
 def _holidays_table() -> str:
@@ -92,7 +113,7 @@ def _is_b3_holiday(date_value: dt.date) -> bool:
         query_parameters=[bigquery.ScalarQueryParameter("ref_date", "DATE", date_value)]
     )
     try:
-        rows = list(client.query(query, job_config=job_config).result())
+        rows = list(_get_client().query(query, job_config=job_config).result())
     except Exception as exc:  # noqa: BLE001
         logging.warning("Falha ao consultar feriados B3: %s", exc, exc_info=True)
         return False
@@ -121,7 +142,7 @@ def _fetch_daily_frame(reference_date: dt.date) -> pd.DataFrame:
     )
     params = [bigquery.ScalarQueryParameter("ref_date", "DATE", reference_date)]
     job_config = bigquery.QueryJobConfig(query_parameters=params)
-    df = client.query(query, job_config=job_config).to_dataframe()
+    df = _get_client().query(query, job_config=job_config).to_dataframe()
     df.sort_values("ticker", inplace=True)
     return df
 
@@ -137,7 +158,7 @@ def _fetch_latest_metrics() -> pd.DataFrame:
         WHERE as_of_date = (SELECT as_of_date FROM latest WHERE as_of_date IS NOT NULL)
     """
     try:
-        return client.query(query).to_dataframe()
+        return _get_client().query(query).to_dataframe()
     except Exception as exc:  # noqa: BLE001
         logging.info("Backtest metrics indisponíveis: %s", exc)
         return pd.DataFrame()
@@ -150,7 +171,7 @@ def _delete_partition(table_id: str, reference_date: dt.date) -> None:
             bigquery.ScalarQueryParameter("ref_date", "DATE", reference_date)
         ]
     )
-    client.query(query, job_config=job_config).result()
+    _get_client().query(query, job_config=job_config).result()
     logging.info("Partição de %s removida em %s", reference_date, table_id)
 
 
@@ -180,7 +201,7 @@ def _persist_signals(
     load_config = bigquery.LoadJobConfig(
         write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
     )
-    job = client.load_table_from_json(rows, table_id, job_config=load_config)
+    job = _get_client().load_table_from_json(rows, table_id, job_config=load_config)
     job.result()
     logging.info("%s sinais gravados em %s", len(rows), table_id)
 
