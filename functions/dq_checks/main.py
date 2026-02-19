@@ -9,10 +9,14 @@ import os
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Sequence
 
+try:
+    from zoneinfo import ZoneInfo
+except ModuleNotFoundError:  # pragma: no cover - fallback for Python 3.8
+    from backports.zoneinfo import ZoneInfo  # type: ignore[assignment]
+
 from google.cloud import bigquery  # type: ignore[import-untyped]
 
-from sisacao8.candles import SAO_PAULO_TZ
-from sisacao8.observability import StructuredLogger
+from .observability import StructuredLogger
 
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
 logging.basicConfig(level=getattr(logging, LOG_LEVEL, logging.INFO))
@@ -33,6 +37,8 @@ DAILY_COVERAGE_THRESHOLD = float(os.environ.get("DQ_DAILY_COVERAGE", "0.9"))
 INTRADAY_COVERAGE_THRESHOLD = float(os.environ.get("DQ_INTRADAY_COVERAGE", "0.7"))
 INTRADAY_MIN_TIME = os.environ.get("DQ_INTRADAY_MIN_TIME", "17:45:00")
 SIGNAL_LIMIT = int(os.environ.get("DQ_MAX_SIGNALS", "5"))
+
+SAO_PAULO_TZ = ZoneInfo("America/Sao_Paulo")
 
 
 _BQ_CLIENT: bigquery.Client | None = None
