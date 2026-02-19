@@ -10,14 +10,14 @@ from typing import Any, Dict, List, Sequence
 import pandas as pd  # type: ignore[import-untyped]
 from google.cloud import bigquery  # type: ignore[import-untyped]
 
-from sisacao8.backtest import (
+from backtest import (
     build_candle_lookup,
     build_signal_payloads,
     compute_metrics as compute_backtest_metrics,
     run_backtest,
 )
-from sisacao8.candles import SAO_PAULO_TZ
-from sisacao8.observability import StructuredLogger
+from candles import SAO_PAULO_TZ
+from observability import StructuredLogger
 
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
 logging.basicConfig(level=getattr(logging, LOG_LEVEL, logging.INFO))
