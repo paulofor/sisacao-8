@@ -56,6 +56,44 @@ jobs:
         run: |
           set -o pipefail
 
+          get_function_state() {
+            gcloud functions describe "$1" \
+              --project "${PROJECT_ID}" \
+              --region "${REGION}" \
+              --gen2 \
+              --format='value(state)' 2>/dev/null || true
+          }
+
+          wait_for_idle_function() {
+            local function_name="$1"
+            local max_checks=40
+            local sleep_seconds=15
+
+            for check in $(seq 1 "${max_checks}"); do
+              state=$(get_function_state "${function_name}")
+
+              if [ -z "${state}" ] || [ "${state}" = "ACTIVE" ] || [ "${state}" = "FAILED" ]; then
+                echo "Function ${function_name} is in state '${state:-UNKNOWN}'. Continuing deploy."
+                return 0
+              fi
+
+              if [ "${state}" = "DEPLOYING" ]; then
+                waited_seconds=$((check * sleep_seconds))
+                echo "Function ${function_name} is DEPLOYING (${check}/${max_checks}). Waiting ${sleep_seconds}s (${waited_seconds}s elapsed)..."
+                sleep "${sleep_seconds}"
+                continue
+              fi
+
+              echo "Function ${function_name} is in state '${state}'. Continuing deploy without extra wait."
+              return 0
+            done
+
+            echo "Timed out waiting for ${function_name} to leave DEPLOYING state."
+            return 1
+          }
+
+          wait_for_idle_function "${{ matrix.name }}"
+
           deploy_cmd=(
             gcloud functions deploy "${{ matrix.name }}"
             --runtime python311
@@ -83,10 +121,14 @@ jobs:
             fi
 
             if grep -q "unable to queue the operation" "$log_file" && [ $attempt -lt 3 ]; then
-              wait_seconds=$((attempt * 30))
-              echo "Deploy returned 409 queue conflict. Retrying in ${wait_seconds}s (attempt ${attempt}/3)."
+              echo "Deploy returned 409 queue conflict. Waiting until function is no longer DEPLOYING (attempt ${attempt}/3)."
               rm -f "$log_file"
-              sleep $wait_seconds
+
+              if ! wait_for_idle_function "${{ matrix.name }}"; then
+                echo "Function remained DEPLOYING for too long after queue conflict."
+                exit 1
+              fi
+
               continue
             fi
 
