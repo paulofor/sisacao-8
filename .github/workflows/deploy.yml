@@ -95,21 +95,23 @@ jobs:
             rm -f "$log_file"
 
             echo "Collecting additional diagnostics for ${{ matrix.name }}..."
-            gcloud functions operations list \
-              --project "${PROJECT_ID}" \
-              --region "${REGION}" \
-              --limit=10 \
-              --format='table(name,status,type,insertTime,error.message)'
-
             gcloud functions describe "${{ matrix.name }}" \
               --project "${PROJECT_ID}" \
               --region "${REGION}" \
+              --gen2 \
               --format=yaml || true
 
-            gcloud functions logs read "${{ matrix.name }}" \
+            gcloud run revisions list \
               --project "${PROJECT_ID}" \
               --region "${REGION}" \
-              --limit=100 || true
+              --service "${{ matrix.name }}" \
+              --limit=5 || true
+
+            gcloud logging read \
+              'resource.type="cloud_run_revision" AND resource.labels.service_name="${{ matrix.name }}"' \
+              --project "${PROJECT_ID}" \
+              --limit=100 \
+              --format="value(timestamp,severity,textPayload,jsonPayload.message)" || true
 
             exit $status
           done

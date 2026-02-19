@@ -9,7 +9,8 @@ from typing import Any, Dict, Tuple
 
 import requests  # type: ignore[import-untyped]
 from google.cloud import bigquery  # type: ignore[import-untyped]
-from sisacao8.observability import StructuredLogger
+
+from observability import StructuredLogger
 
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "WARNING").upper()
 logging.basicConfig(level=getattr(logging, LOG_LEVEL, logging.WARNING))
@@ -20,8 +21,6 @@ DATASET_ID = os.environ.get("BQ_INTRADAY_DATASET", "cotacao_intraday")
 SIGNALS_TABLE_ID = os.environ.get("BQ_SIGNALS_TABLE", "sinais_eod")
 JOB_NAME = os.environ.get("JOB_NAME", "alerts")
 
-client = bigquery.Client()
-
 
 def alerts(request: Any) -> Tuple[Dict[str, Any], int]:
     """Fetch today's signals and optionally send a Telegram alert."""
@@ -30,6 +29,7 @@ def alerts(request: Any) -> Tuple[Dict[str, Any], int]:
     today = datetime.date.today()
     run_logger.update_context(date_ref=today.isoformat())
     run_logger.started()
+    client = bigquery.Client()
     signals_table = f"{client.project}.{DATASET_ID}.{SIGNALS_TABLE_ID}"
     query = f"""
         SELECT ticker, COUNT(*) AS qtd
