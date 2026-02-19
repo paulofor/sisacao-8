@@ -10,9 +10,14 @@ from typing import Any, Dict, List
 import pandas as pd  # type: ignore[import-untyped]
 from google.cloud import bigquery  # type: ignore[import-untyped]
 
-from sisacao8 import build_intraday_candles, rollup_candles
-from sisacao8.observability import StructuredLogger
-from sisacao8.candles import SAO_PAULO_TZ
+if __package__:
+    from .candles import SAO_PAULO_TZ
+    from .intraday import build_intraday_candles, rollup_candles
+    from .observability import StructuredLogger
+else:
+    from candles import SAO_PAULO_TZ
+    from intraday import build_intraday_candles, rollup_candles
+    from observability import StructuredLogger
 
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
 logging.basicConfig(level=getattr(logging, LOG_LEVEL, logging.INFO))
