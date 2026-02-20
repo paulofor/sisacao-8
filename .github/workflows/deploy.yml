@@ -62,6 +62,21 @@ jobs:
         run: |
           set -o pipefail
 
+          resolve_service_account_arg() {
+            local desired_service_account="$1"
+
+            if gcloud iam service-accounts describe "${desired_service_account}" \
+              --project "${PROJECT_ID}" >/dev/null 2>&1; then
+              echo "Using configured service account ${desired_service_account}."
+              printf -- '--service-account=%s' "${desired_service_account}"
+              return 0
+            fi
+
+            echo "Configured service account ${desired_service_account} was not found."
+            echo "Deploy will proceed without --service-account and keep existing/default identity."
+            return 0
+          }
+
           get_function_state() {
             gcloud functions describe "$1" \
               --project "${PROJECT_ID}" \
@@ -100,18 +115,23 @@ jobs:
 
           wait_for_idle_function "${{ matrix.name }}"
 
+          service_account_arg=$(resolve_service_account_arg "${{ matrix.service_account }}")
+
           deploy_cmd=(
             gcloud functions deploy "${{ matrix.name }}"
             --runtime python311
             --trigger-http
             --entry-point "${{ matrix.entry_point }}"
             --source "${{ matrix.source }}"
-            --service-account "${{ matrix.service_account }}"
             --project "${PROJECT_ID}"
             --region "${REGION}"
             --set-env-vars="${{ matrix.env }}"
             --quiet
           )
+
+          if [ -n "${service_account_arg}" ]; then
+            deploy_cmd+=("${service_account_arg}")
+          fi
 
           for attempt in 1 2 3; do
             log_file=$(mktemp)
@@ -178,10 +198,29 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
       - name: Deploy google_finance_price
         run: |
-          gcloud run deploy google-finance-price \
-            --source functions/google_finance_price \
-            --project ${PROJECT_ID} \
-            --region ${REGION} \
-            --service-account sa-google-finance-price@${PROJECT_ID}.iam.gserviceaccount.com \
-            --set-env-vars=FUNCTION_TARGET=google_finance_price,FUNCTION_SIGNATURE_TYPE=http,BQ_INTRADAY_DATASET=cotacao_intraday,BQ_INTRADAY_RAW_TABLE=cotacao_b3,BQ_HOLIDAYS_TABLE=feriados_b3 \
+          configured_service_account="sa-google-finance-price@${PROJECT_ID}.iam.gserviceaccount.com"
+          service_account_arg=""
+
+          if gcloud iam service-accounts describe "${configured_service_account}" \
+            --project "${PROJECT_ID}" >/dev/null 2>&1; then
+            echo "Using configured service account ${configured_service_account}."
+            service_account_arg="--service-account=${configured_service_account}"
+          else
+            echo "Configured service account ${configured_service_account} was not found."
+            echo "Deploy will proceed without --service-account and keep existing/default identity."
+          fi
+
+          deploy_cmd=(
+            gcloud run deploy google-finance-price
+            --source functions/google_finance_price
+            --project "${PROJECT_ID}"
+            --region "${REGION}"
+            --set-env-vars=FUNCTION_TARGET=google_finance_price,FUNCTION_SIGNATURE_TYPE=http,BQ_INTRADAY_DATASET=cotacao_intraday,BQ_INTRADAY_RAW_TABLE=cotacao_b3,BQ_HOLIDAYS_TABLE=feriados_b3
             --quiet
+          )
+
+          if [ -n "${service_account_arg}" ]; then
+            deploy_cmd+=("${service_account_arg}")
+          fi
+
+          "${deploy_cmd[@]}"
