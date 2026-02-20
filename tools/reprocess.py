@@ -7,7 +7,7 @@ import argparse
 import json
 import sys
 from dataclasses import dataclass
-from typing import Iterable, List, Mapping
+from typing import List, Mapping
 
 import requests
 from google.auth.transport.requests import Request
