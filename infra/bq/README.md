@@ -3,7 +3,10 @@
 Os arquivos deste diretório versionam toda a estrutura necessária para o dataset
 `cotacao_intraday` no BigQuery. Utilize-os como "IaC leve": basta substituir o
 *placeholder* `@@PROJECT_ID@@` pelo **ID do projeto** antes de executar os
-scripts com `bq query --use_legacy_sql=false`.
+scripts com `bq query --use_legacy_sql=false`. O arquivo `views_ops.sql` também
+possui o placeholder `@@OPS_DATASET@@` para que as views da Ops API possam ser
+implantadas em datasets diferentes por ambiente (ex.: `monitoring`,
+`monitoring_dev`).
 
 ```bash
 PROJECT_ID=ingestaokraken
@@ -23,6 +26,7 @@ done
 | `03_signals_backtest.sql` | Estruturas analíticas (`sinais_eod`, `backtest_trades`, `backtest_metrics`). |
 | `04_data_quality.sql` | Tabelas `dq_checks_daily` e `dq_incidents` com versionamento de configuração. |
 | `05_views.sql` | Views operacionais (`vw_pipeline_status`, `mv_indicadores`). |
+| `views_ops.sql` | Views da Ops API (`vw_ops_*`) com overview, pipeline, DQ, sinais e incidentes. |
 
 Os scripts podem ser reaplicados sem efeitos colaterais graças ao uso de
 `CREATE TABLE IF NOT EXISTS` e `MERGE`. Documente qualquer ajuste adicional no

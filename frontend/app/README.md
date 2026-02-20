@@ -45,6 +45,13 @@ src/
 
 ## Integração com o backend
 
-O frontend espera que o backend expose o endpoint `GET /data-collections/messages`, com suporte opcional aos parâmetros
-`severity`, `collector` e `limit`. Campos adicionais retornados pela API são exibidos na coluna de metadados.
+- Configure `VITE_API_BASE_URL` no `.env.local`.
+  - **Dev:** `http://localhost:8080` (backend rodando via `./mvnw spring-boot:run`).
+  - **Produção / reverse-proxy:** `/api` (backend atrás do mesmo domínio).
+- Endpoints consumidos atualmente:
+  - `GET /data-collections/messages` (filtros `severity`, `collector`, `limit`).
+  - `GET /data-collections/intraday-summary` / `intraday-daily-counts` / `intraday-latest-records`.
+  - `GET /ops/overview` e demais `/ops/*` para o painel operacional (Sprint 7).
+
+O contrato completo dos endpoints `/ops/*` está documentado em [`docs/ops_api.md`](../../docs/ops_api.md).
 

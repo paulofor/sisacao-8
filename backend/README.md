@@ -14,6 +14,19 @@ Este diretório abrigará o serviço Java (Spring Boot) responsável por expor A
 
 O endpoint padrão ficará disponível em `http://localhost:8080/`.
 
+## Endpoints principais
+
+- `GET /data-collections/messages` — mensagens das pipelines com filtros opcionais.
+- `GET /data-collections/intraday-*` — métricas e amostras do intraday.
+- `GET /ops/overview` — visão consolidada do pipeline (status, DQ e sinais).
+- `GET /ops/pipeline` — status por job (run-id, silêncio, deadline).
+- `GET /ops/dq/latest` — últimos checks de data quality.
+- `GET /ops/incidents/open` — incidentes em aberto.
+- `GET /ops/signals/next` — top 5 do próximo pregão.
+- `GET /ops/signals/history` — histórico filtrável (parâmetros `from`, `to`, `limit`).
+
+Detalhes e exemplos de payload estão documentados em [`docs/ops_api.md`](../docs/ops_api.md).
+
 ### Logs via Actuator
 
 Com a aplicação em execução é possível baixar os logs recentes acessando `http://localhost:8080/actuator/logfile`. O arquivo exposto é o mesmo configurado em `logging.file.name`, apontando para `/opt/sisacao/app/logs/sisacao-backend.log`, diretório compartilhado pelo backend em produção.
