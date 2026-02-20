@@ -67,13 +67,13 @@ jobs:
 
             if gcloud iam service-accounts describe "${desired_service_account}" \
               --project "${PROJECT_ID}" >/dev/null 2>&1; then
-              echo "Using configured service account ${desired_service_account}."
+              echo "Using configured service account ${desired_service_account}." >&2
               printf -- '--service-account=%s' "${desired_service_account}"
               return 0
             fi
 
-            echo "Configured service account ${desired_service_account} was not found."
-            echo "Deploy will proceed without --service-account and keep existing/default identity."
+            echo "Configured service account ${desired_service_account} was not found." >&2
+            echo "Deploy will proceed without --service-account and keep existing/default identity." >&2
             return 0
           }
 
