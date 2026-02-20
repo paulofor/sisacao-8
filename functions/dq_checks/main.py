@@ -150,12 +150,6 @@ def _parse_request_date(payload: Dict[str, Any]) -> dt.date:
         return dt.datetime.strptime(requested, "%Y-%m-%d").date()
     return _now_sp().date()
 
-    if request and hasattr(request, "args") and request.args:
-        requested = request.args.get("date")
-        if requested:
-            return dt.datetime.strptime(requested, "%Y-%m-%d").date()
-    return _now_sp().date()
-
 
 def _table_ref(table_id: str) -> str:
     return f"{_get_client().project}.{DATASET_ID}.{table_id}"
@@ -528,7 +522,10 @@ def _check_signals_freshness(
         SELECT
             COUNT(*) AS total,
             MAX(created_at) AS last_created_at,
-            DATETIME_ADD(DATETIME(@ref_date, @deadline), INTERVAL @grace MINUTE) AS deadline_dt
+            DATETIME_ADD(
+                DATETIME(@ref_date, @deadline),
+                INTERVAL @grace MINUTE
+            ) AS deadline_dt
         FROM `{_table_ref(SIGNALS_TABLE_ID)}`
         WHERE date_ref = @ref_date
     """
@@ -579,7 +576,10 @@ def _check_backtest_metrics(
         SELECT
             COUNT(*) AS linhas,
             MAX(created_at) AS last_created_at,
-            DATETIME_ADD(DATETIME(@ref_date, @deadline), INTERVAL @grace MINUTE) AS deadline_dt
+            DATETIME_ADD(
+                DATETIME(@ref_date, @deadline),
+                INTERVAL @grace MINUTE
+            ) AS deadline_dt
         FROM `{_table_ref(BACKTEST_METRICS_TABLE_ID)}`
         WHERE as_of_date = @ref_date
     """
