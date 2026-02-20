@@ -122,7 +122,7 @@ gcloud functions deploy get_stock_data \
     --trigger-http \
     --entry-point get_stock_data \
     --source functions/get_stock_data \
-    --allow-unauthenticated \
+    --service-account sa-get-stock-data@ingestaokraken.iam.gserviceaccount.com \
     --project ingestaokraken \
     --region us-central1
 ```
@@ -133,3 +133,36 @@ Passos para agendar a consulta diária e montar um painel no Looker Studio
 estão descritos em [docs/monitoramento.md](docs/monitoramento.md).
 
 Consulte também [`docs/observabilidade.md`](docs/observabilidade.md) e o [`RUNBOOK`](RUNBOOK.md) para o checklist diário e configuração de alertas.
+
+## Configuração operacional e IaC (Sprint 5)
+
+- As tabelas de parâmetros (`parametros_estrategia`) e de operação (`pipeline_config`)
+estão versionadas em `infra/bq/01_config_tables.sql`. Ajuste alvos de cobertura,
+deadlines e flags como `allow_offline_fallback` diretamente nessas tabelas para
+que os jobs adotem os novos valores sem redeploy. Cada execução registra o
+`config_version` correspondente nos logs e nas tabelas analíticas.
+- O diretório `infra/iam/` provisiona as service accounts dedicadas para cada
+função, além do invoker usado pelo Cloud Scheduler. Aplique esse módulo antes
+de configurar os agendamentos para garantir *least privilege*.
+- O diretório `infra/monitoring/` cria canais e alertas como código (log-based
+metrics e ausência) cobrindo erros de job, falhas de DQ e silêncio de
+`get_stock_data`, `intraday_candles` e `eod_signals`.
+
+## Reprocessamento autenticado
+
+Use `tools/reprocess.py` para acionar os jobs com ID token e registrar o motivo
+do reprocesso. Exemplo:
+
+```bash
+python tools/reprocess.py 2024-08-12 \
+  --project ingestaokraken \
+  --region us-central1 \
+  --service-account-key sa-invoker.json \
+  --mode ALL \
+  --force
+```
+
+O script envia `reason=manual_reprocess` (padrão) e atualiza `get_stock_data →
+intraday_candles → eod_signals → backtest_daily → dq_checks` de forma segura.
+Consulte o `RUNBOOK.md` para o checklist completo e respostas aos alertas de
+silêncio ou falha.

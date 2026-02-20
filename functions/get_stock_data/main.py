@@ -1,6 +1,7 @@
 import datetime
 import logging
 import os
+from dataclasses import dataclass
 from importlib import import_module
 from pathlib import Path
 from sys import version_info
@@ -61,6 +62,11 @@ FERIADOS_TABLE_ID = os.environ.get("BQ_HOLIDAYS_TABLE", "feriados_b3")
 FONTE_FECHAMENTO = "B3_DAILY_COTAHIST"
 LOAD_STRATEGY = os.environ.get("BQ_DAILY_LOAD_STRATEGY", "MERGE")
 JOB_NAME = os.environ.get("JOB_NAME", "get_stock_data")
+PIPELINE_CONFIG_TABLE_ID = os.environ.get("PIPELINE_CONFIG_TABLE", "pipeline_config")
+PIPELINE_CONFIG_ID = os.environ.get("PIPELINE_CONFIG_ID", "default")
+ALLOW_OFFLINE_FALLBACK_ENV = (
+    os.environ.get("ALLOW_OFFLINE_FALLBACK", "false").lower() == "true"
+)
 
 # Timeout em segundos para requisições HTTP
 TIMEOUT = 120
@@ -70,6 +76,12 @@ MAX_B3_LOOKBACK_DAYS = int(os.environ.get("MAX_B3_LOOKBACK_DAYS", "5"))
 client = bigquery.Client()
 
 
+@dataclass(frozen=True)
+class IngestionConfig:
+    config_version: str
+    allow_offline_fallback: bool
+
+
 def _project_id() -> str:
     project = getattr(client, "project", None)
     if project:
@@ -77,8 +89,112 @@ def _project_id() -> str:
     return os.environ.get("BQ_PROJECT", "local")
 
 
+def _pipeline_config_table() -> str:
+    return f"{_project_id()}.{DATASET_ID}.{PIPELINE_CONFIG_TABLE_ID}"
+
+
+def _request_payload(request: Any) -> Dict[str, Any]:
+    payload: Dict[str, Any] = {}
+    if request is None:
+        return payload
+    if hasattr(request, "args") and request.args:
+        for key in request.args:
+            value = request.args.get(key)
+            if value is not None:
+                payload.setdefault(key, value)
+    if hasattr(request, "get_json"):
+        try:
+            body = request.get_json(silent=True) or {}
+        except Exception:  # noqa: BLE001
+            body = {}
+        if isinstance(body, dict):
+            for key, value in body.items():
+                if value is not None:
+                    payload[key] = value
+    return payload
+
+
+def _get_first_value(payload: Dict[str, Any], keys: tuple[str, ...]) -> str | None:
+    for key in keys:
+        value = payload.get(key)
+        if value is None:
+            continue
+        text = str(value).strip()
+        if text:
+            return text
+    return None
+
+
+def _as_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return False
+
+
+def _parse_request_date(payload: Dict[str, Any]) -> datetime.date:
+    requested = _get_first_value(payload, ("date_ref", "date"))
+    if requested:
+        return datetime.datetime.strptime(requested, "%Y-%m-%d").date()
+    brasil_tz = timezone("America/Sao_Paulo")
+    return datetime.datetime.now(brasil_tz).date()
+
+
 DEFAULT_TICKERS_FILE = Path(__file__).with_name("tickers.txt")
 _env_tickers_path = os.environ.get("TICKERS_FILE")
+
+
+def _default_ingestion_config() -> IngestionConfig:
+    version = os.environ.get("PIPELINE_CONFIG_VERSION", "env-default")
+    return IngestionConfig(
+        config_version=version,
+        allow_offline_fallback=ALLOW_OFFLINE_FALLBACK_ENV,
+    )
+
+
+def _load_ingestion_config() -> IngestionConfig:
+    query = (
+        "SELECT config_id, config_version, allow_offline_fallback, created_at "
+        f"FROM `{_pipeline_config_table()}` "
+        "WHERE config_id = @config_id "
+        "ORDER BY created_at DESC "
+        "LIMIT 1"
+    )
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ScalarQueryParameter("config_id", "STRING", PIPELINE_CONFIG_ID)
+        ]
+    )
+    try:
+        row_iter = client.query(query, job_config=job_config).result()
+        row = next(iter(row_iter), None)
+    except Exception as exc:  # noqa: BLE001
+        logging.warning(
+            "Falha ao carregar pipeline_config %s: %s",
+            PIPELINE_CONFIG_TABLE_ID,
+            exc,
+            exc_info=True,
+        )
+        return _default_ingestion_config()
+    if row is None:
+        logging.warning(
+            "Config %s não encontrado em %s; usando defaults",
+            PIPELINE_CONFIG_ID,
+            PIPELINE_CONFIG_TABLE_ID,
+        )
+        return _default_ingestion_config()
+    config_id = getattr(row, "config_id", PIPELINE_CONFIG_ID)
+    version = getattr(row, "config_version", "unknown")
+    allow_value = getattr(row, "allow_offline_fallback", ALLOW_OFFLINE_FALLBACK_ENV)
+    return IngestionConfig(
+        config_version=f"{config_id}:{version}",
+        allow_offline_fallback=_as_bool(allow_value),
+    )
+
+
 if _env_tickers_path:
     TICKERS_FILE = Path(_env_tickers_path)
 else:
@@ -250,6 +366,7 @@ def download_from_b3(
     date: Optional[datetime.date] = None,
     *,
     diagnostics: Optional[List[str]] = None,
+    allow_fallback: bool = True,
 ) -> Dict[str, Candle]:
     """Download daily candles from the official B3 file."""
 
@@ -317,12 +434,16 @@ def download_from_b3(
         if message and diag_list is not None:
             diag_list.append(_format_diagnostic(message))
     if not result:
-        logging.warning(
-            "Nenhum dado oficial retornado; usando fallback offline se disponível."
-        )
-        fallback = _fallback_b3_prices(tickers, date)
-        if fallback:
-            return fallback
+        logging.warning("Nenhum dado oficial retornado da B3.")
+        if allow_fallback:
+            logging.warning("Tentando fallback offline permitido pela configuração.")
+            fallback = _fallback_b3_prices(tickers, date)
+            if fallback:
+                return fallback
+        else:
+            logging.warning("Fallback offline desabilitado pelo pipeline_config.")
+            if diag_list is not None:
+                diag_list.append("fallback_desabilitado")
         if diag_list is not None and not diag_list:
             diag_list.append("sem dados")
     return result
@@ -349,11 +470,7 @@ def append_dataframe_to_bigquery(data: Any, reference_date: datetime.date) -> No
 
     tabela_id = f"{_project_id()}.{DATASET_ID}.{FECHAMENTO_TABLE_ID}"
     logging.warning("Tabela de destino: %s", tabela_id)
-    delete_query = (
-        "DELETE FROM `"
-        f"{tabela_id}"
-        "` WHERE data_pregao = @ref_date"
-    )
+    delete_query = "DELETE FROM `" f"{tabela_id}" "` WHERE data_pregao = @ref_date"
     job_config = bigquery.QueryJobConfig(
         query_parameters=[
             bigquery.ScalarQueryParameter("ref_date", "DATE", reference_date)
@@ -407,9 +524,9 @@ def append_dataframe_to_bigquery(data: Any, reference_date: datetime.date) -> No
             if "data_pregao" in df.columns:
                 df["data_pregao"] = pd.to_datetime(df["data_pregao"]).dt.date
             if "atualizado_em" in df.columns:
-                df["atualizado_em"] = (
-                    pd.to_datetime(df["atualizado_em"]).dt.tz_localize(None)
-                )
+                df["atualizado_em"] = pd.to_datetime(
+                    df["atualizado_em"]
+                ).dt.tz_localize(None)
             job = client.load_table_from_dataframe(
                 df, target_table_id, job_config=load_config
             )
@@ -471,9 +588,7 @@ def append_dataframe_to_bigquery(data: Any, reference_date: datetime.date) -> No
             )
             """
             client.query(merge_sql).result()
-            logging.warning(
-                "MERGE concluído com chave lógica (ticker, data_pregao)."
-            )
+            logging.warning("MERGE concluído com chave lógica (ticker, data_pregao).")
         logging.warning("Dados inseridos com sucesso (%s linhas).", inserted_rows)
     except Exception as exc:  # noqa: BLE001
         logging.warning("Erro ao inserir dados no BigQuery: %s", exc, exc_info=True)
@@ -521,19 +636,33 @@ def is_b3_holiday(reference_date: datetime.date) -> bool:
 
 def get_stock_data(request):
     """Entry point for the Cloud Function that stores daily closing prices."""
-    brasil_tz = timezone("America/Sao_Paulo")
-    reference_date = datetime.datetime.now(brasil_tz).date()
+    payload = _request_payload(request)
+    reference_date = _parse_request_date(payload)
     run_logger = StructuredLogger(JOB_NAME)
-    run_logger.update_context(date_ref=reference_date.isoformat())
+    reason = _get_first_value(payload, ("reason",))
+    mode = payload.get("mode")
+    force = _as_bool(payload.get("force"))
+    run_logger.update_context(
+        date_ref=reference_date.isoformat(),
+        reason=reason,
+        mode=mode,
+        force=force,
+    )
     run_logger.started()
 
-    if is_b3_holiday(reference_date):
+    if is_b3_holiday(reference_date) and not force:
         run_logger.warn(
             "Coleta ignorada por feriado da B3",
             reason="holiday",
             holidays_table=FERIADOS_TABLE_ID,
         )
         return "Skipped holiday"
+
+    config = _load_ingestion_config()
+    run_logger.update_context(
+        config_version=config.config_version,
+        allow_offline_fallback=config.allow_offline_fallback,
+    )
 
     tickers = load_configured_tickers()
     run_logger.update_context(configured_tickers=len(tickers))
@@ -554,6 +683,7 @@ def get_stock_data(request):
             tickers,
             date=reference_date,
             diagnostics=diagnostics,
+            allow_fallback=config.allow_offline_fallback,
         )
         run_logger.ok(
             "Download concluído",
@@ -563,10 +693,16 @@ def get_stock_data(request):
         )
 
         if not data_dict:
-            run_logger.warn(
+            log_method = run_logger.warn
+            reason_tag = "empty_source"
+            if not config.allow_offline_fallback:
+                log_method = run_logger.error
+                reason_tag = "cotahist_download_failed"
+            log_method(
                 "Nenhum dado oficial retornado",
-                reason="empty_source",
+                reason=reason_tag,
                 diagnostics=diagnostics,
+                allow_offline_fallback=config.allow_offline_fallback,
             )
             return "No data fetched"
 
