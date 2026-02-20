@@ -22,26 +22,32 @@ jobs:
           - name: get_stock_data
             entry_point: get_stock_data
             source: functions/get_stock_data
+            service_account: sa-get-stock-data@${{ env.PROJECT_ID }}.iam.gserviceaccount.com
             env: BQ_INTRADAY_DATASET=cotacao_intraday,BQ_DAILY_TABLE=cotacao_ohlcv_diario,BQ_HOLIDAYS_TABLE=feriados_b3
           - name: intraday_candles
             entry_point: generate_intraday_candles
             source: functions/intraday_candles
+            service_account: sa-intraday-candles@${{ env.PROJECT_ID }}.iam.gserviceaccount.com
             env: BQ_INTRADAY_DATASET=cotacao_intraday,BQ_INTRADAY_RAW_TABLE=cotacao_b3,BQ_INTRADAY_15M_TABLE=candles_intraday_15m,BQ_INTRADAY_1H_TABLE=candles_intraday_1h
           - name: eod_signals
             entry_point: generate_eod_signals
             source: functions/eod_signals
+            service_account: sa-eod-signals@${{ env.PROJECT_ID }}.iam.gserviceaccount.com
             env: BQ_INTRADAY_DATASET=cotacao_intraday,BQ_DAILY_TABLE=cotacao_ohlcv_diario,BQ_SIGNALS_TABLE=sinais_eod,BQ_HOLIDAYS_TABLE=feriados_b3,BQ_BACKTEST_METRICS_TABLE=backtest_metrics
           - name: backtest_daily
             entry_point: backtest_daily
             source: functions/backtest_daily
+            service_account: sa-backtest-daily@${{ env.PROJECT_ID }}.iam.gserviceaccount.com
             env: BQ_INTRADAY_DATASET=cotacao_intraday,BQ_DAILY_TABLE=cotacao_ohlcv_diario,BQ_SIGNALS_TABLE=sinais_eod,BQ_BACKTEST_TRADES_TABLE=backtest_trades,BQ_BACKTEST_METRICS_TABLE=backtest_metrics,BQ_HOLIDAYS_TABLE=feriados_b3
           - name: alerts
             entry_point: alerts
             source: functions/alerts
+            service_account: sa-alerts@${{ env.PROJECT_ID }}.iam.gserviceaccount.com
             env: BQ_INTRADAY_DATASET=cotacao_intraday,BQ_SIGNALS_TABLE=sinais_eod
           - name: dq_checks
             entry_point: dq_checks
             source: functions/dq_checks
+            service_account: sa-dq-checks@${{ env.PROJECT_ID }}.iam.gserviceaccount.com
             env: BQ_INTRADAY_DATASET=cotacao_intraday,BQ_DAILY_TABLE=cotacao_ohlcv_diario,BQ_INTRADAY_RAW_TABLE=cotacao_b3,BQ_SIGNALS_TABLE=sinais_eod,BQ_BACKTEST_METRICS_TABLE=backtest_metrics,BQ_HOLIDAYS_TABLE=feriados_b3,BQ_DQ_CHECKS_TABLE=dq_checks_daily,BQ_DQ_INCIDENTS_TABLE=dq_incidents,BQ_TICKERS_TABLE=acao_bovespa
     steps:
       - uses: actions/checkout@v4
@@ -98,9 +104,9 @@ jobs:
             gcloud functions deploy "${{ matrix.name }}"
             --runtime python311
             --trigger-http
-            --allow-unauthenticated
             --entry-point "${{ matrix.entry_point }}"
             --source "${{ matrix.source }}"
+            --service-account "${{ matrix.service_account }}"
             --project "${PROJECT_ID}"
             --region "${REGION}"
             --set-env-vars="${{ matrix.env }}"
@@ -172,4 +178,10 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
       - name: Deploy google_finance_price
         run: |
-          gcloud run deploy google-finance-price             --source functions/google_finance_price             --allow-unauthenticated             --project ${PROJECT_ID}             --region ${REGION}             --set-env-vars=FUNCTION_TARGET=google_finance_price,FUNCTION_SIGNATURE_TYPE=http,BQ_INTRADAY_DATASET=cotacao_intraday,BQ_INTRADAY_RAW_TABLE=cotacao_b3,BQ_HOLIDAYS_TABLE=feriados_b3             --quiet
+          gcloud run deploy google-finance-price \
+            --source functions/google_finance_price \
+            --project ${PROJECT_ID} \
+            --region ${REGION} \
+            --service-account sa-google-finance-price@${PROJECT_ID}.iam.gserviceaccount.com \
+            --set-env-vars=FUNCTION_TARGET=google_finance_price,FUNCTION_SIGNATURE_TYPE=http,BQ_INTRADAY_DATASET=cotacao_intraday,BQ_INTRADAY_RAW_TABLE=cotacao_b3,BQ_HOLIDAYS_TABLE=feriados_b3 \
+            --quiet

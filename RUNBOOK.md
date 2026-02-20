@@ -1,119 +1,103 @@
-# Runbook operacional — Sisacao-8 (Sprint 4)
+# Runbook operacional — Sisacao-8 (Sprint 5)
 
-Este documento descreve como operar o pipeline diariamente, o que checar em
-caso de incidentes e como reprocessar um dia específico utilizando as funções
-serverless disponíveis no GCP.
+Este runbook descreve o checklist diário, a rotina de reprocessamento e as
+respostas esperadas para cada alerta configurado na Sprint 5. Todos os jobs são
+privados por padrão (Cloud Functions/Run com IAM) e precisam ser invocados com
+service accounts dedicadas.
 
 ## 1. Checklist diário (até 22h BRT)
 
-1. **Verificar o painel `vw_pipeline_status`:**
+1. **Status agregados (`vw_pipeline_status`)**
    ```sql
    SELECT *
    FROM `ingestaokraken.cotacao_intraday.vw_pipeline_status`
    ORDER BY component;
    ```
-   - Todos os componentes devem ter `last_reference` = pregão do dia.
-   - `rows_today = 0` indica ausência de carga para a data corrente.
+   - `last_reference` deve coincidir com o pregão mais recente.
+   - `rows_today = 0` indica silêncio e abre alerta em Cloud Monitoring.
 
-2. **Confirmar DQ:**
+2. **Data quality (`dq_checks_daily`)**
    ```sql
    SELECT check_name, status, details
    FROM `ingestaokraken.cotacao_intraday.dq_checks_daily`
    WHERE check_date = CURRENT_DATE('America/Sao_Paulo')
    ORDER BY check_name;
    ```
-   Qualquer `status = 'FAIL'` deve gerar incidente (ver seção 3).
+   - Falhas em `daily_freshness`, `intraday_freshness`, `intraday_uniqueness`,
+     `signals_freshness` ou `backtest_metrics` exigem incidente imediato.
+   - Verifique o `config_version` registrado para confirmar qual conjunto de
+     thresholds estava ativo.
 
-3. **Monitorar logs estruturados:**
-   - Filtrar no Cloud Logging: `textPayload:"\"job_name\": \"eod_signals\""`.
-   - Conferir se existe log `status":"OK"` para cada job (`google_finance_price`,
-     `get_stock_data`, `intraday_candles`, `eod_signals`, `backtest_daily`,
-     `dq_checks`, `alerts`).
+3. **Alertas no Cloud Monitoring**
+   - Painel: `Monitoring → Alerting`. Os Terraform em `infra/monitoring/`
+     criam políticas para:
+     - Erros de job (`sisacao_job_error`).
+     - Falha de DQ (`sisacao_dq_fail`).
+     - Falha no download COTAHIST.
+     - Silêncio de `get_stock_data`, `intraday_candles` e `eod_signals`.
+   - Cada alerta contém o `run_id` para cruzar com Cloud Logging.
 
-4. **Alertas enviados:** conferir o canal (Telegram ou equivalente) após o
-   job `alerts-diario`. Em caso de ausência, executar a função manualmente (ver
-   seção 2).
+4. **Logs estruturados**
+   - Filtro sugerido: `jsonPayload.job_name="eod_signals" AND jsonPayload.status`.
+   - Confirmar que cada execução guarda `reason`, `mode`, `force` e
+     `config_version` para auditoria.
 
-## 2. Reprocessamentos idempotentes
+## 2. Reprocessamento autenticado
 
-Todos os jobs recebem o parâmetro `date=YYYY-MM-DD` via querystring.
-Utilize `gcloud functions call` ou a aba “Testing” do console.
+Utilize `tools/reprocess.py` para acionar a cadeia completa com ID token (SA
+invoker). O script respeita `mode`, `date_ref`, `force` e registra
+`reason=manual_reprocess` por padrão.
 
-1. **Diário oficial (`get_stock_data`):**
-   ```bash
-   gcloud functions call get_stock_data \
-     --data '{}'
-   ```
-   - Reprocessa a data atual. Para datas passadas, defina
-     `{"date": "2024-08-12"}`.
-   - A função realiza `DELETE`/`MERGE` por partição, portanto é segura.
+```bash
+python tools/reprocess.py 2024-08-12 \
+  --project ingestaokraken \
+  --region us-central1 \
+  --service-account-key sa-invoker.json \
+  --mode ALL \
+  --force
+```
 
-2. **Candles intraday (`intraday_candles`):**
-   ```bash
-   gcloud functions call intraday_candles \
-     --data '{"date": "2024-08-12"}'
-   ```
-   - Regera `candles_intraday_15m` e `candles_intraday_1h` para o dia informado.
+Modos disponíveis:
+- `DAILY`: apenas `get_stock_data`.
+- `EOD`: `get_stock_data` → `intraday_candles` → `eod_signals`.
+- `BACKTEST`: somente `backtest_daily`.
+- `ALL` (default): cadeia completa + `dq_checks`.
 
-3. **Sinais (`eod_signals`):**
-   ```bash
-   gcloud functions call eod_signals \
-     --data '{"date": "2024-08-12"}'
-   ```
-   - Gera até 5 sinais para o pregão informado e sobrescreve a partição.
-
-4. **Backtest (`backtest_daily`):**
-   ```bash
-   gcloud functions call backtest_daily \
-     --data '{"date": "2024-08-12"}'
-   ```
-   - Recria `backtest_trades` e `backtest_metrics` da data.
-
-5. **DQ (`dq_checks`):**
-   ```bash
-   gcloud functions call dq_checks \
-     --data '{"date": "2024-08-12"}'
-   ```
-   - Útil após reprocessar qualquer etapa; confirma que `dq_checks_daily` ficou
-     com `status = PASS`.
+Sempre inclua o motivo real via `--reason` quando for diferente de
+`manual_reprocess`. O parâmetro `--force` ignora o cutoff (18h) e validações de
+feriado — use somente após avaliar o impacto no `RUNBOOK`.
 
 ## 3. Tratamento de incidentes
 
-1. **Falha em job:**
-   - Verificar o log estruturado correspondente (`status = "ERROR"`).
-   - Identificar o `run_id` e consultar o campo `diagnostics`/`reason`.
-   - Reprocessar o job (seção 2) e confirmar alerta automático.
+| Alerta / Check                   | Ação imediata                                                                 |
+|----------------------------------|-------------------------------------------------------------------------------|
+| `sisacao_job_error`              | Abrir o log pelo `run_id`, identificar o estágio e reprocessar com o script. |
+| `sisacao_dq_fail`                | Consultar `dq_incidents` e corrigir o componente afetado, depois reexecutar DQ. |
+| `sisacao_cotahist_failure`       | Verificar conectividade com B3, validar `allow_offline_fallback` no `pipeline_config` e reprocessar assim que normalizar. |
+| `silêncio get_stock_data`        | Reprocessar DAILY; checar se havia feriado ou se o Scheduler perdeu a janela. |
+| `silêncio intraday_candles`      | Verificar ingestão intraday (`cotacao_b3`) e reprocessar o dia.               |
+| `silêncio eod_signals`           | Confirmar se `parametros_estrategia` estavam ativos e executar `--mode EOD`.  |
+| `signals_freshness = FAIL`       | Sinais não chegaram até 22h+grace. Rodar `eod_signals` manualmente e avisar trading. |
+| `backtest_metrics = FAIL`        | Falta de métricas ou execução pós-deadline. Reprocessar backtest e validar logs. |
 
-2. **DQ `FAIL`:**
-   - Consultar `dq_incidents` para identificar o `details` do check.
-   - Corrigir a causa (ex.: reprocessar `get_stock_data` se `daily_freshness`
-     falhar).
-   - Reexecutar `dq_checks` para fechar o incidente.
+Após reprocessar, registre o incidente no canal do time informando `run_id`,
+`config_version` e motivo.
 
-3. **Pipeline silencioso:**
-   - `intraday` sem dados recentes: disparar manualmente `google_finance_price`
-     e validar `cotacao_b3`.
-   - `sinais_eod` vazios após 22h: conferir se houve feriado. Se não, executar a
-     função manualmente.
+## 4. Componentes de referência
 
-## 4. Runbook rápido por componente
-
-| Componente | Indicadores | Logs (filtro) | Reprocesso |
-|------------|-------------|---------------|------------|
-| `google_finance_price` | `cotacao_b3` última hora >= 17:45 | `job_name="google_finance_price"` | `gcloud run jobs execute ...` ou função HTTP |
-| `get_stock_data` | `cotacao_ohlcv_diario` com pregão atual | `job_name="get_stock_data"` | `gcloud functions call get_stock_data` |
-| `intraday_candles` | `candles_intraday_15m` com linhas para o dia | `job_name="intraday_candles"` | `gcloud functions call intraday_candles` |
-| `eod_signals` | `sinais_eod` <= 5 linhas/dia | `job_name="eod_signals"` | `gcloud functions call eod_signals` |
-| `backtest_daily` | `backtest_metrics.as_of_date = date_ref` | `job_name="backtest_daily"` | `gcloud functions call backtest_daily` |
-| `dq_checks` | `dq_checks_daily` status PASS | `job_name="dq_checks"` | `gcloud functions call dq_checks` |
-| `alerts` | Mensagem no canal (Telegram) | `job_name="alerts"` | `gcloud functions call alerts` |
+| Componente          | Indicadores principais                                                   | Log (filtro)                                 | Reprocesso                           |
+|---------------------|---------------------------------------------------------------------------|----------------------------------------------|--------------------------------------|
+| `get_stock_data`    | `cotacao_ohlcv_diario` atualizado + alerta `silence` limpo               | `job_name="get_stock_data"`                 | `python tools/reprocess.py ... --mode DAILY` |
+| `intraday_candles`  | `candles_intraday_*` do dia + alerta de silêncio limpo                   | `job_name="intraday_candles"`               | `--mode EOD` ou `ALL`                |
+| `eod_signals`       | `sinais_eod` com `config_version` esperado; `signals_freshness=PASS`     | `job_name="eod_signals"`                   | `--mode EOD` ou `ALL`                |
+| `backtest_daily`    | `backtest_metrics.as_of_date` = pregão, sem atraso                       | `job_name="backtest_daily"`                | `--mode BACKTEST` ou `ALL`           |
+| `dq_checks`         | Todos os checks = `PASS` (exceto `WARN` para dias não úteis)             | `job_name="dq_checks"`                     | `--mode ALL` (encerra a cadeia)      |
 
 ## 5. Comunicação
 
-- **Falhas críticas**: abrir incidente no canal definido pelo time (Slack ou
-  PagerDuty) e anexar o `run_id` do log estruturado.
-- **Mudanças de configuração**: atualizar `infra/bq/01_config_tables.sql`
-  (tickers/feriados) e documentar no PR.
-
-Seguindo estes passos o ambiente pode ser recriado do zero e operado por qualquer
-membro do time sem dependência de conhecimento tácito.
+- **Incidentes**: abrir ticket/slack no canal de operação com `run_id`,
+  `config_version`, motivo (`reason`) e ação tomada.
+- **Mudanças de configuração**: qualquer ajuste em `pipeline_config` ou
+  `parametros_estrategia` deve ser feito via PR (scripts em `infra/bq/`).
+- **Alertas de silêncio**: responder até 15 minutos após o disparo, registrando
+  o follow-up no canal e no incidente correspondente.

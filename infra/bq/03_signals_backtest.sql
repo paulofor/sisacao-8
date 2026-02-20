@@ -23,7 +23,8 @@ CREATE TABLE IF NOT EXISTS `@@PROJECT_ID@@.cotacao_intraday.sinais_eod`
   score FLOAT64,
   horizon_days INT64,
   valid BOOLEAN,
-  job_run_id STRING
+  job_run_id STRING,
+  config_version STRING
 )
 PARTITION BY date_ref
 CLUSTER BY ticker, side

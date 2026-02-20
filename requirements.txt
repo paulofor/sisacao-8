@@ -14,3 +14,4 @@ requests
 beautifulsoup4
 tensorflow-cpu>=2.12,<3
 backports.zoneinfo; python_version < "3.9"
+google-auth

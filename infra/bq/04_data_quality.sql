@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS `@@PROJECT_ID@@.cotacao_intraday.dq_checks_daily`
   details STRING,
   job_name STRING,
   run_id STRING,
+  config_version STRING,
   created_at DATETIME NOT NULL
 )
 PARTITION BY check_date
@@ -28,6 +29,7 @@ CREATE TABLE IF NOT EXISTS `@@PROJECT_ID@@.cotacao_intraday.dq_incidents`
   details STRING,
   job_name STRING,
   run_id STRING,
+  config_version STRING,
   created_at DATETIME NOT NULL,
   acknowledged_by STRING,
   acknowledged_at DATETIME,
