@@ -4,13 +4,11 @@ import com.sisacao.backend.ops.bigquery.BigQueryOpsClient;
 import com.sisacao.backend.ops.bigquery.OpsBigQueryProperties;
 import java.time.LocalDate;
 import java.util.List;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 @Service
 @ConditionalOnProperty(prefix = "sisacao.ops.bigquery", name = "enabled", havingValue = "true")
-@ConditionalOnBean(BigQueryOpsClient.class)
 public class OpsService {
 
     private final BigQueryOpsClient bigQueryOpsClient;
