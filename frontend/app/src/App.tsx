@@ -1,32 +1,35 @@
 import RefreshIcon from '@mui/icons-material/Refresh'
 import {
-  Alert,
   AppBar,
   Box,
   Button,
   Container,
-  FormControl,
-  InputLabel,
   LinearProgress,
-  MenuItem,
-  Select,
-  Stack,
-  TextField,
+  Tab,
+  Tabs,
   Toolbar,
   Typography,
 } from '@mui/material'
+import type { UseQueryResult } from '@tanstack/react-query'
 import dayjs from 'dayjs'
-import { useMemo, useState } from 'react'
+import { type SyntheticEvent, useMemo, useState } from 'react'
 
 import type { DataCollectionMessage, DataCollectionMessageSeverity } from './api/dataCollections'
-import DataCollectionMessagesTable from './components/DataCollectionMessagesTable'
-import IntradayDailyCountsCard from './components/IntradayDailyCountsCard'
-import IntradayLatestRecordsCard from './components/IntradayLatestRecordsCard'
-import IntradaySummaryCard from './components/IntradaySummaryCard'
+import type { OpsSignalHistoryEntry, OpsSignalsHistoryFilters } from './api/ops'
+import ColetasTab from './components/tabs/ColetasTab'
+import IncidentesTab from './components/tabs/IncidentesTab'
+import OperacaoTab from './components/tabs/OperacaoTab'
+import SinaisTab from './components/tabs/SinaisTab'
 import { useDataCollectionMessages } from './hooks/useDataCollectionMessages'
 import { useIntradayDailyCounts } from './hooks/useIntradayDailyCounts'
 import { useIntradayLatestRecords } from './hooks/useIntradayLatestRecords'
 import { useIntradaySummary } from './hooks/useIntradaySummary'
+import { useOpsDqLatest } from './hooks/useOpsDqLatest'
+import { useOpsIncidentsOpen } from './hooks/useOpsIncidentsOpen'
+import { useOpsOverview } from './hooks/useOpsOverview'
+import { useOpsPipeline } from './hooks/useOpsPipeline'
+import { useOpsSignalsHistory } from './hooks/useOpsSignalsHistory'
+import { useOpsSignalsNext } from './hooks/useOpsSignalsNext'
 
 const severityOptions: Array<'all' | DataCollectionMessageSeverity> = [
   'all',
@@ -49,71 +52,92 @@ const filterMessagesBySearch = (messages: DataCollectionMessage[], searchTerm: s
   })
 }
 
+const getDefaultSignalsHistoryFilters = (): OpsSignalsHistoryFilters => {
+  return {
+    from: dayjs().subtract(7, 'day').format('YYYY-MM-DD'),
+    to: dayjs().format('YYYY-MM-DD'),
+    limit: 100,
+  }
+}
+
+type TabValue = 'coletas' | 'operacao' | 'sinais' | 'incidentes'
+
+type QueryResult = UseQueryResult<unknown, Error>
+
 function App() {
+  const [activeTab, setActiveTab] = useState<TabValue>('coletas')
   const [selectedSeverity, setSelectedSeverity] = useState<'all' | DataCollectionMessageSeverity>('all')
   const [searchTerm, setSearchTerm] = useState('')
+  const [signalsHistoryFilters, setSignalsHistoryFilters] = useState<OpsSignalsHistoryFilters>(
+    getDefaultSignalsHistoryFilters(),
+  )
 
-  const { data, isLoading, isFetching, refetch, error, dataUpdatedAt } = useDataCollectionMessages({
+  const dataCollectionMessagesQuery = useDataCollectionMessages({
     severity: selectedSeverity === 'all' ? undefined : selectedSeverity,
   })
+  const intradaySummaryQuery = useIntradaySummary()
+  const intradayDailyCountsQuery = useIntradayDailyCounts()
+  const intradayLatestRecordsQuery = useIntradayLatestRecords()
 
-  const {
-    data: intradaySummary,
-    isLoading: isSummaryLoading,
-    isFetching: isSummaryFetching,
-    refetch: refetchIntradaySummary,
-    error: intradaySummaryError,
-  } = useIntradaySummary()
+  const opsOverviewQuery = useOpsOverview()
+  const opsPipelineQuery = useOpsPipeline()
+  const opsDqLatestQuery = useOpsDqLatest()
+  const opsSignalsNextQuery = useOpsSignalsNext()
+  const opsSignalsHistoryQuery = useOpsSignalsHistory(signalsHistoryFilters)
+  const opsIncidentsOpenQuery = useOpsIncidentsOpen()
 
-  const {
-    data: intradayDailyCounts,
-    isLoading: isDailyCountsLoading,
-    isFetching: isDailyCountsFetching,
-    refetch: refetchIntradayDailyCounts,
-    error: intradayDailyCountsError,
-  } = useIntradayDailyCounts()
-
-  const {
-    data: intradayLatestRecords,
-    isLoading: isLatestRecordsLoading,
-    isFetching: isLatestRecordsFetching,
-    refetch: refetchIntradayLatestRecords,
-    error: intradayLatestRecordsError,
-  } = useIntradayLatestRecords()
-
-  const messages = useMemo(() => data ?? [], [data])
+  const messages = useMemo(() => dataCollectionMessagesQuery.data ?? [], [dataCollectionMessagesQuery.data])
 
   const filteredMessages = useMemo(
     () => filterMessagesBySearch(messages, searchTerm),
     [messages, searchTerm],
   )
 
-  const lastUpdatedLabel = dataUpdatedAt
-    ? `Atualizado às ${dayjs(dataUpdatedAt).format('HH:mm:ss')}`
+  const signalsHistoryData = (opsSignalsHistoryQuery.data ?? []) as OpsSignalHistoryEntry[]
+
+  const tabQueries: Record<TabValue, QueryResult[]> = {
+    coletas: [
+      dataCollectionMessagesQuery,
+      intradaySummaryQuery,
+      intradayDailyCountsQuery,
+      intradayLatestRecordsQuery,
+    ] as QueryResult[],
+    operacao: [opsOverviewQuery, opsPipelineQuery, opsDqLatestQuery] as QueryResult[],
+    sinais: [opsSignalsNextQuery, opsSignalsHistoryQuery] as QueryResult[],
+    incidentes: [opsIncidentsOpenQuery] as QueryResult[],
+  }
+
+  const activeQueries = tabQueries[activeTab]
+  const isTabLoading = activeQueries.some((query) => query.isLoading)
+  const isRefreshing = activeQueries.some((query) => query.isFetching)
+  const lastUpdatedAt = activeQueries.reduce<number>((latest, query) => {
+    const updatedAt = query.dataUpdatedAt ?? 0
+    return updatedAt > latest ? updatedAt : latest
+  }, 0)
+
+  const lastUpdatedLabel = lastUpdatedAt
+    ? `Atualizado às ${dayjs(lastUpdatedAt).format('HH:mm:ss')}`
     : 'Aguardando atualização'
 
-  const isRefreshing = isFetching || isSummaryFetching || isDailyCountsFetching || isLatestRecordsFetching
-
-  const isPageLoading =
-    isLoading ||
-    isFetching ||
-    isSummaryLoading ||
-    isSummaryFetching ||
-    isDailyCountsLoading ||
-    isDailyCountsFetching ||
-    isLatestRecordsLoading ||
-    isLatestRecordsFetching
-
   const handleRefresh = () => {
-    void Promise.all([refetch(), refetchIntradaySummary(), refetchIntradayDailyCounts(), refetchIntradayLatestRecords()])
+    void Promise.all(activeQueries.map((query) => query.refetch()))
   }
+
+  const handleTabChange = (_event: SyntheticEvent, newValue: string | number) => {
+    setActiveTab(newValue as TabValue)
+  }
+
+  const intradaySummaryLoading = intradaySummaryQuery.isLoading && !intradaySummaryQuery.data
+  const intradayDailyCountsLoading = intradayDailyCountsQuery.isLoading && !intradayDailyCountsQuery.data
+  const intradayLatestRecordsLoading = intradayLatestRecordsQuery.isLoading && !intradayLatestRecordsQuery.data
+  const signalsHistoryLoading = opsSignalsHistoryQuery.isLoading && !opsSignalsHistoryQuery.data
 
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
       <AppBar position="sticky" color="transparent" elevation={0} sx={{ borderBottom: '1px solid', borderColor: 'divider' }}>
         <Toolbar sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
           <Typography variant="h6" color="text.primary" sx={{ flexGrow: 1 }}>
-            Monitoramento de Coletas – BigQuery
+            Painel Operacional — Sisacao-8
           </Typography>
           <Typography variant="body2" color="text.secondary">
             {lastUpdatedLabel}
@@ -128,77 +152,82 @@ function App() {
             Atualizar
           </Button>
         </Toolbar>
-        {isPageLoading ? <LinearProgress color="primary" /> : null}
+        <Tabs
+          value={activeTab}
+          onChange={handleTabChange}
+          variant="scrollable"
+          allowScrollButtonsMobile
+          textColor="primary"
+          indicatorColor="primary"
+          sx={{ px: 2 }}
+        >
+          <Tab label="Coletas" value="coletas" />
+          <Tab label="Operação" value="operacao" />
+          <Tab label="Sinais" value="sinais" />
+          <Tab label="Incidentes" value="incidentes" />
+        </Tabs>
+        {isTabLoading || isRefreshing ? <LinearProgress color="primary" /> : null}
       </AppBar>
 
       <Container maxWidth="lg" sx={{ py: 4 }}>
-        <Stack spacing={3}>
-          <Box>
-            <Typography variant="h4" gutterBottom color="text.primary">
-              Mensagens das Coletas de Dados
-            </Typography>
-            <Typography variant="body1" color="text.secondary">
-              Consulte em tempo real os registros inseridos pelas pipelines de ingestão no BigQuery. Utilize os filtros para
-              encontrar rapidamente coletas específicas ou investigar eventuais falhas.
-            </Typography>
-          </Box>
-
-          <IntradaySummaryCard
-            summary={intradaySummary}
-            isLoading={isSummaryLoading && !intradaySummary}
-            error={intradaySummaryError}
+        {activeTab === 'coletas' ? (
+          <ColetasTab
+            severityOptions={severityOptions}
+            selectedSeverity={selectedSeverity}
+            onSeverityChange={setSelectedSeverity}
+            searchTerm={searchTerm}
+            onSearchTermChange={setSearchTerm}
+            messages={filteredMessages}
+            messagesError={dataCollectionMessagesQuery.error}
+            intradaySummary={intradaySummaryQuery.data}
+            intradaySummaryError={intradaySummaryQuery.error}
+            intradaySummaryLoading={intradaySummaryLoading}
+            intradayDailyCounts={intradayDailyCountsQuery.data}
+            intradayDailyCountsError={intradayDailyCountsQuery.error}
+            intradayDailyCountsLoading={intradayDailyCountsLoading}
+            intradayLatestRecords={intradayLatestRecordsQuery.data}
+            intradayLatestRecordsError={intradayLatestRecordsQuery.error}
+            intradayLatestRecordsLoading={intradayLatestRecordsLoading}
           />
+        ) : null}
 
-          <IntradayDailyCountsCard
-            counts={intradayDailyCounts}
-            isLoading={isDailyCountsLoading && !intradayDailyCounts}
-            error={intradayDailyCountsError}
+        {activeTab === 'operacao' ? (
+          <OperacaoTab
+            overview={opsOverviewQuery.data}
+            overviewError={opsOverviewQuery.error}
+            overviewLoading={opsOverviewQuery.isLoading && !opsOverviewQuery.data}
+            pipelineJobs={opsPipelineQuery.data ?? []}
+            pipelineError={opsPipelineQuery.error}
+            pipelineLoading={opsPipelineQuery.isLoading && (opsPipelineQuery.data ?? []).length === 0}
+            dqChecks={opsDqLatestQuery.data ?? []}
+            dqError={opsDqLatestQuery.error}
+            dqLoading={opsDqLatestQuery.isLoading && (opsDqLatestQuery.data ?? []).length === 0}
           />
+        ) : null}
 
-          <IntradayLatestRecordsCard
-            records={intradayLatestRecords}
-            isLoading={isLatestRecordsLoading && !intradayLatestRecords}
-            error={intradayLatestRecordsError}
+        {activeTab === 'sinais' ? (
+          <SinaisTab
+            signalsNext={opsSignalsNextQuery.data ?? []}
+            signalsNextError={opsSignalsNextQuery.error}
+            signalsNextLoading={opsSignalsNextQuery.isLoading && (opsSignalsNextQuery.data ?? []).length === 0}
+            signalsHistory={signalsHistoryData}
+            signalsHistoryError={opsSignalsHistoryQuery.error}
+            signalsHistoryLoading={signalsHistoryLoading}
+            historyFilters={signalsHistoryFilters}
+            onHistoryFiltersChange={setSignalsHistoryFilters}
           />
+        ) : null}
 
-          <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems={{ xs: 'stretch', md: 'center' }}>
-            <FormControl sx={{ minWidth: { xs: '100%', md: 200 } }} size="small">
-              <InputLabel id="severity-select-label">Severidade</InputLabel>
-              <Select
-                labelId="severity-select-label"
-                label="Severidade"
-                value={selectedSeverity}
-                onChange={(event) => setSelectedSeverity(event.target.value as typeof selectedSeverity)}
-              >
-                {severityOptions.map((option) => (
-                  <MenuItem key={option} value={option}>
-                    {option === 'all' ? 'Todas' : option}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-
-            <TextField
-              size="small"
-              label="Buscar por coletor, dataset ou mensagem"
-              value={searchTerm}
-              onChange={(event) => setSearchTerm(event.target.value)}
-              fullWidth
-            />
-          </Stack>
-
-          {error ? (
-            <Alert severity="error">
-              Não foi possível carregar as mensagens. Verifique se a API do backend está disponível e tente novamente.
-            </Alert>
-          ) : null}
-
-          <DataCollectionMessagesTable messages={filteredMessages} />
-        </Stack>
+        {activeTab === 'incidentes' ? (
+          <IncidentesTab
+            incidents={opsIncidentsOpenQuery.data ?? []}
+            incidentsError={opsIncidentsOpenQuery.error}
+            incidentsLoading={opsIncidentsOpenQuery.isLoading && (opsIncidentsOpenQuery.data ?? []).length === 0}
+          />
+        ) : null}
       </Container>
     </Box>
   )
 }
 
 export default App
-
