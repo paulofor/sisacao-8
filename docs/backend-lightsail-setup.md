@@ -197,7 +197,7 @@ O endereço IP (`34.194.252.70`) e o usuário SSH (`deploy`) já estão versiona
 
 ### 10.3 Workflow de deploy automático
 
-O workflow `Deploy backend to Lightsail` já está versionado no repositório em `.github/workflows/deploy-lightsail.yml`. Ele executa os seguintes passos sempre que houver push na branch `master` ou quando disparado manualmente via **workflow_dispatch**:
+O workflow `Deploy backend to Lightsail` já está versionado no repositório em `.github/workflows/deploy-lightsail.yml`. Ele executa os seguintes passos sempre que houver push na branch `main` ou quando disparado manualmente via **workflow_dispatch**:
 
 1. Faz o checkout do código.
 2. Provisiona o Java 21 com o `actions/setup-java`.

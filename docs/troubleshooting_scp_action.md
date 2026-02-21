@@ -48,7 +48,7 @@ O segundo erro (`dial tcp ...:22: i/o timeout`) acontece quando o GitHub Actions
 
 ## 5. Re-execute o workflow
 
-Depois de ajustar as credenciais e validar o acesso, execute novamente o workflow `Deploy backend to Lightsail` via `workflow_dispatch` ou realizando um novo push na branch `master`.
+Depois de ajustar as credenciais e validar o acesso, execute novamente o workflow `Deploy backend to Lightsail` via `workflow_dispatch` ou realizando um novo push na branch `main`.
 
 Se ainda houver falhas, habilite o modo debug do action adicionando `debug: true` ao passo do `appleboy/scp-action` para obter mais detalhes.
 
