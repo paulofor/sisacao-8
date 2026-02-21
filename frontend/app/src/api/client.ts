@@ -8,7 +8,7 @@ const baseURLCandidates = Array.from(
   new Set(
     configuredBaseURL && configuredBaseURL.length > 0
       ? [configuredBaseURL, DEFAULT_BASE_URL]
-      : [DEFAULT_BASE_URL, '/api'],
+      : [DEFAULT_BASE_URL],
   ),
 )
 
