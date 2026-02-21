@@ -36,10 +36,10 @@ do pipeline (`/ops/*`), sinais do próximo pregão e incidentes em aberto — tu
 ## Variáveis de ambiente
 
 - `VITE_API_BASE_URL` — base dos endpoints REST.
-  - **Padrão dev:** `http://localhost:8080`.
-  - **Produção/reverse-proxy:** `/api`.
-- A aplicação também considera `import.meta.env.PROD` para alternar entre `/api` e `http://localhost:8080` automaticamente quando a
-  variável não está setada.
+  - **Padrão (recomendado):** vazio (`""`), usando o backend no mesmo host do frontend (`/ops/*` e `/data-collections/*`).
+  - **Ambiente local separado:** definir `VITE_API_BASE_URL=http://localhost:8080`.
+  - **Produção com reverse-proxy em `/api`:** definir `VITE_API_BASE_URL=/api`.
+- Quando `VITE_API_BASE_URL` não está definida, a aplicação usa base vazia (`""`) por padrão.
 
 ## Depurando chamadas HTTP
 
