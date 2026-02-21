@@ -1,6 +1,6 @@
 import axios from 'axios'
 
-const DEFAULT_BASE_URL = import.meta.env.PROD ? '' : 'http://localhost:8080'
+const DEFAULT_BASE_URL = ''
 
 const baseURL =
   (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? DEFAULT_BASE_URL
