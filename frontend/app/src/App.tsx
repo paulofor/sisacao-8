@@ -134,7 +134,12 @@ function App() {
 
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
-      <AppBar position="sticky" color="transparent" elevation={0} sx={{ borderBottom: '1px solid', borderColor: 'divider' }}>
+      <AppBar
+        position="sticky"
+        color="inherit"
+        elevation={0}
+        sx={{ borderBottom: '1px solid', borderColor: 'divider', backgroundColor: 'background.paper' }}
+      >
         <Toolbar sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
           <Typography variant="h6" color="text.primary" sx={{ flexGrow: 1 }}>
             Painel Operacional — Sisacao-8
@@ -152,20 +157,22 @@ function App() {
             Atualizar
           </Button>
         </Toolbar>
-        <Tabs
-          value={activeTab}
-          onChange={handleTabChange}
-          variant="scrollable"
-          allowScrollButtonsMobile
-          textColor="primary"
-          indicatorColor="primary"
-          sx={{ px: 2 }}
-        >
-          <Tab label="Coletas" value="coletas" />
-          <Tab label="Operação" value="operacao" />
-          <Tab label="Sinais" value="sinais" />
-          <Tab label="Incidentes" value="incidentes" />
-        </Tabs>
+        <Box sx={{ borderTop: '1px solid', borderColor: 'divider', px: 2 }}>
+          <Tabs
+            value={activeTab}
+            onChange={handleTabChange}
+            variant="scrollable"
+            allowScrollButtonsMobile
+            textColor="primary"
+            indicatorColor="primary"
+            aria-label="Abas principais do painel"
+          >
+            <Tab label="Coletas" value="coletas" />
+            <Tab label="Operação" value="operacao" />
+            <Tab label="Sinais" value="sinais" />
+            <Tab label="Incidentes" value="incidentes" />
+          </Tabs>
+        </Box>
         {isTabLoading || isRefreshing ? <LinearProgress color="primary" /> : null}
       </AppBar>
 
