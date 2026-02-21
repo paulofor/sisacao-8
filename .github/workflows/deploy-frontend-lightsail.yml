@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - master
+      - main
     paths:
       - 'frontend/**'
       - '.github/workflows/deploy-frontend-lightsail.yml'
@@ -36,7 +37,7 @@ jobs:
           port: 22
           script: |
             set -euo pipefail
-            mkdir -p /home/deploy/sisacao/frontend
+            mkdir -p /home/deploy/sisacao
           timeout: 60s
           command_timeout: 30m
 
@@ -66,8 +67,8 @@ jobs:
           username: deploy
           key: ${{ secrets.KEY }}
           port: 22
-          source: frontend/app/dist/**
-          target: /home/deploy/sisacao/frontend
+          source: frontend/app/dist
+          target: /home/deploy/sisacao
           strip_components: 2
           overwrite: true
           timeout: 120s
@@ -85,13 +86,13 @@ jobs:
             sudo install -d -o deploy -g deploy /opt/sisacao/app
             sudo install -d -o deploy -g deploy /opt/sisacao/tmp
 
-            if [ ! -d /home/deploy/sisacao/frontend/dist ]; then
-              echo "Artefato do frontend não encontrado em /home/deploy/sisacao/frontend/dist" >&2
+            if [ ! -d /home/deploy/sisacao/dist ]; then
+              echo "Artefato do frontend não encontrado em /home/deploy/sisacao/dist" >&2
               exit 1
             fi
 
             rm -rf /home/deploy/sisacao/frontend_new || true
-            mv /home/deploy/sisacao/frontend/dist /home/deploy/sisacao/frontend_new
+            mv /home/deploy/sisacao/dist /home/deploy/sisacao/frontend_new
 
             timestamp=$(date +%Y%m%d%H%M%S)
             if [ -d /opt/sisacao/app/frontend ]; then
@@ -100,7 +101,6 @@ jobs:
 
             sudo mv /home/deploy/sisacao/frontend_new /opt/sisacao/app/frontend
 
-            rm -rf /home/deploy/sisacao/frontend || true
             rm -rf /opt/sisacao/tmp/frontend_${timestamp} || true
           timeout: 60s
           command_timeout: 30m
