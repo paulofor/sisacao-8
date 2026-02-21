@@ -37,8 +37,9 @@ do pipeline (`/ops/*`), sinais do próximo pregão e incidentes em aberto — tu
 
 - `VITE_API_BASE_URL` — base dos endpoints REST.
   - **Padrão dev:** `http://localhost:8080`.
-  - **Produção/reverse-proxy:** `/api`.
-- A aplicação também considera `import.meta.env.PROD` para alternar entre `/api` e `http://localhost:8080` automaticamente quando a
+  - **Produção (mesma origem):** vazio (`""`), usando rotas do backend em `/ops/*` e `/data-collections/*`.
+  - **Produção com reverse-proxy em `/api`:** definir `VITE_API_BASE_URL=/api`.
+- A aplicação também considera `import.meta.env.PROD` para alternar automaticamente entre `http://localhost:8080` (dev) e base vazia `""` (produção, mesma origem) quando a
   variável não está setada.
 
 ## Depurando chamadas HTTP
