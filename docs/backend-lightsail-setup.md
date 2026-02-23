@@ -95,6 +95,11 @@ GCP_REGION=us-central1
 SPRING_PROFILES_ACTIVE=prod
 ```
 
+> **Dica:** se não puder manter o arquivo físico indicado em `GOOGLE_APPLICATION_CREDENTIALS`,
+> defina `GCP_SERVICE_ACCOUNT_JSON` com o conteúdo bruto (multi-linha) ou use
+> `GCP_SERVICE_ACCOUNT_JSON_BASE64` para enviar o arquivo codificado. O backend tentará
+> nessa ordem: JSON bruto, Base64 e caminho do arquivo.
+
 Garanta que o arquivo seja acessível apenas pelo usuário da aplicação (`chmod 600`).
 
 ## 7. Build e empacotamento
