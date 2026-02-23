@@ -3,6 +3,7 @@ package com.sisacao.backend.datacollection;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.cloud.bigquery.BigQuery;
 import com.google.cloud.bigquery.BigQueryOptions;
+import com.sisacao.backend.gcp.GcpCredentialsProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -14,11 +15,13 @@ public class DataCollectionConfiguration {
 
     @Bean
     @ConditionalOnProperty(prefix = "sisacao.data-collection.bigquery", name = "enabled", havingValue = "true")
-    public BigQuery bigQuery(DataCollectionBigQueryProperties properties) {
+    public BigQuery bigQuery(
+            DataCollectionBigQueryProperties properties, GcpCredentialsProvider credentialsProvider) {
         BigQueryOptions.Builder builder = BigQueryOptions.newBuilder();
         if (properties.getProjectId() != null && !properties.getProjectId().isBlank()) {
             builder.setProjectId(properties.getProjectId());
         }
+        credentialsProvider.getCredentials().ifPresent(builder::setCredentials);
         return builder.build().getService();
     }
 
