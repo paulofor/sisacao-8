@@ -22,9 +22,11 @@ import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -37,10 +39,13 @@ public class BigQueryCollectionMessageClient {
     private static final Logger LOGGER = LoggerFactory.getLogger(BigQueryCollectionMessageClient.class);
 
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
+    private static final List<String> ORDER_COLUMN_CANDIDATES =
+            List.of("created_at", "createdAt", "timestamp", "event_timestamp", "eventTimestamp", "inserted_at", "insertedAt");
 
     private final BigQuery bigQuery;
     private final ObjectMapper objectMapper;
     private final DataCollectionBigQueryProperties properties;
+    private volatile String resolvedOrderColumn;
 
     public BigQueryCollectionMessageClient(
             BigQuery bigQuery, ObjectMapper objectMapper, DataCollectionBigQueryProperties properties) {
@@ -51,35 +56,97 @@ public class BigQueryCollectionMessageClient {
 
     public List<PythonDataCollectionClient.PythonMessage> fetchMessages() {
         String qualifiedTable = buildQualifiedTableName();
-        String query =
-                "SELECT * FROM "
-                        + qualifiedTable
-                        + " ORDER BY created_at DESC, createdAt DESC, timestamp DESC LIMIT @limit";
+        List<String> orderColumns = buildOrderPreferenceList();
+        BigQueryException lastMissingColumnException = null;
 
-        QueryJobConfiguration configuration =
-                QueryJobConfiguration.newBuilder(query)
-                        .addNamedParameter("limit", QueryParameterValue.int64(properties.getMaxRows()))
-                        .setUseLegacySql(false)
-                        .build();
+        for (String orderColumn : orderColumns) {
+            String query = buildMessageQuery(qualifiedTable, orderColumn);
+            QueryJobConfiguration configuration =
+                    QueryJobConfiguration.newBuilder(query)
+                            .addNamedParameter("limit", QueryParameterValue.int64(properties.getMaxRows()))
+                            .setUseLegacySql(false)
+                            .build();
 
-        try {
-            TableResult result = bigQuery.query(configuration);
-            Schema schema = result.getSchema();
-            FieldList fields = schema != null ? schema.getFields() : FieldList.of();
-            Map<String, Field> fieldIndex = indexFields(fields);
-
-            List<PythonDataCollectionClient.PythonMessage> messages = new ArrayList<>();
-            for (FieldValueList row : result.iterateAll()) {
-                messages.add(toMessage(row, fieldIndex));
+            try {
+                TableResult result = bigQuery.query(configuration);
+                if (orderColumn != null && !orderColumn.equals(resolvedOrderColumn)) {
+                    resolvedOrderColumn = orderColumn;
+                }
+                List<PythonDataCollectionClient.PythonMessage> messages = mapMessages(result);
+                LOGGER.debug(
+                        "Retrieved {} collection messages from BigQuery ordering by {}",
+                        messages.size(),
+                        orderColumn);
+                return messages;
+            } catch (BigQueryException ex) {
+                if (orderColumn != null && isMissingColumnException(ex, orderColumn)) {
+                    lastMissingColumnException = ex;
+                    LOGGER.debug(
+                            "Column '{}' not found in {}. Trying next fallback column.",
+                            orderColumn,
+                            qualifiedTable);
+                    if (Objects.equals(resolvedOrderColumn, orderColumn)) {
+                        resolvedOrderColumn = null;
+                    }
+                    continue;
+                }
+                throw new IllegalStateException("Failed to query BigQuery for data collection messages", ex);
+            } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException(
+                        "Interrupted while querying BigQuery for data collection messages", ex);
             }
-            LOGGER.debug("Retrieved {} collection messages from BigQuery", messages.size());
-            return messages;
-        } catch (BigQueryException ex) {
-            throw new IllegalStateException("Failed to query BigQuery for data collection messages", ex);
-        } catch (InterruptedException ex) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("Interrupted while querying BigQuery for data collection messages", ex);
         }
+
+        throw new IllegalStateException(
+                String.format(
+                        "None of the configured timestamp columns %s were found in table %s",
+                        ORDER_COLUMN_CANDIDATES,
+                        qualifiedTable),
+                lastMissingColumnException);
+    }
+
+    private List<String> buildOrderPreferenceList() {
+        LinkedHashSet<String> preference = new LinkedHashSet<>();
+        if (resolvedOrderColumn != null && !resolvedOrderColumn.isBlank()) {
+            preference.add(resolvedOrderColumn);
+        }
+        preference.addAll(ORDER_COLUMN_CANDIDATES);
+        return new ArrayList<>(preference);
+    }
+
+    private String buildMessageQuery(String qualifiedTable, String orderColumn) {
+        StringBuilder builder = new StringBuilder("SELECT * FROM ").append(qualifiedTable);
+        if (orderColumn != null && !orderColumn.isBlank()) {
+            builder.append(" ORDER BY ").append(orderColumn).append(" DESC");
+        }
+        builder.append(" LIMIT @limit");
+        return builder.toString();
+    }
+
+    private List<PythonDataCollectionClient.PythonMessage> mapMessages(TableResult result) {
+        Schema schema = result.getSchema();
+        FieldList fields = schema != null ? schema.getFields() : FieldList.of();
+        Map<String, Field> fieldIndex = indexFields(fields);
+
+        List<PythonDataCollectionClient.PythonMessage> messages = new ArrayList<>();
+        for (FieldValueList row : result.iterateAll()) {
+            messages.add(toMessage(row, fieldIndex));
+        }
+        return messages;
+    }
+
+    private boolean isMissingColumnException(BigQueryException ex, String column) {
+        if (ex == null || column == null || column.isBlank()) {
+            return false;
+        }
+        String message = ex.getMessage();
+        if (message == null) {
+            return false;
+        }
+        String normalizedMessage = message.toLowerCase(Locale.ROOT);
+        return normalizedMessage.contains("unrecognized name")
+                && normalizedMessage.contains(column.toLowerCase(Locale.ROOT));
     }
 
     private String buildQualifiedTableName() {
