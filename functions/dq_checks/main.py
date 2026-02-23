@@ -12,7 +12,28 @@ from typing import Any, Dict, Iterable, List, Sequence
 try:
     from zoneinfo import ZoneInfo
 except ModuleNotFoundError:  # pragma: no cover - fallback for Python 3.8
-    from backports.zoneinfo import ZoneInfo  # type: ignore[assignment]
+    try:
+        from backports.zoneinfo import ZoneInfo  # type: ignore[assignment]
+    except ModuleNotFoundError:  # pragma: no cover - defensive fallback
+
+        class ZoneInfo(dt.tzinfo):
+            """Fallback timezone implementation for fixed UTC offsets."""
+
+            def __init__(self, key: str) -> None:
+                if key != "America/Sao_Paulo":
+                    msg = f"Timezone support unavailable for name: {key}"
+                    raise ModuleNotFoundError(msg)
+                self.key = key
+                self._offset = dt.timedelta(hours=-3)
+
+            def utcoffset(self, value: dt.datetime | None) -> dt.timedelta:
+                return self._offset
+
+            def dst(self, value: dt.datetime | None) -> dt.timedelta:
+                return dt.timedelta(0)
+
+            def tzname(self, value: dt.datetime | None) -> str:
+                return self.key
 
 from google.cloud import bigquery  # type: ignore[import-untyped]
 
