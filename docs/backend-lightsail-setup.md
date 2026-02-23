@@ -142,6 +142,35 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now sisacao-backend.service
 ```
 
+### 8.1 Validar carregamento do `.env` no service
+
+Depois de subir/reiniciar o backend, confirme se o `systemd` está carregando o
+arquivo `/opt/sisacao/app/.env` e expondo as variáveis esperadas (por exemplo,
+`GOOGLE_APPLICATION_CREDENTIALS`):
+
+```bash
+sudo systemctl cat sisacao-backend.service
+sudo systemctl show sisacao-backend.service -p EnvironmentFiles -p Environment --no-pager
+```
+
+Se o comando mostrar somente `Environment=JAVA_HOME=...`, significa que o
+`EnvironmentFile` não está sendo aplicado. Nesse caso:
+
+1. Confirme que `/etc/systemd/system/sisacao-backend.service` contém a linha
+   `EnvironmentFile=/opt/sisacao/app/.env`.
+2. Garanta que o arquivo existe e é legível pelo usuário do serviço:
+
+   ```bash
+   sudo -u sisacao test -r /opt/sisacao/app/.env && echo OK || echo FALHOU
+   ```
+
+3. Recarregue as units e reinicie o backend:
+
+   ```bash
+   sudo systemctl daemon-reload
+   sudo systemctl restart sisacao-backend.service
+   ```
+
 ## 9. Observabilidade e logs
 
 - Utilize `journalctl -u sisacao-backend -f` para acompanhar logs em tempo real.
