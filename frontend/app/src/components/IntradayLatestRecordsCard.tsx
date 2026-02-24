@@ -36,7 +36,13 @@ const formatPrice = (price?: number | null): string => {
 
 const formatCapturedAt = (record: IntradayLatestRecord): string => {
   if (record.capturedAt) {
-    return dayjs(record.capturedAt).format('DD/MM/YYYY HH:mm:ss')
+    const normalizedValue = record.capturedAt.trim().replace(' ', 'T')
+    const timestampWithoutOffset = normalizedValue.replace(/(?:[zZ]|[+-]\d{2}:?\d{2})$/, '')
+    const parsed = dayjs(timestampWithoutOffset)
+
+    if (parsed.isValid()) {
+      return parsed.format('DD/MM/YYYY HH:mm:ss')
+    }
   }
 
   const date = record.tradeDate?.trim()
