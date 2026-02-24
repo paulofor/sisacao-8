@@ -1,4 +1,6 @@
 pandas
+db-dtypes
+pandas-gbq>=0.26.1
 google-cloud-bigquery>=3.12
 google-cloud-storage
 pyarrow

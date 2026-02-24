@@ -61,6 +61,7 @@ FECHAMENTO_TABLE_ID = os.environ.get("BQ_DAILY_TABLE", "cotacao_ohlcv_diario")
 FERIADOS_TABLE_ID = os.environ.get("BQ_HOLIDAYS_TABLE", "feriados_b3")
 FONTE_FECHAMENTO = "B3_DAILY_COTAHIST"
 LOAD_STRATEGY = os.environ.get("BQ_DAILY_LOAD_STRATEGY", "MERGE")
+BQ_LOCATION = os.environ.get("BQ_LOCATION", os.environ.get("GCP_REGION", "us-central1"))
 JOB_NAME = os.environ.get("JOB_NAME", "get_stock_data")
 PIPELINE_CONFIG_TABLE_ID = os.environ.get("PIPELINE_CONFIG_TABLE", "pipeline_config")
 PIPELINE_CONFIG_ID = os.environ.get("PIPELINE_CONFIG_ID", "default")
@@ -80,6 +81,15 @@ client = bigquery.Client()
 class IngestionConfig:
     config_version: str
     allow_offline_fallback: bool
+
+
+def _query_with_location(query: str, **kwargs: Any) -> Any:
+    """Execute query using configured location when supported by the client."""
+
+    try:
+        return client.query(query, location=BQ_LOCATION, **kwargs)
+    except TypeError:
+        return client.query(query, **kwargs)
 
 
 def _project_id() -> str:
@@ -479,7 +489,7 @@ def append_dataframe_to_bigquery(data: Any, reference_date: datetime.date) -> No
     strategy = LOAD_STRATEGY.strip().upper()
     if strategy == "DELETE_PARTITION_APPEND":
         try:
-            client.query(delete_query, job_config=job_config).result()
+            _query_with_location(delete_query, job_config=job_config).result()
             logging.warning(
                 "Partição de %s limpa antes da nova inserção.", reference_date
             )
@@ -508,8 +518,14 @@ def append_dataframe_to_bigquery(data: Any, reference_date: datetime.date) -> No
         ]
         try:
             expected_schema = client.get_table(tabela_id).schema
-        except Exception:  # noqa: BLE001
-            expected_schema = fallback_schema
+        except Exception as exc:  # noqa: BLE001
+            if exc.__class__.__name__ == "NotFound":
+                table = bigquery.Table(tabela_id, schema=fallback_schema)
+                client.create_table(table)
+                expected_schema = fallback_schema
+                logging.warning("Tabela %s criada automaticamente.", tabela_id)
+            else:
+                expected_schema = fallback_schema
         load_config = bigquery.LoadJobConfig(
             schema=expected_schema,
             write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
@@ -527,16 +543,36 @@ def append_dataframe_to_bigquery(data: Any, reference_date: datetime.date) -> No
                 df["atualizado_em"] = pd.to_datetime(
                     df["atualizado_em"]
                 ).dt.tz_localize(None)
-            job = client.load_table_from_dataframe(
-                df, target_table_id, job_config=load_config
-            )
+            try:
+                job = client.load_table_from_dataframe(
+                    df,
+                    target_table_id,
+                    job_config=load_config,
+                    location=BQ_LOCATION,
+                )
+            except TypeError:
+                job = client.load_table_from_dataframe(
+                    df,
+                    target_table_id,
+                    job_config=load_config,
+                )
             inserted_rows = len(df)
         else:
             rows = list(data) if not isinstance(data, list) else data
             normalized_rows = _normalize_rows(rows)
-            job = client.load_table_from_json(
-                normalized_rows, target_table_id, job_config=load_config
-            )
+            try:
+                job = client.load_table_from_json(
+                    normalized_rows,
+                    target_table_id,
+                    job_config=load_config,
+                    location=BQ_LOCATION,
+                )
+            except TypeError:
+                job = client.load_table_from_json(
+                    normalized_rows,
+                    target_table_id,
+                    job_config=load_config,
+                )
             inserted_rows = len(normalized_rows)
         job.result()
         if strategy == "MERGE":
@@ -587,7 +623,7 @@ def append_dataframe_to_bigquery(data: Any, reference_date: datetime.date) -> No
               source.fator_cotacao
             )
             """
-            client.query(merge_sql).result()
+            _query_with_location(merge_sql).result()
             logging.warning("MERGE concluído com chave lógica (ticker, data_pregao).")
         logging.warning("Dados inseridos com sucesso (%s linhas).", inserted_rows)
     except Exception as exc:  # noqa: BLE001
@@ -611,17 +647,7 @@ def is_b3_holiday(reference_date: datetime.date) -> bool:
         "LIMIT 1"
     )
     try:
-        query_job = client.query(query)
-        if pd is not None:
-            df = query_job.to_dataframe()
-            if "data_feriado" not in df.columns:
-                logging.warning(
-                    "Consulta de feriados retornou colunas inesperadas (%s). "
-                    "Ignorando validação de feriado.",
-                    list(df.columns),
-                )
-                return False
-            return not df.empty
+        query_job = _query_with_location(query)
         rows = list(query_job.result())
         return len(rows) > 0
     except Exception as exc:  # noqa: BLE001
