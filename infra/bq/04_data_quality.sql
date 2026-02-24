@@ -1,6 +1,6 @@
 -- Tabelas utilizadas pela função dq_checks para persistir resultados.
 
-CREATE TABLE IF NOT EXISTS `@@PROJECT_ID@@.cotacao_intraday.dq_checks_daily`
+CREATE TABLE IF NOT EXISTS `ingestaokraken.cotacao_intraday.dq_checks_daily`
 (
   check_date DATE NOT NULL,
   check_name STRING NOT NULL,
@@ -19,7 +19,7 @@ OPTIONS (
   description = "Resultados diários dos data-quality checks"
 );
 
-CREATE TABLE IF NOT EXISTS `@@PROJECT_ID@@.cotacao_intraday.dq_incidents`
+CREATE TABLE IF NOT EXISTS `ingestaokraken.cotacao_intraday.dq_incidents`
 (
   incident_id STRING NOT NULL,
   check_name STRING NOT NULL,

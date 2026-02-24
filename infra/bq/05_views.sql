@@ -1,6 +1,6 @@
 -- Views operacionais para monitorar o pipeline.
 
-CREATE OR REPLACE VIEW `@@PROJECT_ID@@.cotacao_intraday.vw_pipeline_status` AS
+CREATE OR REPLACE VIEW `ingestaokraken.cotacao_intraday.vw_pipeline_status` AS
 WITH daily AS (
   SELECT
     'cotacao_ohlcv_diario' AS component,
@@ -8,7 +8,7 @@ WITH daily AS (
     MAX(atualizado_em) AS last_timestamp,
     COUNTIF(data_pregao = CURRENT_DATE('America/Sao_Paulo')) AS rows_today,
     CONCAT('Último pregão: ', FORMAT_DATE('%Y-%m-%d', MAX(data_pregao))) AS notes
-  FROM `@@PROJECT_ID@@.cotacao_intraday.cotacao_ohlcv_diario`
+  FROM `ingestaokraken.cotacao_intraday.cotacao_ohlcv_diario`
 ),
 intraday AS (
   SELECT
@@ -17,7 +17,7 @@ intraday AS (
     DATETIME(MAX(data_hora_atual)) AS last_timestamp,
     COUNTIF(data = CURRENT_DATE('America/Sao_Paulo')) AS rows_today,
     CONCAT('Última hora registrada: ', CAST(MAX(hora) AS STRING)) AS notes
-  FROM `@@PROJECT_ID@@.cotacao_intraday.cotacao_b3`
+  FROM `ingestaokraken.cotacao_intraday.cotacao_b3`
 ),
 signals AS (
   SELECT
@@ -26,7 +26,7 @@ signals AS (
     MAX(created_at) AS last_timestamp,
     COUNTIF(date_ref = CURRENT_DATE('America/Sao_Paulo')) AS rows_today,
     CONCAT('Válidos para: ', FORMAT_DATE('%Y-%m-%d', MAX(valid_for))) AS notes
-  FROM `@@PROJECT_ID@@.cotacao_intraday.sinais_eod`
+  FROM `ingestaokraken.cotacao_intraday.sinais_eod`
 ),
 backtest AS (
   SELECT
@@ -35,7 +35,7 @@ backtest AS (
     MAX(created_at) AS last_timestamp,
     COUNTIF(as_of_date = CURRENT_DATE('America/Sao_Paulo')) AS rows_today,
     CONCAT('Entradas avaliadas: ', CAST(SUM(signals) AS STRING)) AS notes
-  FROM `@@PROJECT_ID@@.cotacao_intraday.backtest_metrics`
+  FROM `ingestaokraken.cotacao_intraday.backtest_metrics`
 ),
 dq AS (
   SELECT
@@ -44,7 +44,7 @@ dq AS (
     MAX(created_at) AS last_timestamp,
     COUNTIF(status = 'FAIL' AND check_date = CURRENT_DATE('America/Sao_Paulo')) AS rows_today,
     CONCAT('Último status: ', ANY_VALUE(status)) AS notes
-  FROM `@@PROJECT_ID@@.cotacao_intraday.dq_checks_daily`
+  FROM `ingestaokraken.cotacao_intraday.dq_checks_daily`
 )
 SELECT * FROM daily
 UNION ALL SELECT * FROM intraday
@@ -52,7 +52,7 @@ UNION ALL SELECT * FROM signals
 UNION ALL SELECT * FROM backtest
 UNION ALL SELECT * FROM dq;
 
-CREATE OR REPLACE VIEW `@@PROJECT_ID@@.cotacao_intraday.mv_indicadores` AS
+CREATE OR REPLACE VIEW `ingestaokraken.cotacao_intraday.mv_indicadores` AS
 WITH base AS (
   SELECT
     ticker,
@@ -61,7 +61,7 @@ WITH base AS (
     high AS px_high,
     low AS px_low,
     LAG(close) OVER (PARTITION BY ticker ORDER BY data_pregao) AS px_prev
-  FROM `@@PROJECT_ID@@.cotacao_intraday.cotacao_ohlcv_diario`
+  FROM `ingestaokraken.cotacao_intraday.cotacao_ohlcv_diario`
 ),
 bb AS (
   SELECT

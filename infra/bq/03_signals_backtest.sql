@@ -1,6 +1,6 @@
 -- Estruturas analíticas (sinais e backtest determinístico).
 
-CREATE TABLE IF NOT EXISTS `@@PROJECT_ID@@.cotacao_intraday.sinais_eod`
+CREATE TABLE IF NOT EXISTS `ingestaokraken.cotacao_intraday.sinais_eod`
 (
   date_ref DATE NOT NULL,
   valid_for DATE NOT NULL,
@@ -32,7 +32,7 @@ OPTIONS (
   description = "Sinais condicionais gerados no pós-fechamento"
 );
 
-CREATE TABLE IF NOT EXISTS `@@PROJECT_ID@@.cotacao_intraday.backtest_trades`
+CREATE TABLE IF NOT EXISTS `ingestaokraken.cotacao_intraday.backtest_trades`
 (
   date_ref DATE NOT NULL,
   valid_for DATE NOT NULL,
@@ -59,7 +59,7 @@ OPTIONS (
   description = "Trades simulados pelo backtest diário"
 );
 
-CREATE TABLE IF NOT EXISTS `@@PROJECT_ID@@.cotacao_intraday.backtest_metrics`
+CREATE TABLE IF NOT EXISTS `ingestaokraken.cotacao_intraday.backtest_metrics`
 (
   as_of_date DATE NOT NULL,
   ticker STRING,

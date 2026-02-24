@@ -1,6 +1,6 @@
 -- Tabelas de ingestão e consolidação de preços (intraday + diário).
 
-CREATE TABLE IF NOT EXISTS `@@PROJECT_ID@@.cotacao_intraday.cotacao_b3`
+CREATE TABLE IF NOT EXISTS `ingestaokraken.cotacao_intraday.cotacao_b3`
 (
   ticker STRING NOT NULL,
   data DATE NOT NULL,
@@ -18,7 +18,7 @@ OPTIONS (
   description = "Coletas intraday vindas do Google Finance"
 );
 
-CREATE TABLE IF NOT EXISTS `@@PROJECT_ID@@.cotacao_intraday.cotacao_ohlcv_diario`
+CREATE TABLE IF NOT EXISTS `ingestaokraken.cotacao_intraday.cotacao_ohlcv_diario`
 (
   ticker STRING NOT NULL,
   data_pregao DATE NOT NULL,
@@ -41,7 +41,7 @@ OPTIONS (
   description = "Candles diários ingeridos via arquivo oficial da B3"
 );
 
-CREATE TABLE IF NOT EXISTS `@@PROJECT_ID@@.cotacao_intraday.candles_intraday_15m`
+CREATE TABLE IF NOT EXISTS `ingestaokraken.cotacao_intraday.candles_intraday_15m`
 (
   ticker STRING NOT NULL,
   candle_datetime DATETIME NOT NULL,
@@ -64,7 +64,7 @@ OPTIONS (
   description = "Candles intraday agregados em janelas de 15 minutos"
 );
 
-CREATE TABLE IF NOT EXISTS `@@PROJECT_ID@@.cotacao_intraday.candles_intraday_1h`
+CREATE TABLE IF NOT EXISTS `ingestaokraken.cotacao_intraday.candles_intraday_1h`
 (
   ticker STRING NOT NULL,
   candle_datetime DATETIME NOT NULL,
