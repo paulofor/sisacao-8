@@ -26,6 +26,7 @@ done
 | `03_signals_backtest.sql` | Estruturas analíticas (`sinais_eod`, `backtest_trades`, `backtest_metrics`). |
 | `04_data_quality.sql` | Tabelas `dq_checks_daily` e `dq_incidents` com versionamento de configuração. |
 | `05_views.sql` | Views operacionais (`vw_pipeline_status`, `mv_indicadores`). |
+| `06_schema_snapshot.sql` | Script SQL para inventariar tabelas existentes e estrutura atual (metadados, partição, cluster e colunas), com validação de dataset/região. |
 | `views_ops.sql` | Views da Ops API (`vw_ops_*`) com overview, pipeline, DQ, sinais e incidentes. |
 
 Os scripts podem ser reaplicados sem efeitos colaterais graças ao uso de

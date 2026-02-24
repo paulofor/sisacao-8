@@ -1,9 +1,9 @@
 -- Views operacionais utilizadas pelo módulo Ops API.
 -- Substitua os placeholders abaixo antes de executar este script:
---   @@PROJECT_ID@@  → ID do projeto no GCP
+--   ingestaokraken  → ID do projeto no GCP
 --   @@OPS_DATASET@@ → dataset onde as views de operação ficarão armazenadas (ex.: monitoring, monitoring_dev)
 
-CREATE OR REPLACE VIEW `@@PROJECT_ID@@.@@OPS_DATASET@@.vw_ops_pipeline_status` AS
+CREATE OR REPLACE VIEW `ingestaokraken.@@OPS_DATASET@@.vw_ops_pipeline_status` AS
 WITH latest_runs AS (
   SELECT
     job_name,
@@ -16,12 +16,12 @@ WITH latest_runs AS (
       ORDER BY COALESCE(finished_at, updated_at, started_at) DESC
       LIMIT 1
     )[SAFE_OFFSET(0)] AS last_run
-  FROM `@@PROJECT_ID@@.@@OPS_DATASET@@.pipeline_runs`
+  FROM `ingestaokraken.@@OPS_DATASET@@.pipeline_runs`
   GROUP BY job_name
 ),
 config AS (
   SELECT *
-  FROM `@@PROJECT_ID@@.cotacao_intraday.pipeline_config`
+  FROM `ingestaokraken.cotacao_intraday.pipeline_config`
   QUALIFY ROW_NUMBER() OVER (ORDER BY created_at DESC) = 1
 ),
 thresholds AS (
@@ -59,19 +59,19 @@ FROM latest_runs
 LEFT JOIN thresholds USING (job_name)
 ORDER BY jobName;
 
-CREATE OR REPLACE VIEW `@@PROJECT_ID@@.@@OPS_DATASET@@.vw_ops_dq_latest` AS
+CREATE OR REPLACE VIEW `ingestaokraken.@@OPS_DATASET@@.vw_ops_dq_latest` AS
 SELECT
   check_date AS checkDate,
   check_name AS checkName,
   status,
   details,
   TIMESTAMP(created_at, 'America/Sao_Paulo') AS createdAt
-FROM `@@PROJECT_ID@@.cotacao_intraday.dq_checks_daily`
+FROM `ingestaokraken.cotacao_intraday.dq_checks_daily`
 WHERE check_date >= DATE_SUB(CURRENT_DATE('America/Sao_Paulo'), INTERVAL 7 DAY)
 ORDER BY createdAt DESC
 LIMIT 200;
 
-CREATE OR REPLACE VIEW `@@PROJECT_ID@@.@@OPS_DATASET@@.vw_ops_signals_history` AS
+CREATE OR REPLACE VIEW `ingestaokraken.@@OPS_DATASET@@.vw_ops_signals_history` AS
 SELECT
   date_ref AS dateRef,
   valid_for AS validFor,
@@ -83,14 +83,14 @@ SELECT
   score,
   rank,
   TIMESTAMP(created_at, 'America/Sao_Paulo') AS createdAt
-FROM `@@PROJECT_ID@@.cotacao_intraday.sinais_eod`
+FROM `ingestaokraken.cotacao_intraday.sinais_eod`
 WHERE date_ref >= DATE_SUB(CURRENT_DATE('America/Sao_Paulo'), INTERVAL 365 DAY)
 ORDER BY dateRef DESC, rank ASC;
 
-CREATE OR REPLACE VIEW `@@PROJECT_ID@@.@@OPS_DATASET@@.vw_ops_signals_next_session` AS
+CREATE OR REPLACE VIEW `ingestaokraken.@@OPS_DATASET@@.vw_ops_signals_next_session` AS
 WITH last_day AS (
   SELECT IFNULL(MAX(data_pregao), CURRENT_DATE('America/Sao_Paulo')) AS last_trading_day
-  FROM `@@PROJECT_ID@@.cotacao_intraday.cotacao_ohlcv_diario`
+  FROM `ingestaokraken.cotacao_intraday.cotacao_ohlcv_diario`
 ),
 next_day AS (
   SELECT MIN(candidate_day) AS next_trading_day
@@ -103,7 +103,7 @@ next_day AS (
         INTERVAL 1 DAY
       )
     ) AS day
-    LEFT JOIN `@@PROJECT_ID@@.cotacao_intraday.feriados_b3` f
+    LEFT JOIN `ingestaokraken.cotacao_intraday.feriados_b3` f
       ON f.data_feriado = day AND f.ativo
     WHERE day > (SELECT last_trading_day FROM last_day)
       AND EXTRACT(DAYOFWEEK FROM day) NOT IN (1, 7)
@@ -120,12 +120,12 @@ SELECT
   s.score,
   s.rank,
   TIMESTAMP(s.created_at, 'America/Sao_Paulo') AS createdAt
-FROM `@@PROJECT_ID@@.cotacao_intraday.sinais_eod` AS s
+FROM `ingestaokraken.cotacao_intraday.sinais_eod` AS s
 WHERE s.valid_for = (SELECT next_trading_day FROM next_day)
 ORDER BY s.rank ASC
 LIMIT 5;
 
-CREATE OR REPLACE VIEW `@@PROJECT_ID@@.@@OPS_DATASET@@.vw_ops_incidents_open` AS
+CREATE OR REPLACE VIEW `ingestaokraken.@@OPS_DATASET@@.vw_ops_incidents_open` AS
 SELECT
   incident_id AS incidentId,
   check_name AS checkName,
@@ -136,21 +136,21 @@ SELECT
   status,
   run_id AS runId,
   TIMESTAMP(created_at, 'America/Sao_Paulo') AS createdAt
-FROM `@@PROJECT_ID@@.cotacao_intraday.dq_incidents`
+FROM `ingestaokraken.cotacao_intraday.dq_incidents`
 WHERE status IN ('OPEN', 'INVESTIGATING') OR resolved_at IS NULL
 ORDER BY createdAt DESC
 LIMIT 200;
 
-CREATE OR REPLACE VIEW `@@PROJECT_ID@@.@@OPS_DATASET@@.vw_ops_overview` AS
+CREATE OR REPLACE VIEW `ingestaokraken.@@OPS_DATASET@@.vw_ops_overview` AS
 WITH pipeline AS (
-  SELECT * FROM `@@PROJECT_ID@@.@@OPS_DATASET@@.vw_ops_pipeline_status`
+  SELECT * FROM `ingestaokraken.@@OPS_DATASET@@.vw_ops_pipeline_status`
 ),
 dq AS (
-  SELECT * FROM `@@PROJECT_ID@@.@@OPS_DATASET@@.vw_ops_dq_latest`
+  SELECT * FROM `ingestaokraken.@@OPS_DATASET@@.vw_ops_dq_latest`
 ),
 last_day AS (
   SELECT IFNULL(MAX(data_pregao), CURRENT_DATE('America/Sao_Paulo')) AS last_trading_day
-  FROM `@@PROJECT_ID@@.cotacao_intraday.cotacao_ohlcv_diario`
+  FROM `ingestaokraken.cotacao_intraday.cotacao_ohlcv_diario`
 ),
 next_day AS (
   SELECT MIN(candidate_day) AS next_trading_day
@@ -163,7 +163,7 @@ next_day AS (
         INTERVAL 1 DAY
       )
     ) AS day
-    LEFT JOIN `@@PROJECT_ID@@.cotacao_intraday.feriados_b3` f
+    LEFT JOIN `ingestaokraken.cotacao_intraday.feriados_b3` f
       ON f.data_feriado = day AND f.ativo
     WHERE day > (SELECT last_trading_day FROM last_day)
       AND EXTRACT(DAYOFWEEK FROM day) NOT IN (1, 7)
@@ -174,7 +174,7 @@ signals AS (
   SELECT
     COUNT(*) AS total_signals,
     MAX(createdAt) AS last_created_at
-  FROM `@@PROJECT_ID@@.@@OPS_DATASET@@.vw_ops_signals_next_session`
+  FROM `ingestaokraken.@@OPS_DATASET@@.vw_ops_signals_next_session`
 ),
 pipeline_health AS (
   SELECT

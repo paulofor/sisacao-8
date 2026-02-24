@@ -1,6 +1,6 @@
 -- Tabelas de configuração (tickers, parâmetros e feriados da B3).
 
-CREATE TABLE IF NOT EXISTS `@@PROJECT_ID@@.cotacao_intraday.acao_bovespa`
+CREATE TABLE IF NOT EXISTS `ingestaokraken.cotacao_intraday.acao_bovespa`
 (
   ticker STRING NOT NULL,
   nome STRING,
@@ -16,7 +16,7 @@ OPTIONS (
   description = "Tickers monitorados pelo Sisacao-8"
 );
 
-CREATE TABLE IF NOT EXISTS `@@PROJECT_ID@@.cotacao_intraday.parametros_estrategia`
+CREATE TABLE IF NOT EXISTS `ingestaokraken.cotacao_intraday.parametros_estrategia`
 (
   parametro_id STRING NOT NULL,
   estrategia STRING DEFAULT 'signals_eod',
@@ -34,7 +34,7 @@ OPTIONS (
   description = "Parâmetros versionados das estratégias de sinais"
 );
 
-MERGE `@@PROJECT_ID@@.cotacao_intraday.parametros_estrategia` target
+MERGE `ingestaokraken.cotacao_intraday.parametros_estrategia` target
 USING (
   SELECT
     'signals_v1' AS parametro_id,
@@ -83,7 +83,7 @@ WHEN NOT MATCHED THEN
     source.updated_by
   );
 
-CREATE TABLE IF NOT EXISTS `@@PROJECT_ID@@.cotacao_intraday.pipeline_config`
+CREATE TABLE IF NOT EXISTS `ingestaokraken.cotacao_intraday.pipeline_config`
 (
   config_id STRING NOT NULL,
   config_version STRING NOT NULL,
@@ -105,7 +105,7 @@ OPTIONS (
   description = "Configurações operacionais versionadas do pipeline"
 );
 
-MERGE `@@PROJECT_ID@@.cotacao_intraday.pipeline_config` target
+MERGE `ingestaokraken.cotacao_intraday.pipeline_config` target
 USING (
   SELECT
     'default' AS config_id,
@@ -169,7 +169,7 @@ WHEN NOT MATCHED THEN
     source.created_by
   );
 
-CREATE TABLE IF NOT EXISTS `@@PROJECT_ID@@.cotacao_intraday.feriados_b3`
+CREATE TABLE IF NOT EXISTS `ingestaokraken.cotacao_intraday.feriados_b3`
 (
   data_feriado DATE NOT NULL,
   nome_feriado STRING NOT NULL,
@@ -182,7 +182,7 @@ OPTIONS (
   description = "Calendário oficial da B3 utilizado para pausar os jobs"
 );
 
-MERGE `@@PROJECT_ID@@.cotacao_intraday.feriados_b3` target
+MERGE `ingestaokraken.cotacao_intraday.feriados_b3` target
 USING (
   SELECT DATE '2026-01-01' AS data_feriado, 'Confraternização Universal' AS nome_feriado UNION ALL
   SELECT DATE '2026-02-16', 'Carnaval' UNION ALL
