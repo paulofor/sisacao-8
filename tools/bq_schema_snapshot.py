@@ -15,7 +15,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-from typing import Iterable, List, Sequence
+from typing import List, Sequence
 
 from google.cloud import bigquery
 
@@ -81,7 +81,9 @@ def _build_table_snapshot(table: bigquery.table.Table) -> dict:
                 )
             ),
             "expiration_ms": (
-                table.time_partitioning.expiration_ms if table.time_partitioning else None
+                table.time_partitioning.expiration_ms
+                if table.time_partitioning
+                else None
             ),
         },
         "clustering_fields": table.clustering_fields,
@@ -98,8 +100,10 @@ def _render_markdown(summary: dict) -> str:
     lines.append(f"- Dataset: `{summary['dataset']}`")
     lines.append(f"- Tabelas encontradas: `{len(summary['tables'])}`")
     if summary["missing_tables"]:
+        missing = ", ".join(summary["missing_tables"])
         lines.append(
-            f"- Tabelas ausentes (solicitadas, mas não encontradas): `{', '.join(summary['missing_tables'])}`"
+            "- Tabelas ausentes "
+            f"(solicitadas, mas não encontradas): `{missing}`"
         )
     lines.append("")
 
@@ -177,7 +181,10 @@ def main() -> None:
 
     requested_tables = _parse_tables(args.tables, args.tables_file)
     dataset_tables = _list_dataset_tables(client, dataset_ref)
-    target_tables, missing_tables = _resolve_target_tables(requested_tables, dataset_tables)
+    target_tables, missing_tables = _resolve_target_tables(
+        requested_tables,
+        dataset_tables,
+    )
 
     snapshots: list[dict] = []
     for table_id in target_tables:
@@ -194,7 +201,10 @@ def main() -> None:
 
     output_json = Path(args.output_json)
     output_md = Path(args.output_md)
-    output_json.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    output_json.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
     output_md.write_text(_render_markdown(payload), encoding="utf-8")
 
     print(f"Snapshot gerado: {output_json}")
