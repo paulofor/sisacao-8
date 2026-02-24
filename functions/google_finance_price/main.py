@@ -17,7 +17,14 @@ try:
 except ModuleNotFoundError:  # pragma: no cover - optional dependency
     pd = None  # type: ignore[assignment]
 from google.cloud import bigquery  # type: ignore[import-untyped]
-from sisacao8.observability import StructuredLogger
+
+try:
+    from sisacao8.observability import StructuredLogger
+except ModuleNotFoundError:  # pragma: no cover - Cloud Run source deploy fallback
+    if __package__:
+        from .observability import StructuredLogger
+    else:
+        from observability import StructuredLogger
 
 try:
     from flask import Response as FlaskResponse  # type: ignore[import-untyped]
