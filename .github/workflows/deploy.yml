@@ -28,6 +28,7 @@ jobs:
             entry_point: generate_intraday_candles
             source: functions/intraday_candles
             service_account: sa-intraday-candles@ingestaokraken.iam.gserviceaccount.com
+            memory: 512Mi
             env: BQ_INTRADAY_DATASET=cotacao_intraday,BQ_INTRADAY_RAW_TABLE=cotacao_b3,BQ_INTRADAY_15M_TABLE=candles_intraday_15m,BQ_INTRADAY_1H_TABLE=candles_intraday_1h
           - name: eod_signals
             entry_point: generate_eod_signals
@@ -38,6 +39,7 @@ jobs:
             entry_point: backtest_daily
             source: functions/backtest_daily
             service_account: sa-backtest-daily@ingestaokraken.iam.gserviceaccount.com
+            memory: 512Mi
             env: BQ_INTRADAY_DATASET=cotacao_intraday,BQ_DAILY_TABLE=cotacao_ohlcv_diario,BQ_SIGNALS_TABLE=sinais_eod,BQ_BACKTEST_TRADES_TABLE=backtest_trades,BQ_BACKTEST_METRICS_TABLE=backtest_metrics,BQ_HOLIDAYS_TABLE=feriados_b3
           - name: alerts
             entry_point: alerts
@@ -131,6 +133,10 @@ jobs:
 
           if [ -n "${service_account_arg}" ]; then
             deploy_cmd+=("${service_account_arg}")
+          fi
+
+          if [ -n "${{ matrix.memory }}" ]; then
+            deploy_cmd+=("--memory=${{ matrix.memory }}")
           fi
 
           for attempt in 1 2 3; do
