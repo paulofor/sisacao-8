@@ -48,6 +48,8 @@ HTML_LANG_RE = re.compile(
     re.IGNORECASE,
 )
 
+TITLE_RE = re.compile(r"<title>(?P<title>.*?)</title>", re.IGNORECASE | re.DOTALL)
+
 logger = logging.getLogger(__name__)
 
 WIZ_GLOBAL_DATA_RE = re.compile(
@@ -326,6 +328,23 @@ def _extract_wrapped_rpc_payload(payload: str, rpc_id: str) -> Optional[str]:
     return None
 
 
+def _has_unresolved_ticker_title(html: str, ticker: str) -> bool:
+    """Return ``True`` when Google Finance did not resolve ticker metadata.
+
+    When Google Finance cannot fully resolve the symbol page, the title tends
+    to be the plain ``"<TICKER> - Google Finance"`` variant. Those pages still
+    contain market widgets (e.g. Dow Jones) and can trick generic extractors
+    into returning unrelated prices.
+    """
+
+    match = TITLE_RE.search(html)
+    if not match:
+        return False
+    title = unescape(match.group("title")).strip().upper()
+    expected = f"{ticker.upper()} - GOOGLE FINANCE"
+    return title == expected
+
+
 def _parse_batchexecute_price(raw_payload: str) -> float:
     """Extract the price value from the ``mKsvE`` RPC payload."""
 
@@ -448,6 +467,33 @@ def fetch_google_finance_price(
         ) from exc
 
     html = response.text
+    if _has_unresolved_ticker_title(html, ticker_upper):
+        logger.warning(
+            "Google Finance returned unresolved quote page for %s; trying batchexecute fallback",
+            ticker,
+        )
+        try:
+            price = _fetch_price_from_batchexecute(symbol, source_path, html, sess)
+        except (ValueError, requests.RequestException) as api_error:
+            message = (
+                f"Google Finance não retornou cotação resolvida para {ticker} "
+                f"e o fallback via API falhou: {api_error}"
+            )
+            raise GoogleFinancePriceError(
+                ticker,
+                message,
+                url=url,
+                status=response.status_code,
+                cause=api_error,
+                response_excerpt=_normalize_excerpt(html),
+            ) from api_error
+        logger.warning(
+            "Extracted price %.2f for ticker %s via unresolved-page fallback",
+            price,
+            ticker,
+        )
+        return price
+
     try:
         price = extract_price_from_html(html)
     except ValueError as html_error:
