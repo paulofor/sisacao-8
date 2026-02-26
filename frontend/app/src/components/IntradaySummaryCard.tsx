@@ -97,6 +97,7 @@ const IntradaySummaryCard: FC<IntradaySummaryCardProps> = ({ summary, isLoading,
   const totalTickers = summary?.totalTickers ?? 0
   const successfulTickers = summary?.successfulTickers ?? 0
   const failedTickers = summary?.failedTickers ?? 0
+  const failedTickerEntries = tickers.filter((ticker) => !ticker.success)
 
   return (
     <Paper elevation={0} sx={{ borderRadius: 2, border: '1px solid', borderColor: 'divider', p: 3 }}>
@@ -130,6 +131,37 @@ const IntradaySummaryCard: FC<IntradaySummaryCardProps> = ({ summary, isLoading,
 
         {hasData ? (
           <>
+            <Divider />
+            <Stack spacing={1.5}>
+              <Typography variant="h6" color="text.primary" fontWeight={600}>
+                Falhas no google-finance-price
+              </Typography>
+              {failedTickerEntries.length > 0 ? (
+                <Stack spacing={1}>
+                  {failedTickerEntries.map((ticker) => (
+                    <Box
+                      key={`failed-${ticker.ticker}`}
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        flexWrap: 'wrap',
+                        gap: 1,
+                      }}
+                    >
+                      <Chip label={ticker.ticker} color="error" size="small" sx={{ fontWeight: 700 }} />
+                      <Typography variant="caption" color="text.secondary">
+                        {ticker.error ?? 'Falha sem detalhe retornado pela API'}
+                      </Typography>
+                    </Box>
+                  ))}
+                </Stack>
+              ) : (
+                <Typography variant="body2" color="text.secondary">
+                  Nenhum ticker com falha na última execução.
+                </Typography>
+              )}
+            </Stack>
+
             <Divider />
             <Table size="small" aria-label="Resumo de tickers intraday">
               <TableHead>
