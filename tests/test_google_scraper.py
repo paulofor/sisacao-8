@@ -200,7 +200,8 @@ def test_fetch_google_finance_price_uses_batchexecute_fallback(monkeypatch):
 def test_has_unresolved_ticker_title():
     unresolved_html = "<html><head><title>BPAN4 - Google Finance</title></head></html>"
     resolved_html = (
-        "<html><head><title>Banco Pan SA (BPAN4) Stock Price &amp; News - Google Finance"
+        "<html><head><title>Banco Pan SA (BPAN4) "
+        "Stock Price &amp; News - Google Finance"
         "</title></head></html>"
     )
 
@@ -223,7 +224,9 @@ def test_fetch_google_finance_price_prioritizes_unresolved_title_fallback(monkey
             return DummyResponse()
 
     def fake_extract(_html: str) -> float:  # noqa: D401, ANN001
-        raise AssertionError("extract_price_from_html should not run for unresolved pages")
+        raise AssertionError(
+            "extract_price_from_html should not run for unresolved pages"
+        )
 
     def fake_fallback(*_args, **_kwargs):  # noqa: D401, ANN001
         return 17.35
