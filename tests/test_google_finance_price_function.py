@@ -74,11 +74,21 @@ def test_google_finance_price_success(monkeypatch):
         "valor",
         "hora_atual",
         "data_hora_atual",
+        "ingested_at",
+        "fonte",
+        "job_run_id",
     ]
     assert list(df["ticker"]) == ["YDUQ3", "PETR4"]
     assert list(df["valor"]) == [pytest.approx(11.11), pytest.approx(22.22)]
     assert all(
         getattr(value, "tzinfo", None) is None for value in df["data_hora_atual"]
+    )
+    assert set(df["fonte"]) == {"google_finance"}
+    job_run_ids = set(df["job_run_id"])
+    assert len(job_run_ids) == 1
+    assert next(iter(job_run_ids))
+    assert all(
+        getattr(value, "tzinfo", None) is not None for value in df["ingested_at"]
     )
 
 

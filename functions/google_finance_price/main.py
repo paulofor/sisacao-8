@@ -105,6 +105,7 @@ DATASET_ID = os.environ.get("BQ_INTRADAY_DATASET", "cotacao_intraday")
 TABELA_ID = os.environ.get("BQ_INTRADAY_RAW_TABLE", "cotacao_b3")
 FERIADOS_TABLE_ID = os.environ.get("BQ_HOLIDAYS_TABLE", "feriados_b3")
 JOB_NAME = os.environ.get("JOB_NAME", "google_finance_price")
+INGESTION_SOURCE = os.environ.get("GOOGLE_FINANCE_SOURCE", "google_finance")
 
 client = bigquery.Client()
 
@@ -310,6 +311,13 @@ def _normalize_rows(rows: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
             record["data_hora_atual"] = _ensure_naive_datetime(
                 data_hora_value
             ).isoformat()
+        ingested_value = record.get("ingested_at")
+        if isinstance(ingested_value, datetime.datetime):
+            if ingested_value.tzinfo is None:
+                ingested_value = ingested_value.replace(tzinfo=datetime.timezone.utc)
+            else:
+                ingested_value = ingested_value.astimezone(datetime.timezone.utc)
+            record["ingested_at"] = ingested_value.isoformat()
         normalized.append(record)
     return normalized
 
@@ -332,6 +340,9 @@ def append_dataframe_to_bigquery(data: Any) -> None:
             bigquery.SchemaField("valor", "FLOAT"),
             bigquery.SchemaField("hora_atual", "TIME"),
             bigquery.SchemaField("data_hora_atual", "DATETIME"),
+            bigquery.SchemaField("ingested_at", "TIMESTAMP"),
+            bigquery.SchemaField("fonte", "STRING"),
+            bigquery.SchemaField("job_run_id", "STRING"),
         ]
         try:
             expected_schema = client.get_table(tabela_id).schema
@@ -372,6 +383,8 @@ def append_dataframe_to_bigquery(data: Any) -> None:
                 except (AttributeError, TypeError):
                     pass
                 df["data_hora_atual"] = data_hora_col
+            if "ingested_at" in df.columns:
+                df["ingested_at"] = pd.to_datetime(df["ingested_at"], utc=True)
 
             job = client.load_table_from_dataframe(
                 df,
@@ -544,10 +557,14 @@ def _build_price_row(
     data_atual: str,
     hora_atual: str,
     data_hora_atual: datetime.datetime,
+    *,
+    job_run_id: str,
+    source: str,
 ) -> Dict[str, Any]:
     """Fetch price for ``ticker`` and return the BigQuery row payload."""
 
     price = fetch_google_finance_price(ticker)
+    ingestion_timestamp = datetime.datetime.now(datetime.timezone.utc)
     return {
         "ticker": ticker,
         "data": data_atual,
@@ -555,6 +572,9 @@ def _build_price_row(
         "valor": round(price, 2),
         "hora_atual": hora_atual,
         "data_hora_atual": _ensure_naive_datetime(data_hora_atual),
+        "ingested_at": ingestion_timestamp,
+        "fonte": source,
+        "job_run_id": job_run_id,
     }
 
 
@@ -624,6 +644,8 @@ def google_finance_price(request: Any) -> Response:
                 data_atual,
                 hora_atual,
                 data_hora_atual,
+                job_run_id=run_logger.run_id,
+                source=INGESTION_SOURCE,
             )
             future_to_ticker[future] = ticker
 
