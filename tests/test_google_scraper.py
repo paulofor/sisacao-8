@@ -195,3 +195,41 @@ def test_fetch_google_finance_price_uses_batchexecute_fallback(monkeypatch):
 
     price = gf_scraper.fetch_google_finance_price("test", session=DummySession())
     assert price == pytest.approx(42.42)
+
+
+def test_has_unresolved_ticker_title():
+    unresolved_html = "<html><head><title>BPAN4 - Google Finance</title></head></html>"
+    resolved_html = (
+        "<html><head><title>Banco Pan SA (BPAN4) Stock Price &amp; News - Google Finance"
+        "</title></head></html>"
+    )
+
+    assert gf_scraper._has_unresolved_ticker_title(unresolved_html, "BPAN4")
+    assert not gf_scraper._has_unresolved_ticker_title(resolved_html, "BPAN4")
+
+
+def test_fetch_google_finance_price_prioritizes_unresolved_title_fallback(monkeypatch):
+    html_content = "<html><head><title>BPAN4 - Google Finance</title></head></html>"
+
+    class DummyResponse:
+        status_code = 200
+        text = html_content
+
+        def raise_for_status(self):
+            return None
+
+    class DummySession:
+        def get(self, *_args, **_kwargs):
+            return DummyResponse()
+
+    def fake_extract(_html: str) -> float:  # noqa: D401, ANN001
+        raise AssertionError("extract_price_from_html should not run for unresolved pages")
+
+    def fake_fallback(*_args, **_kwargs):  # noqa: D401, ANN001
+        return 17.35
+
+    monkeypatch.setattr(gf_scraper, "extract_price_from_html", fake_extract)
+    monkeypatch.setattr(gf_scraper, "_fetch_price_from_batchexecute", fake_fallback)
+
+    price = gf_scraper.fetch_google_finance_price("BPAN4", session=DummySession())
+    assert price == pytest.approx(17.35)
