@@ -469,7 +469,10 @@ def fetch_google_finance_price(
     html = response.text
     if _has_unresolved_ticker_title(html, ticker_upper):
         logger.warning(
-            "Google Finance returned unresolved quote page for %s; trying batchexecute fallback",
+            (
+                "Google Finance returned unresolved quote page for %s; "
+                "trying batchexecute fallback"
+            ),
             ticker,
         )
         try:
