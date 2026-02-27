@@ -73,12 +73,30 @@ def _load_rows(table_id: str, rows: List[Dict[str, Any]]) -> None:
     if not rows:
         logging.warning("Nenhum candle para gravar em %s", table_id)
         return
+
+    serialized_rows = [_json_ready_row(row) for row in rows]
     load_config = bigquery.LoadJobConfig(
         write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
     )
-    job = client.load_table_from_json(rows, table_id, job_config=load_config)
+    job = client.load_table_from_json(
+        serialized_rows,
+        table_id,
+        job_config=load_config,
+    )
     job.result()
     logging.info("%s linhas inseridas em %s", len(rows), table_id)
+
+
+def _json_ready_row(row: Dict[str, Any]) -> Dict[str, Any]:
+    serialized: Dict[str, Any] = {}
+    for key, value in row.items():
+        if isinstance(value, dt.datetime):
+            serialized[key] = value.isoformat()
+        elif isinstance(value, dt.date):
+            serialized[key] = value.isoformat()
+        else:
+            serialized[key] = value
+    return serialized
 
 
 def generate_intraday_candles(request: Any) -> Dict[str, Any]:
