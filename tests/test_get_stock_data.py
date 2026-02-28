@@ -194,7 +194,11 @@ def test_load_configured_tickers_uses_bigquery_before_file(monkeypatch):
         "load_tickers_from_google_finance",
         lambda: (_ for _ in ()).throw(RuntimeError("google down")),
     )
-    monkeypatch.setattr(module, "load_tickers_from_bigquery", lambda: ["VALE3", "ITUB4"])
+    monkeypatch.setattr(
+        module,
+        "load_tickers_from_bigquery",
+        lambda: ["VALE3", "ITUB4"],
+    )
     monkeypatch.setattr(module, "load_tickers_from_file", lambda path=None: ["YDUQ3"])
 
     tickers = module.load_configured_tickers()
