@@ -120,10 +120,28 @@ def test_load_tickers_from_file(monkeypatch, tmp_path):
     assert tickers == ["YDUQ3", "PETR4"]
 
 
-def test_load_configured_tickers_uses_google(monkeypatch):
+def test_load_configured_tickers_uses_bigquery_first(monkeypatch):
     module = import_get_stock_module(monkeypatch)
     monkeypatch.setattr(module, "_env_tickers_path", None, raising=False)
     monkeypatch.setattr(module, "load_tickers_from_file", lambda path=None: [])
+    monkeypatch.setattr(module, "load_tickers_from_google_finance", lambda: ["FAIL"])
+    monkeypatch.setattr(module, "load_tickers_from_bigquery", lambda: ["YDUQ3", "PETR4"])
+
+    tickers = module.load_configured_tickers()
+
+    assert tickers == ["YDUQ3", "PETR4"]
+
+
+def test_load_configured_tickers_uses_google_when_bigquery_fails(monkeypatch):
+    module = import_get_stock_module(monkeypatch)
+    monkeypatch.setattr(module, "_env_tickers_path", None, raising=False)
+    monkeypatch.setattr(module, "load_tickers_from_file", lambda path=None: [])
+
+    def fail_bq():
+        raise RuntimeError("bq indisponivel")
+
+    monkeypatch.setattr(module, "load_tickers_from_bigquery", fail_bq)
+
     calls = {}
 
     def fake_import(path):  # noqa: D401
@@ -139,6 +157,7 @@ def test_load_configured_tickers_uses_google(monkeypatch):
 
     monkeypatch.setattr(module, "import_module", fake_import)
     tickers = module.load_configured_tickers()
+
     assert calls.get("imported") == module.GOOGLE_FINANCE_MODULE
     assert calls.get("fetched") is True
     assert tickers == ["YDUQ3", "PETR4"]
@@ -321,3 +340,42 @@ def test_append_dataframe_to_bigquery_merge_strategy(monkeypatch):
     assert captured["table_id"].endswith("cotacao_ohlcv_diario_staging")
     assert captured["write_disposition"] == "WRITE_TRUNCATE"
     assert any("MERGE `" in query for query in captured["queries"])
+
+
+def test_load_tickers_from_bigquery(monkeypatch):
+    module = import_get_stock_module(monkeypatch)
+
+    class FakeQueryJob:
+        def result(self):  # noqa: D401
+            return [
+                {"ticker": " yduq3 "},
+                {"ticker": "PETR4"},
+                {"ticker": "YDUQ3"},
+            ]
+
+    class FakeClient:
+        project = "test-project"
+
+        def query(self, *args, **kwargs):  # noqa: D401
+            return FakeQueryJob()
+
+    monkeypatch.setattr(module, "pd", None, raising=False)
+    monkeypatch.setattr(module, "client", FakeClient(), raising=False)
+
+    tickers = module.load_tickers_from_bigquery()
+
+    assert tickers == ["YDUQ3", "PETR4"]
+
+
+def test_daily_table_id_prefers_bq_table_env(monkeypatch):
+    module = import_get_stock_module(monkeypatch)
+    monkeypatch.setattr(
+        module,
+        "FULLY_QUALIFIED_BQ_TABLE",
+        "ingestaokraken.cotacao_intraday.cotacao_ohlcv_diario",
+        raising=False,
+    )
+
+    table_id = module._daily_table_id()
+
+    assert table_id == "ingestaokraken.cotacao_intraday.cotacao_ohlcv_diario"

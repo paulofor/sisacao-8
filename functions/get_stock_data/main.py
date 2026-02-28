@@ -58,6 +58,8 @@ logging.basicConfig(
 
 DATASET_ID = os.environ.get("BQ_INTRADAY_DATASET", "cotacao_intraday")
 FECHAMENTO_TABLE_ID = os.environ.get("BQ_DAILY_TABLE", "cotacao_ohlcv_diario")
+FULLY_QUALIFIED_BQ_TABLE = os.environ.get("BQ_TABLE", "").strip()
+ACTIVE_TICKERS_TABLE_ID = os.environ.get("BQ_ACTIVE_TICKERS_TABLE", "acao_bovespa")
 FERIADOS_TABLE_ID = os.environ.get("BQ_HOLIDAYS_TABLE", "feriados_b3")
 FONTE_FECHAMENTO = "B3_DAILY_COTAHIST"
 LOAD_STRATEGY = os.environ.get("BQ_DAILY_LOAD_STRATEGY", "MERGE")
@@ -101,6 +103,16 @@ def _project_id() -> str:
 
 def _pipeline_config_table() -> str:
     return f"{_project_id()}.{DATASET_ID}.{PIPELINE_CONFIG_TABLE_ID}"
+
+
+def _daily_table_id() -> str:
+    """Resolve fully-qualified daily table id honoring ``BQ_TABLE`` override."""
+
+    if FULLY_QUALIFIED_BQ_TABLE:
+        return FULLY_QUALIFIED_BQ_TABLE
+    if FECHAMENTO_TABLE_ID.count(".") == 2:
+        return FECHAMENTO_TABLE_ID
+    return f"{_project_id()}.{DATASET_ID}.{FECHAMENTO_TABLE_ID}"
 
 
 def _request_payload(request: Any) -> Dict[str, Any]:
@@ -292,6 +304,46 @@ def load_tickers_from_google_finance() -> List[str]:
     return tickers
 
 
+def load_tickers_from_bigquery() -> List[str]:
+    """Load active tickers from BigQuery table configured by env vars."""
+
+    project_id = _project_id()
+    table_id = ACTIVE_TICKERS_TABLE_ID
+    if table_id.count(".") == 1:
+        table_id = f"{project_id}.{table_id}"
+    elif table_id.count(".") == 0:
+        table_id = f"{project_id}.{DATASET_ID}.{table_id}"
+
+    query = f"SELECT ticker FROM `{table_id}` WHERE ativo = TRUE"
+    query_job = _query_with_location(query)
+
+    tickers: List[str] = []
+    if pd is not None:
+        df = query_job.to_dataframe()
+        if "ticker" in df.columns:
+            tickers = [
+                str(value).strip().upper()
+                for value in df["ticker"].tolist()
+                if str(value).strip()
+            ]
+    else:
+        tickers = [
+            str(row["ticker"]).strip().upper()
+            for row in query_job.result()
+            if str(row["ticker"]).strip()
+        ]
+
+    deduplicated: List[str] = []
+    for ticker in tickers:
+        if ticker not in deduplicated:
+            deduplicated.append(ticker)
+    if not deduplicated:
+        raise ValueError(f"Nenhum ticker ativo retornado de {table_id}")
+
+    logging.warning("Tickers carregados do BigQuery (%s): %s", table_id, deduplicated)
+    return deduplicated
+
+
 def load_configured_tickers(file_path: Optional[Path] = None) -> List[str]:
     """Load tickers from google_finance_price or fallback to file."""
 
@@ -299,6 +351,14 @@ def load_configured_tickers(file_path: Optional[Path] = None) -> List[str]:
         return load_tickers_from_file(file_path)
     if _env_tickers_path:
         return load_tickers_from_file(Path(_env_tickers_path))
+    try:
+        return load_tickers_from_bigquery()
+    except Exception as exc:  # noqa: BLE001
+        logging.warning(
+            "Falha ao carregar tickers ativos via BigQuery: %s",
+            exc,
+            exc_info=True,
+        )
     try:
         return load_tickers_from_google_finance()
     except ModuleNotFoundError as exc:
@@ -478,7 +538,7 @@ def _normalize_rows(rows: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
 def append_dataframe_to_bigquery(data: Any, reference_date: datetime.date) -> None:
     """Load normalized candles to BigQuery with idempotent strategies."""
 
-    tabela_id = f"{_project_id()}.{DATASET_ID}.{FECHAMENTO_TABLE_ID}"
+    tabela_id = _daily_table_id()
     logging.warning("Tabela de destino: %s", tabela_id)
     delete_query = "DELETE FROM `" f"{tabela_id}" "` WHERE data_pregao = @ref_date"
     job_config = bigquery.QueryJobConfig(
