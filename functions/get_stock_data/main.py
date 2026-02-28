@@ -61,7 +61,8 @@ FECHAMENTO_TABLE_ID = os.environ.get("BQ_DAILY_TABLE", "cotacao_ohlcv_diario")
 FERIADOS_TABLE_ID = os.environ.get("BQ_HOLIDAYS_TABLE", "feriados_b3")
 FONTE_FECHAMENTO = "B3_DAILY_COTAHIST"
 LOAD_STRATEGY = os.environ.get("BQ_DAILY_LOAD_STRATEGY", "MERGE")
-BQ_LOCATION = os.environ.get("BQ_LOCATION", os.environ.get("GCP_REGION", "us-central1"))
+_raw_bq_location = os.environ.get("BQ_LOCATION", "").strip()
+BQ_LOCATION = _raw_bq_location or None
 JOB_NAME = os.environ.get("JOB_NAME", "get_stock_data")
 PIPELINE_CONFIG_TABLE_ID = os.environ.get("PIPELINE_CONFIG_TABLE", "pipeline_config")
 PIPELINE_CONFIG_ID = os.environ.get("PIPELINE_CONFIG_ID", "default")
@@ -85,6 +86,9 @@ class IngestionConfig:
 
 def _query_with_location(query: str, **kwargs: Any) -> Any:
     """Execute query using configured location when supported by the client."""
+
+    if BQ_LOCATION is None:
+        return client.query(query, **kwargs)
 
     try:
         return client.query(query, location=BQ_LOCATION, **kwargs)
@@ -313,7 +317,75 @@ def load_configured_tickers(file_path: Optional[Path] = None) -> List[str]:
             exc,
             exc_info=True,
         )
+    tickers_from_bq = load_tickers_from_bigquery()
+    if tickers_from_bq:
+        return tickers_from_bq
     return load_tickers_from_file()
+
+
+def load_tickers_from_bigquery() -> List[str]:
+    """Load active tickers directly from BigQuery as runtime fallback."""
+
+    table_id = f"{_project_id()}.{DATASET_ID}.acao_bovespa"
+    query = (
+        "SELECT ticker "
+        f"FROM `{table_id}` "
+        "WHERE ativo = TRUE "
+        "ORDER BY ticker"
+    )
+    try:
+        query_job = _query_with_location(query)
+        results = query_job.result()
+        tickers: List[str] = []
+        for row in results:
+            ticker_value = row.get("ticker") if isinstance(row, dict) else row["ticker"]
+            ticker = str(ticker_value).strip().upper()
+            if ticker and ticker not in tickers:
+                tickers.append(ticker)
+        if tickers:
+            logging.warning(
+                "Tickers carregados diretamente do BigQuery (%s): %s",
+                len(tickers),
+                tickers,
+            )
+            return tickers
+        logging.warning(
+            "Consulta BigQuery %s não retornou tickers ativos.",
+            table_id,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logging.warning(
+            "Falha ao carregar tickers do BigQuery (%s): %s",
+            table_id,
+            exc,
+            exc_info=True,
+        )
+    return []
+
+
+def _ensure_dataset_exists(project_id: str, dataset_id: str) -> None:
+    """Guarantee destination dataset exists before load jobs."""
+
+    dataset_ref = f"{project_id}.{dataset_id}"
+    try:
+        client.get_dataset(dataset_ref)
+        return
+    except Exception as exc:  # noqa: BLE001
+        if exc.__class__.__name__ != "NotFound":
+            return
+    try:
+        dataset = bigquery.Dataset(dataset_ref)
+        if BQ_LOCATION:
+            dataset.location = BQ_LOCATION
+        client.create_dataset(dataset, exists_ok=True)
+        logging.warning("Dataset %s criado automaticamente.", dataset_ref)
+    except Exception as exc:  # noqa: BLE001
+        logging.warning(
+            "Falha ao criar dataset %s automaticamente: %s",
+            dataset_ref,
+            exc,
+            exc_info=True,
+        )
 
 
 def _format_diagnostic(message: str) -> str:
@@ -480,6 +552,7 @@ def append_dataframe_to_bigquery(data: Any, reference_date: datetime.date) -> No
 
     tabela_id = f"{_project_id()}.{DATASET_ID}.{FECHAMENTO_TABLE_ID}"
     logging.warning("Tabela de destino: %s", tabela_id)
+    _ensure_dataset_exists(_project_id(), DATASET_ID)
     delete_query = "DELETE FROM `" f"{tabela_id}" "` WHERE data_pregao = @ref_date"
     job_config = bigquery.QueryJobConfig(
         query_parameters=[
@@ -544,12 +617,12 @@ def append_dataframe_to_bigquery(data: Any, reference_date: datetime.date) -> No
                     df["atualizado_em"]
                 ).dt.tz_localize(None)
             try:
-                job = client.load_table_from_dataframe(
-                    df,
-                    target_table_id,
-                    job_config=load_config,
-                    location=BQ_LOCATION,
-                )
+                kwargs = {
+                    "job_config": load_config,
+                }
+                if BQ_LOCATION:
+                    kwargs["location"] = BQ_LOCATION
+                job = client.load_table_from_dataframe(df, target_table_id, **kwargs)
             except TypeError:
                 job = client.load_table_from_dataframe(
                     df,
@@ -561,11 +634,15 @@ def append_dataframe_to_bigquery(data: Any, reference_date: datetime.date) -> No
             rows = list(data) if not isinstance(data, list) else data
             normalized_rows = _normalize_rows(rows)
             try:
+                kwargs = {
+                    "job_config": load_config,
+                }
+                if BQ_LOCATION:
+                    kwargs["location"] = BQ_LOCATION
                 job = client.load_table_from_json(
                     normalized_rows,
                     target_table_id,
-                    job_config=load_config,
-                    location=BQ_LOCATION,
+                    **kwargs,
                 )
             except TypeError:
                 job = client.load_table_from_json(

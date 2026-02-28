@@ -186,6 +186,22 @@ def test_load_configured_tickers_fallbacks_to_file(monkeypatch):
     assert tickers == ["YDUQ3"]
 
 
+def test_load_configured_tickers_uses_bigquery_before_file(monkeypatch):
+    module = import_get_stock_module(monkeypatch)
+    monkeypatch.setattr(module, "_env_tickers_path", None, raising=False)
+    monkeypatch.setattr(
+        module,
+        "load_tickers_from_google_finance",
+        lambda: (_ for _ in ()).throw(RuntimeError("google down")),
+    )
+    monkeypatch.setattr(module, "load_tickers_from_bigquery", lambda: ["VALE3", "ITUB4"])
+    monkeypatch.setattr(module, "load_tickers_from_file", lambda path=None: ["YDUQ3"])
+
+    tickers = module.load_configured_tickers()
+
+    assert tickers == ["VALE3", "ITUB4"]
+
+
 def test_append_dataframe_to_bigquery_without_pandas(monkeypatch):
     module = import_get_stock_module(monkeypatch)
     monkeypatch.setattr(module, "pd", None, raising=False)
@@ -321,3 +337,49 @@ def test_append_dataframe_to_bigquery_merge_strategy(monkeypatch):
     assert captured["table_id"].endswith("cotacao_ohlcv_diario_staging")
     assert captured["write_disposition"] == "WRITE_TRUNCATE"
     assert any("MERGE `" in query for query in captured["queries"])
+
+
+def test_append_dataframe_to_bigquery_omits_location_when_unset(monkeypatch):
+    module = import_get_stock_module(monkeypatch)
+    monkeypatch.setattr(module, "pd", None, raising=False)
+    monkeypatch.setattr(module, "BQ_LOCATION", None, raising=False)
+
+    captured = {}
+
+    class FakeJob:
+        def result(self):  # noqa: D401
+            return None
+
+    class FakeClient:
+        project = "test-project"
+
+        def get_dataset(self, dataset_ref):  # noqa: D401, ANN001
+            return dataset_ref
+
+        def query(self, query, job_config=None):  # noqa: D401, ANN001
+            return FakeJob()
+
+        def get_table(self, table_id):  # noqa: D401, ANN001
+            return types.SimpleNamespace(schema=[])
+
+        def load_table_from_json(self, rows, table_id, **kwargs):  # noqa: D401, ANN001
+            captured["kwargs"] = kwargs
+            return FakeJob()
+
+    monkeypatch.setattr(module, "client", FakeClient(), raising=False)
+
+    module.append_dataframe_to_bigquery(
+        [
+            {
+                "ticker": "YDUQ3",
+                "data_pregao": datetime.date(2024, 1, 3),
+                "open": 10.0,
+                "high": 11.0,
+                "low": 9.5,
+                "close": 10.5,
+            }
+        ],
+        datetime.date(2024, 1, 3),
+    )
+
+    assert "location" not in captured["kwargs"]
