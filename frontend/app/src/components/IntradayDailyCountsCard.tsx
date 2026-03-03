@@ -21,9 +21,19 @@ interface IntradayDailyCountsCardProps {
   counts?: IntradayDailyCount[]
   isLoading: boolean
   error?: Error | null
+  title?: string
+  emptyMessage?: string
+  tableAriaLabel?: string
 }
 
-const IntradayDailyCountsCard: FC<IntradayDailyCountsCardProps> = ({ counts, isLoading, error }) => {
+const IntradayDailyCountsCard: FC<IntradayDailyCountsCardProps> = ({
+  counts,
+  isLoading,
+  error,
+  title = 'Volume diário de inserções (Intraday)',
+  emptyMessage = 'Nenhum registro encontrado para os últimos dias na tabela de intraday.',
+  tableAriaLabel = 'Contagem diária de registros intraday',
+}) => {
   if (isLoading) {
     return (
       <Paper elevation={0} sx={{ borderRadius: 2, border: '1px solid', borderColor: 'divider', p: 3 }}>
@@ -48,7 +58,7 @@ const IntradayDailyCountsCard: FC<IntradayDailyCountsCardProps> = ({ counts, isL
       <Stack spacing={3}>
         <Stack direction={{ xs: 'column', md: 'row' }} spacing={1} alignItems={{ xs: 'flex-start', md: 'center' }}>
           <Typography variant="h5" color="text.primary" fontWeight={700}>
-            Volume diário de inserções (Intraday)
+            {title}
           </Typography>
           <Chip
             label={`${totalInWindow.toLocaleString('pt-BR')} registros nos últimos ${items.length} dias`}
@@ -60,7 +70,7 @@ const IntradayDailyCountsCard: FC<IntradayDailyCountsCardProps> = ({ counts, isL
         </Stack>
 
         {items.length > 0 ? (
-          <Table size="small" aria-label="Contagem diária de registros intraday">
+          <Table size="small" aria-label={tableAriaLabel}>
             <TableHead>
               <TableRow>
                 <TableCell width="50%">Data</TableCell>
@@ -87,7 +97,7 @@ const IntradayDailyCountsCard: FC<IntradayDailyCountsCardProps> = ({ counts, isL
         ) : (
           <Box>
             <Typography variant="body2" color="text.secondary">
-              Nenhum registro encontrado para os últimos dias na tabela de intraday.
+              {emptyMessage}
             </Typography>
           </Box>
         )}

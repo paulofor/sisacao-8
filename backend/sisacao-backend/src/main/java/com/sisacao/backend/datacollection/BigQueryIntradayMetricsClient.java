@@ -31,7 +31,7 @@ public class BigQueryIntradayMetricsClient {
     }
 
     public List<IntradayDailyCount> fetchDailyCounts() {
-        String qualifiedTable = buildQualifiedIntradayTableName();
+        String qualifiedTable = buildQualifiedTableName(properties.getIntradayDataset(), properties.getIntradayTable());
         int lookbackDays = Math.max(properties.getIntradayDays(), 1);
 
         String query =
@@ -73,8 +73,51 @@ public class BigQueryIntradayMetricsClient {
         }
     }
 
+    public List<IntradayDailyCount> fetchDailyTableCounts() {
+        String qualifiedTable = buildQualifiedTableName(properties.getDailyDataset(), properties.getDailyTable());
+        int lookbackDays = Math.max(properties.getDailyDays(), 1);
+
+        String query =
+                """
+                        SELECT
+                          DATE(data) AS data_ref,
+                          COUNT(*) AS total_registros
+                        FROM %s
+                        WHERE data >= DATE_SUB(CURRENT_DATE(), INTERVAL @lookbackDays DAY)
+                        GROUP BY data_ref
+                        ORDER BY data_ref DESC
+                        LIMIT @lookbackDays;
+                        """
+                        .formatted(qualifiedTable);
+
+        QueryJobConfiguration configuration =
+                QueryJobConfiguration.newBuilder(query)
+                        .addNamedParameter("lookbackDays", QueryParameterValue.int64(lookbackDays))
+                        .setUseLegacySql(false)
+                        .build();
+
+        try {
+            TableResult result = bigQuery.query(configuration);
+            List<IntradayDailyCount> counts = new ArrayList<>();
+            for (FieldValueList row : result.iterateAll()) {
+                LocalDate date = toLocalDate(row.get("data_ref"));
+                long totalRecords = toLong(row.get("total_registros"));
+                if (date != null) {
+                    counts.add(new IntradayDailyCount(date, totalRecords));
+                }
+            }
+            LOGGER.debug("Retrieved {} daily table counts from BigQuery", counts.size());
+            return counts;
+        } catch (BigQueryException ex) {
+            throw new IllegalStateException("Failed to query BigQuery for daily table counts", ex);
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while querying BigQuery for daily table counts", ex);
+        }
+    }
+
     public List<IntradayLatestRecord> fetchLatestRecords(int limit) {
-        String qualifiedTable = buildQualifiedIntradayTableName();
+        String qualifiedTable = buildQualifiedTableName(properties.getIntradayDataset(), properties.getIntradayTable());
         int safeLimit = Math.max(limit, 1);
 
         String query =
@@ -121,15 +164,9 @@ public class BigQueryIntradayMetricsClient {
         }
     }
 
-    private String buildQualifiedIntradayTableName() {
-        String dataset =
-                Optional.ofNullable(properties.getIntradayDataset())
-                        .filter(value -> !value.isBlank())
-                        .orElse("cotacao_intraday");
-        String table =
-                Optional.ofNullable(properties.getIntradayTable())
-                        .filter(value -> !value.isBlank())
-                        .orElse("cotacao_b3");
+    private String buildQualifiedTableName(String configuredDataset, String configuredTable) {
+        String dataset = Optional.ofNullable(configuredDataset).filter(value -> !value.isBlank()).orElse("cotacao_intraday");
+        String table = Optional.ofNullable(configuredTable).filter(value -> !value.isBlank()).orElse("cotacao_b3");
         String projectId =
                 Optional.ofNullable(properties.getProjectId()).filter(value -> !value.isBlank()).orElse(null);
         if (projectId == null) {

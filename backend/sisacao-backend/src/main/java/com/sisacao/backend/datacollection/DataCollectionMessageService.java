@@ -120,6 +120,21 @@ public class DataCollectionMessageService {
         return List.of();
     }
 
+    public List<IntradayDailyCount> fetchDailyTableCounts() {
+        if (intradayMetricsClient.isPresent()) {
+            try {
+                List<IntradayDailyCount> counts = intradayMetricsClient.get().fetchDailyTableCounts();
+                if (!counts.isEmpty()) {
+                    return counts;
+                }
+                LOGGER.debug("BigQuery returned no daily table counts. Falling back to python metadata.");
+            } catch (RuntimeException ex) {
+                LOGGER.warn("Failed to fetch daily table counts from BigQuery. Falling back to python metadata.", ex);
+            }
+        }
+        return buildDailyTableCountsFromMessages();
+    }
+
     private List<PythonDataCollectionClient.PythonMessage> loadMessages() {
         if (bigQueryClient.isPresent()) {
             try {
@@ -163,6 +178,15 @@ public class DataCollectionMessageService {
         return dataset.toLowerCase().contains("cotacao_intraday.cotacao_bovespa");
     }
 
+    private boolean isDailyDataset(String dataset) {
+        if (dataset == null) {
+            return false;
+        }
+        String normalized = dataset.toLowerCase();
+        return normalized.contains("cotacao_intraday.cotacao_ohlcv_diario")
+                || normalized.contains("cotacao_intraday.cotacao_fechamento_diario");
+    }
+
     private List<IntradayDailyCount> buildIntradayDailyCountsFromMessages() {
         List<PythonDataCollectionClient.PythonMessage> messages = loadMessages();
         if (messages.isEmpty()) {
@@ -176,6 +200,47 @@ public class DataCollectionMessageService {
 
         for (PythonDataCollectionClient.PythonMessage message : messages) {
             if (!isIntradayDataset(message.dataset())) {
+                continue;
+            }
+
+            OffsetDateTime createdAt = message.createdAt();
+            if (createdAt == null) {
+                continue;
+            }
+
+            LocalDate messageDate = createdAt.toLocalDate();
+            if (messageDate.isBefore(cutoffDate)) {
+                continue;
+            }
+
+            long recordCount = extractIntradayRecordCount(message.metadata());
+            totalsByDate.merge(messageDate, recordCount, Long::sum);
+        }
+
+        if (totalsByDate.isEmpty()) {
+            return List.of();
+        }
+
+        return totalsByDate.entrySet().stream()
+                .sorted(Entry.<LocalDate, Long>comparingByKey().reversed())
+                .limit(lookbackDays)
+                .map(entry -> new IntradayDailyCount(entry.getKey(), entry.getValue()))
+                .collect(Collectors.toList());
+    }
+
+    private List<IntradayDailyCount> buildDailyTableCountsFromMessages() {
+        List<PythonDataCollectionClient.PythonMessage> messages = loadMessages();
+        if (messages.isEmpty()) {
+            return List.of();
+        }
+
+        int lookbackDays = Math.max(bigQueryProperties.getDailyDays(), 1);
+        LocalDate cutoffDate = LocalDate.now(ZoneOffset.UTC).minusDays(Math.max(lookbackDays - 1L, 0L));
+
+        Map<LocalDate, Long> totalsByDate = new HashMap<>();
+
+        for (PythonDataCollectionClient.PythonMessage message : messages) {
+            if (!isDailyDataset(message.dataset())) {
                 continue;
             }
 

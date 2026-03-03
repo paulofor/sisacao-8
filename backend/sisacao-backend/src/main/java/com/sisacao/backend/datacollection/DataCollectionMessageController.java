@@ -34,6 +34,11 @@ public class DataCollectionMessageController {
         return service.fetchIntradayDailyCounts();
     }
 
+    @GetMapping("/daily-daily-counts")
+    public List<IntradayDailyCount> getDailyTableCounts() {
+        return service.fetchDailyTableCounts();
+    }
+
     @GetMapping("/intraday-latest-records")
     public List<IntradayLatestRecord> getIntradayLatestRecords() {
         return service.fetchLatestIntradayRecords();

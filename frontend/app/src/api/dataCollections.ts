@@ -47,6 +47,11 @@ export interface IntradayDailyCount {
   totalRecords: number
 }
 
+export interface DailyTableCount {
+  date: string
+  totalRecords: number
+}
+
 export interface IntradayLatestRecord {
   ticker: string
   price?: number | null
@@ -309,6 +314,22 @@ export const fetchIntradayDailyCounts = async (): Promise<IntradayDailyCount[]> 
     .sort((a, b) => dayjs(b.date).valueOf() - dayjs(a.date).valueOf())
 }
 
+export const fetchDailyTableCounts = async (): Promise<DailyTableCount[]> => {
+  const response = await apiClient.get<unknown>('/data-collections/daily-daily-counts')
+  const items = Array.isArray(response.data) ? response.data : []
+
+  return items
+    .map((item) => {
+      const record = item as Record<string, unknown>
+      const date = toIsoDateString(record.date ?? record.data ?? record.data_ref)
+      const totalRecords = toInteger(record.totalRecords ?? record.total_registros ?? record.total)
+
+      return { date, totalRecords }
+    })
+    .filter((item) => Boolean(item.date))
+    .sort((a, b) => dayjs(b.date).valueOf() - dayjs(a.date).valueOf())
+}
+
 export const fetchIntradayLatestRecords = async (): Promise<IntradayLatestRecord[]> => {
   const response = await apiClient.get<unknown>('/data-collections/intraday-latest-records')
   const items = Array.isArray(response.data) ? response.data : []
@@ -348,4 +369,3 @@ export const fetchIntradaySummary = async (): Promise<IntradaySummary> => {
     }),
   }
 }
-

@@ -14,6 +14,9 @@ public class DataCollectionBigQueryProperties {
     private String intradayTable = "cotacao_b3";
     private int intradayDays = 14;
     private int intradayLatestLimit = 20;
+    private String dailyDataset = "cotacao_intraday";
+    private String dailyTable = "cotacao_ohlcv_diario";
+    private int dailyDays = 14;
 
     public boolean isEnabled() {
         return enabled;
@@ -98,6 +101,36 @@ public class DataCollectionBigQueryProperties {
     public void setIntradayLatestLimit(int intradayLatestLimit) {
         if (intradayLatestLimit > 0) {
             this.intradayLatestLimit = intradayLatestLimit;
+        }
+    }
+
+    public String getDailyDataset() {
+        return dailyDataset;
+    }
+
+    public void setDailyDataset(String dailyDataset) {
+        if (dailyDataset != null && !dailyDataset.isBlank()) {
+            this.dailyDataset = dailyDataset;
+        }
+    }
+
+    public String getDailyTable() {
+        return dailyTable;
+    }
+
+    public void setDailyTable(String dailyTable) {
+        if (dailyTable != null && !dailyTable.isBlank()) {
+            this.dailyTable = dailyTable;
+        }
+    }
+
+    public int getDailyDays() {
+        return dailyDays;
+    }
+
+    public void setDailyDays(int dailyDays) {
+        if (dailyDays > 0) {
+            this.dailyDays = dailyDays;
         }
     }
 }
