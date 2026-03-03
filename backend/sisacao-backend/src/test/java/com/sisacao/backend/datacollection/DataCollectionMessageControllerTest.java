@@ -39,6 +39,7 @@ class DataCollectionMessageControllerTest {
     void setUpMocks() {
         given(pythonClient.fetchMessages()).willAnswer(invocation -> sampleMessages());
         given(intradayMetricsClient.fetchDailyCounts()).willReturn(sampleIntradayCounts());
+        given(intradayMetricsClient.fetchDailyTableCounts()).willReturn(sampleDailyTableCounts());
         given(intradayMetricsClient.fetchLatestRecords(20)).willReturn(sampleIntradayLatestRecords());
     }
 
@@ -126,6 +127,17 @@ class DataCollectionMessageControllerTest {
                 .andExpect(jsonPath("$[1].totalRecords", is(180)));
     }
 
+    @Test
+    void shouldReturnDailyTableCounts() throws Exception {
+        mockMvc.perform(get("/data-collections/daily-daily-counts"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(2)))
+                .andExpect(jsonPath("$[0].date", is("2024-11-03")))
+                .andExpect(jsonPath("$[0].totalRecords", is(68)))
+                .andExpect(jsonPath("$[1].date", is("2024-11-02")))
+                .andExpect(jsonPath("$[1].totalRecords", is(64)));
+    }
+
     private List<PythonDataCollectionClient.PythonMessage> sampleMessages() {
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         return List.of(
@@ -192,5 +204,10 @@ class DataCollectionMessageControllerTest {
                 new IntradayLatestRecord(
                         "VALE3", 71.8, OffsetDateTime.parse("2024-11-03T12:59:00Z"), "2024-11-03", "09:59:00"));
     }
-}
 
+    private List<IntradayDailyCount> sampleDailyTableCounts() {
+        return List.of(
+                new IntradayDailyCount(java.time.LocalDate.parse("2024-11-03"), 68L),
+                new IntradayDailyCount(java.time.LocalDate.parse("2024-11-02"), 64L));
+    }
+}

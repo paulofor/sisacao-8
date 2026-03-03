@@ -145,6 +145,52 @@ class DataCollectionMessageServiceTest {
     }
 
     @Test
+    void shouldReturnDailyCountsFromMetricsClient() {
+        List<IntradayDailyCount> counts =
+                List.of(new IntradayDailyCount(java.time.LocalDate.parse("2024-11-01"), 52L));
+        when(metricsClient.fetchDailyTableCounts()).thenReturn(counts);
+
+        DataCollectionMessageService service =
+                new DataCollectionMessageService(
+                        pythonClient, Optional.of(bigQueryClient), Optional.of(metricsClient), properties);
+
+        List<IntradayDailyCount> result = service.fetchDailyTableCounts();
+
+        assertThat(result).hasSize(1);
+        assertThat(result.getFirst().totalRecords()).isEqualTo(52L);
+    }
+
+    @Test
+    void shouldBuildDailyCountsFromPythonMessagesWhenMetricsUnavailable() {
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        Map<String, Object> metadata = Map.of(
+                "registrosInseridos", 23,
+                "linhasProcessadas", 23);
+        List<PythonDataCollectionClient.PythonMessage> pythonMessages =
+                List.of(new PythonDataCollectionClient.PythonMessage(
+                        "evt-888",
+                        "get_stock_data",
+                        "SUCCESS",
+                        "Resumo fallback diário",
+                        "cotacao_intraday.cotacao_ohlcv_diario",
+                        now,
+                        metadata));
+
+        when(pythonClient.fetchMessages()).thenReturn(pythonMessages);
+
+        DataCollectionMessageService service =
+                new DataCollectionMessageService(pythonClient, Optional.empty(), Optional.empty(), properties);
+
+        List<IntradayDailyCount> result = service.fetchDailyTableCounts();
+
+        assertThat(result).hasSize(1);
+        IntradayDailyCount count = result.getFirst();
+        assertThat(count.totalRecords()).isEqualTo(23L);
+        assertThat(count.date()).isEqualTo(now.toLocalDate());
+        verify(pythonClient).fetchMessages();
+    }
+
+    @Test
     void shouldReturnEmptyCountsWhenMetricsClientMissing() {
         when(pythonClient.fetchMessages()).thenReturn(List.of());
 

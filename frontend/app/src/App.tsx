@@ -21,6 +21,7 @@ import IncidentesTab from './components/tabs/IncidentesTab'
 import OperacaoTab from './components/tabs/OperacaoTab'
 import SinaisTab from './components/tabs/SinaisTab'
 import { useDataCollectionMessages } from './hooks/useDataCollectionMessages'
+import { useDailyTableCounts } from './hooks/useDailyTableCounts'
 import { useIntradayDailyCounts } from './hooks/useIntradayDailyCounts'
 import { useIntradayLatestRecords } from './hooks/useIntradayLatestRecords'
 import { useIntradaySummary } from './hooks/useIntradaySummary'
@@ -78,6 +79,7 @@ function App() {
   const intradaySummaryQuery = useIntradaySummary()
   const intradayDailyCountsQuery = useIntradayDailyCounts()
   const intradayLatestRecordsQuery = useIntradayLatestRecords()
+  const dailyTableCountsQuery = useDailyTableCounts()
 
   const opsOverviewQuery = useOpsOverview()
   const opsPipelineQuery = useOpsPipeline()
@@ -100,6 +102,7 @@ function App() {
       dataCollectionMessagesQuery,
       intradaySummaryQuery,
       intradayDailyCountsQuery,
+      dailyTableCountsQuery,
       intradayLatestRecordsQuery,
     ] as QueryResult[],
     operacao: [opsOverviewQuery, opsPipelineQuery, opsDqLatestQuery] as QueryResult[],
@@ -130,6 +133,7 @@ function App() {
   const intradaySummaryLoading = intradaySummaryQuery.isLoading && !intradaySummaryQuery.data
   const intradayDailyCountsLoading = intradayDailyCountsQuery.isLoading && !intradayDailyCountsQuery.data
   const intradayLatestRecordsLoading = intradayLatestRecordsQuery.isLoading && !intradayLatestRecordsQuery.data
+  const dailyTableCountsLoading = dailyTableCountsQuery.isLoading && !dailyTableCountsQuery.data
   const signalsHistoryLoading = opsSignalsHistoryQuery.isLoading && !opsSignalsHistoryQuery.data
 
   return (
@@ -188,6 +192,9 @@ function App() {
             intradayLatestRecords={intradayLatestRecordsQuery.data}
             intradayLatestRecordsError={intradayLatestRecordsQuery.error}
             intradayLatestRecordsLoading={intradayLatestRecordsLoading}
+            dailyTableCounts={dailyTableCountsQuery.data}
+            dailyTableCountsError={dailyTableCountsQuery.error}
+            dailyTableCountsLoading={dailyTableCountsLoading}
           />
         ) : null}
 

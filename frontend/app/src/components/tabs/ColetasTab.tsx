@@ -13,6 +13,7 @@ import type { FC } from 'react'
 
 import type {
   DataCollectionMessage,
+  DailyTableCount,
   DataCollectionMessageSeverity,
   IntradayDailyCount,
   IntradayLatestRecord,
@@ -40,6 +41,9 @@ interface ColetasTabProps {
   intradayLatestRecords?: IntradayLatestRecord[]
   intradayLatestRecordsError?: Error | null
   intradayLatestRecordsLoading: boolean
+  dailyTableCounts?: DailyTableCount[]
+  dailyTableCountsError?: Error | null
+  dailyTableCountsLoading: boolean
 }
 
 const ColetasTab: FC<ColetasTabProps> = ({
@@ -59,6 +63,9 @@ const ColetasTab: FC<ColetasTabProps> = ({
   intradayLatestRecords,
   intradayLatestRecordsError,
   intradayLatestRecordsLoading,
+  dailyTableCounts,
+  dailyTableCountsError,
+  dailyTableCountsLoading,
 }) => {
   return (
     <Stack spacing={3}>
@@ -78,6 +85,15 @@ const ColetasTab: FC<ColetasTabProps> = ({
         counts={intradayDailyCounts}
         isLoading={intradayDailyCountsLoading}
         error={intradayDailyCountsError ?? null}
+      />
+
+      <IntradayDailyCountsCard
+        counts={dailyTableCounts}
+        isLoading={dailyTableCountsLoading}
+        error={dailyTableCountsError ?? null}
+        title="Volume diário de inserções (Dados diários)"
+        emptyMessage="Nenhum registro encontrado para os últimos dias na tabela de dados diários."
+        tableAriaLabel="Contagem diária de registros em dados diários"
       />
 
       <IntradayLatestRecordsCard
