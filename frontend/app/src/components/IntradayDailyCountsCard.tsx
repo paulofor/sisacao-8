@@ -22,6 +22,7 @@ interface IntradayDailyCountsCardProps {
   isLoading: boolean
   error?: Error | null
   title?: string
+  lookbackDays?: number
   emptyMessage?: string
   tableAriaLabel?: string
 }
@@ -31,6 +32,7 @@ const IntradayDailyCountsCard: FC<IntradayDailyCountsCardProps> = ({
   isLoading,
   error,
   title = 'Volume diário de inserções (Intraday)',
+  lookbackDays,
   emptyMessage = 'Nenhum registro encontrado para os últimos dias na tabela de intraday.',
   tableAriaLabel = 'Contagem diária de registros intraday',
 }) => {
@@ -52,6 +54,8 @@ const IntradayDailyCountsCard: FC<IntradayDailyCountsCardProps> = ({
 
   const items = counts ?? []
   const totalInWindow = items.reduce((acc, item) => acc + item.totalRecords, 0)
+  const displayedWindowDays = Math.max(lookbackDays ?? items.length, 1)
+  const windowDaysLabel = displayedWindowDays === 1 ? 'dia' : 'dias'
 
   return (
     <Paper elevation={0} sx={{ borderRadius: 2, border: '1px solid', borderColor: 'divider', p: 3 }}>
@@ -61,7 +65,7 @@ const IntradayDailyCountsCard: FC<IntradayDailyCountsCardProps> = ({
             {title}
           </Typography>
           <Chip
-            label={`${totalInWindow.toLocaleString('pt-BR')} registros nos últimos ${items.length} dias`}
+            label={`${totalInWindow.toLocaleString('pt-BR')} registros nos últimos ${displayedWindowDays} ${windowDaysLabel}`}
             color="primary"
             variant="outlined"
             size="small"

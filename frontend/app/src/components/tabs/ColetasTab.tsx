@@ -92,6 +92,7 @@ const ColetasTab: FC<ColetasTabProps> = ({
         isLoading={dailyTableCountsLoading}
         error={dailyTableCountsError ?? null}
         title="Volume diário de inserções (Dados diários)"
+        lookbackDays={5}
         emptyMessage="Nenhum registro encontrado para os últimos dias na tabela de dados diários."
         tableAriaLabel="Contagem diária de registros em dados diários"
       />
