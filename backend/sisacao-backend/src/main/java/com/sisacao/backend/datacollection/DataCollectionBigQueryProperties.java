@@ -16,7 +16,7 @@ public class DataCollectionBigQueryProperties {
     private int intradayLatestLimit = 20;
     private String dailyDataset = "cotacao_intraday";
     private String dailyTable = "cotacao_ohlcv_diario";
-    private int dailyDays = 14;
+    private int dailyDays = 5;
 
     public boolean isEnabled() {
         return enabled;

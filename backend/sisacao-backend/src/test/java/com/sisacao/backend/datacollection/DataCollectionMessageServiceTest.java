@@ -161,6 +161,78 @@ class DataCollectionMessageServiceTest {
     }
 
     @Test
+    void shouldLimitDailyCountsToLatestTradingSessionsFromPythonMessages() {
+        properties.setDailyDays(5);
+        List<PythonDataCollectionClient.PythonMessage> pythonMessages = List.of(
+                new PythonDataCollectionClient.PythonMessage(
+                        "evt-100",
+                        "get_stock_data",
+                        "SUCCESS",
+                        "Resumo fallback diário",
+                        "cotacao_intraday.cotacao_ohlcv_diario",
+                        OffsetDateTime.parse("2026-03-05T20:00:00Z"),
+                        Map.of("registrosInseridos", 10)),
+                new PythonDataCollectionClient.PythonMessage(
+                        "evt-101",
+                        "get_stock_data",
+                        "SUCCESS",
+                        "Resumo fallback diário",
+                        "cotacao_intraday.cotacao_ohlcv_diario",
+                        OffsetDateTime.parse("2026-03-04T20:00:00Z"),
+                        Map.of("registrosInseridos", 12)),
+                new PythonDataCollectionClient.PythonMessage(
+                        "evt-102",
+                        "get_stock_data",
+                        "SUCCESS",
+                        "Resumo fallback diário",
+                        "cotacao_intraday.cotacao_ohlcv_diario",
+                        OffsetDateTime.parse("2026-03-03T20:00:00Z"),
+                        Map.of("registrosInseridos", 8)),
+                new PythonDataCollectionClient.PythonMessage(
+                        "evt-103",
+                        "get_stock_data",
+                        "SUCCESS",
+                        "Resumo fallback diário",
+                        "cotacao_intraday.cotacao_ohlcv_diario",
+                        OffsetDateTime.parse("2026-03-02T20:00:00Z"),
+                        Map.of("registrosInseridos", 9)),
+                new PythonDataCollectionClient.PythonMessage(
+                        "evt-104",
+                        "get_stock_data",
+                        "SUCCESS",
+                        "Resumo fallback diário",
+                        "cotacao_intraday.cotacao_ohlcv_diario",
+                        OffsetDateTime.parse("2026-02-27T20:00:00Z"),
+                        Map.of("registrosInseridos", 11)),
+                new PythonDataCollectionClient.PythonMessage(
+                        "evt-105",
+                        "get_stock_data",
+                        "SUCCESS",
+                        "Resumo fallback diário",
+                        "cotacao_intraday.cotacao_ohlcv_diario",
+                        OffsetDateTime.parse("2026-02-26T20:00:00Z"),
+                        Map.of("registrosInseridos", 7)));
+
+        when(pythonClient.fetchMessages()).thenReturn(pythonMessages);
+
+        DataCollectionMessageService service =
+                new DataCollectionMessageService(pythonClient, Optional.empty(), Optional.empty(), properties);
+
+        List<IntradayDailyCount> result = service.fetchDailyTableCounts();
+
+        assertThat(result).hasSize(5);
+        assertThat(result)
+                .extracting(IntradayDailyCount::date)
+                .containsExactly(
+                        java.time.LocalDate.parse("2026-03-05"),
+                        java.time.LocalDate.parse("2026-03-04"),
+                        java.time.LocalDate.parse("2026-03-03"),
+                        java.time.LocalDate.parse("2026-03-02"),
+                        java.time.LocalDate.parse("2026-02-27"));
+        verify(pythonClient).fetchMessages();
+    }
+
+    @Test
     void shouldBuildDailyCountsFromPythonMessagesWhenMetricsUnavailable() {
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         Map<String, Object> metadata = Map.of(

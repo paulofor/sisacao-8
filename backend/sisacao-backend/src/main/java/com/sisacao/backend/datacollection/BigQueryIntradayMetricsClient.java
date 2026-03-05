@@ -75,24 +75,28 @@ public class BigQueryIntradayMetricsClient {
 
     public List<IntradayDailyCount> fetchDailyTableCounts() {
         String qualifiedTable = buildQualifiedTableName(properties.getDailyDataset(), properties.getDailyTable());
-        int lookbackDays = Math.max(properties.getDailyDays(), 1);
+        int tradingSessions = Math.max(properties.getDailyDays(), 1);
 
         String query =
                 """
                         SELECT
-                          DATE(data) AS data_ref,
-                          COUNT(*) AS total_registros
-                        FROM %s
-                        WHERE data >= DATE_SUB(CURRENT_DATE(), INTERVAL @lookbackDays DAY)
-                        GROUP BY data_ref
+                          data_ref,
+                          total_registros
+                        FROM (
+                          SELECT
+                            DATE(data) AS data_ref,
+                            COUNT(*) AS total_registros
+                          FROM %s
+                          GROUP BY data_ref
+                        )
                         ORDER BY data_ref DESC
-                        LIMIT @lookbackDays;
+                        LIMIT @tradingSessions;
                         """
                         .formatted(qualifiedTable);
 
         QueryJobConfiguration configuration =
                 QueryJobConfiguration.newBuilder(query)
-                        .addNamedParameter("lookbackDays", QueryParameterValue.int64(lookbackDays))
+                        .addNamedParameter("tradingSessions", QueryParameterValue.int64(tradingSessions))
                         .setUseLegacySql(false)
                         .build();
 

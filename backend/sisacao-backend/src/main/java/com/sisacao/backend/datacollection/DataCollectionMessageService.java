@@ -235,7 +235,6 @@ public class DataCollectionMessageService {
         }
 
         int lookbackDays = Math.max(bigQueryProperties.getDailyDays(), 1);
-        LocalDate cutoffDate = LocalDate.now(ZoneOffset.UTC).minusDays(Math.max(lookbackDays - 1L, 0L));
 
         Map<LocalDate, Long> totalsByDate = new HashMap<>();
 
@@ -250,9 +249,6 @@ public class DataCollectionMessageService {
             }
 
             LocalDate messageDate = createdAt.toLocalDate();
-            if (messageDate.isBefore(cutoffDate)) {
-                continue;
-            }
 
             long recordCount = extractIntradayRecordCount(message.metadata());
             totalsByDate.merge(messageDate, recordCount, Long::sum);
