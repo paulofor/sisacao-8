@@ -80,15 +80,11 @@ public class BigQueryIntradayMetricsClient {
         String query =
                 """
                         SELECT
-                          data_ref,
-                          total_registros
-                        FROM (
-                          SELECT
-                            DATE(data) AS data_ref,
-                            COUNT(*) AS total_registros
-                          FROM %s
-                          GROUP BY data_ref
-                        )
+                          data_pregao AS data_ref,
+                          COUNT(*) AS total_registros
+                        FROM %s
+                        WHERE data_pregao IS NOT NULL
+                        GROUP BY data_pregao
                         ORDER BY data_ref DESC
                         LIMIT @tradingSessions;
                         """
