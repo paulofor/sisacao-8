@@ -241,6 +241,13 @@ def _load_strategy_config() -> StrategyConfig:
     )
 
 
+def _query_rows(
+    query: str, *, job_config: bigquery.QueryJobConfig | None = None
+) -> List[Dict[str, Any]]:
+    row_iter = _get_client().query(query, job_config=job_config).result()
+    return [dict(row.items()) for row in row_iter]
+
+
 def _is_b3_holiday(date_value: dt.date) -> bool:
     query = (
         "SELECT 1 FROM `"
@@ -280,7 +287,7 @@ def _fetch_daily_frame(reference_date: dt.date) -> pd.DataFrame:
     )
     params = [bigquery.ScalarQueryParameter("ref_date", "DATE", reference_date)]
     job_config = bigquery.QueryJobConfig(query_parameters=params)
-    df = _get_client().query(query, job_config=job_config).to_dataframe()
+    df = pd.DataFrame(_query_rows(query, job_config=job_config))
     df.sort_values("ticker", inplace=True)
     return df
 
@@ -296,7 +303,7 @@ def _fetch_latest_metrics() -> pd.DataFrame:
         WHERE as_of_date = (SELECT as_of_date FROM latest WHERE as_of_date IS NOT NULL)
     """
     try:
-        return _get_client().query(query).to_dataframe()
+        return pd.DataFrame(_query_rows(query))
     except Exception as exc:  # noqa: BLE001
         logging.info("Backtest metrics indisponíveis: %s", exc)
         return pd.DataFrame()
