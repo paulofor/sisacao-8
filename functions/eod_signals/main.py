@@ -279,6 +279,16 @@ def _next_business_day(date_value: dt.date) -> dt.date:
 
 
 def _fetch_daily_frame(reference_date: dt.date) -> pd.DataFrame:
+    expected_columns = [
+        "ticker",
+        "data_pregao",
+        "open",
+        "close",
+        "high",
+        "low",
+        "volume_financeiro",
+        "qtd_negociada",
+    ]
     query = (
         "SELECT ticker, data_pregao, open, close, high, low, "
         "volume_financeiro, qtd_negociada "
@@ -287,8 +297,9 @@ def _fetch_daily_frame(reference_date: dt.date) -> pd.DataFrame:
     )
     params = [bigquery.ScalarQueryParameter("ref_date", "DATE", reference_date)]
     job_config = bigquery.QueryJobConfig(query_parameters=params)
-    df = pd.DataFrame(_query_rows(query, job_config=job_config))
-    df.sort_values("ticker", inplace=True)
+    df = pd.DataFrame(_query_rows(query, job_config=job_config), columns=expected_columns)
+    if "ticker" in df.columns:
+        df.sort_values("ticker", inplace=True)
     return df
 
 
