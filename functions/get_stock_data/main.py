@@ -737,6 +737,42 @@ def is_b3_holiday(reference_date: datetime.date) -> bool:
         return False
 
 
+def has_daily_data(reference_date: datetime.date) -> bool:
+    """Return ``True`` when target table already has candles for ``reference_date``."""
+
+    table_id = f"{_project_id()}.{DATASET_ID}.{FECHAMENTO_TABLE_ID}"
+    query = (
+        "SELECT COUNT(1) AS total "
+        f"FROM `{table_id}` "
+        "WHERE data_pregao = @ref_date"
+    )
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ScalarQueryParameter("ref_date", "DATE", reference_date)
+        ]
+    )
+    try:
+        rows = list(_query_with_location(query, job_config=job_config).result())
+    except Exception as exc:  # noqa: BLE001
+        logging.warning(
+            "Falha ao verificar dados existentes para %s: %s",
+            reference_date,
+            exc,
+            exc_info=True,
+        )
+        return False
+    if not rows:
+        return False
+    first_row = rows[0]
+    total = getattr(first_row, "total", None)
+    if total is None and isinstance(first_row, dict):
+        total = first_row.get("total")
+    try:
+        return int(total or 0) > 0
+    except (TypeError, ValueError):
+        return False
+
+
 def get_stock_data(request):
     """Entry point for the Cloud Function that stores daily closing prices."""
     payload = _request_payload(request)
@@ -760,6 +796,14 @@ def get_stock_data(request):
             holidays_table=FERIADOS_TABLE_ID,
         )
         return "Skipped holiday"
+
+    if has_daily_data(reference_date) and not force:
+        run_logger.warn(
+            "Coleta ignorada por já existir carga do dia",
+            reason="already_loaded",
+            table=FECHAMENTO_TABLE_ID,
+        )
+        return "Skipped already loaded"
 
     config = _load_ingestion_config()
     run_logger.update_context(
