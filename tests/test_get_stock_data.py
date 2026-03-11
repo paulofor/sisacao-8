@@ -267,6 +267,17 @@ def test_get_stock_data_skips_on_holiday(monkeypatch):
     assert response == "Skipped holiday"
 
 
+def test_get_stock_data_skips_when_already_loaded(monkeypatch):
+    module = import_get_stock_module(monkeypatch)
+
+    monkeypatch.setattr(module, "is_b3_holiday", lambda date: False)
+    monkeypatch.setattr(module, "has_daily_data", lambda date: True)
+
+    response = module.get_stock_data(None)
+
+    assert response == "Skipped already loaded"
+
+
 def test_is_b3_holiday_true_when_row_exists(monkeypatch):
     module = import_get_stock_module(monkeypatch)
     monkeypatch.setattr(module, "pd", None, raising=False)
@@ -287,6 +298,38 @@ def test_is_b3_holiday_true_when_row_exists(monkeypatch):
 
     assert result is True
     assert module.FERIADOS_TABLE_ID in fake_client.query_text
+
+
+def test_has_daily_data_true_when_count_positive(monkeypatch):
+    module = import_get_stock_module(monkeypatch)
+
+    class FakeClient:
+        project = "test-project"
+
+        def query(self, query, job_config=None):  # noqa: D401, ANN001
+            return types.SimpleNamespace(result=lambda: [{"total": 4}])
+
+    monkeypatch.setattr(module, "client", FakeClient(), raising=False)
+
+    result = module.has_daily_data(datetime.date(2026, 1, 2))
+
+    assert result is True
+
+
+def test_has_daily_data_false_when_count_zero(monkeypatch):
+    module = import_get_stock_module(monkeypatch)
+
+    class FakeClient:
+        project = "test-project"
+
+        def query(self, query, job_config=None):  # noqa: D401, ANN001
+            return types.SimpleNamespace(result=lambda: [{"total": 0}])
+
+    monkeypatch.setattr(module, "client", FakeClient(), raising=False)
+
+    result = module.has_daily_data(datetime.date(2026, 1, 2))
+
+    assert result is False
 
 
 def test_append_dataframe_to_bigquery_merge_strategy(monkeypatch):
