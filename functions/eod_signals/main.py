@@ -297,7 +297,10 @@ def _fetch_daily_frame(reference_date: dt.date) -> pd.DataFrame:
     )
     params = [bigquery.ScalarQueryParameter("ref_date", "DATE", reference_date)]
     job_config = bigquery.QueryJobConfig(query_parameters=params)
-    df = pd.DataFrame(_query_rows(query, job_config=job_config), columns=expected_columns)
+    df = pd.DataFrame(
+        _query_rows(query, job_config=job_config),
+        columns=expected_columns,
+    )
     if "ticker" in df.columns:
         df.sort_values("ticker", inplace=True)
     return df
