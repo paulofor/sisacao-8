@@ -358,6 +358,11 @@ def _persist_signals(
         for signal in signals
     ]
     for row in rows:
+        for key, value in list(row.items()):
+            if isinstance(value, dt.date) and not isinstance(value, dt.datetime):
+                row[key] = value.isoformat()
+            elif isinstance(value, dt.datetime):
+                row[key] = value.isoformat(sep=" ", timespec="seconds")
         row["job_run_id"] = run_id
         row["config_version"] = config_version
     if not rows:
