@@ -113,6 +113,47 @@ client = bigquery.Client(location=BQ_LOCATION)
 app: Optional[Any] = None
 
 
+def _runtime_context_snapshot() -> Dict[str, Any]:
+    """Return key runtime context values used by BigQuery operations."""
+
+    return {
+        "client_project": getattr(client, "project", None),
+        "client_location": getattr(client, "location", None),
+        "configured_dataset": DATASET_ID,
+        "configured_table": TABELA_ID,
+        "configured_bq_location": BQ_LOCATION,
+        "env_gcp_project": os.environ.get("GCP_PROJECT"),
+        "env_google_cloud_project": os.environ.get("GOOGLE_CLOUD_PROJECT"),
+        "env_bq_intraday_dataset": os.environ.get("BQ_INTRADAY_DATASET"),
+        "env_bq_intraday_raw_table": os.environ.get("BQ_INTRADAY_RAW_TABLE"),
+        "k_service": os.environ.get("K_SERVICE"),
+        "k_revision": os.environ.get("K_REVISION"),
+    }
+
+
+def _log_bigquery_runtime_context() -> None:
+    """Emit a single log line with the current BigQuery runtime context."""
+
+    context = _runtime_context_snapshot()
+    logger.warning(
+        "BigQuery runtime context: project=%s location=%s dataset=%s table=%s "
+        "BQ_LOCATION=%s GCP_PROJECT=%s GOOGLE_CLOUD_PROJECT=%s "
+        "BQ_INTRADAY_DATASET=%s BQ_INTRADAY_RAW_TABLE=%s "
+        "K_SERVICE=%s K_REVISION=%s",
+        context["client_project"],
+        context["client_location"],
+        context["configured_dataset"],
+        context["configured_table"],
+        context["configured_bq_location"],
+        context["env_gcp_project"],
+        context["env_google_cloud_project"],
+        context["env_bq_intraday_dataset"],
+        context["env_bq_intraday_raw_table"],
+        context["k_service"],
+        context["k_revision"],
+    )
+
+
 DEFAULT_FALLBACK_TICKERS = [
     "PETR4",
     "VALE3",
@@ -422,9 +463,15 @@ def append_dataframe_to_bigquery(data: Any) -> None:
             inserted_rows,
         )
     except Exception as exc:  # noqa: BLE001
+        context = _runtime_context_snapshot()
         logger.warning(
-            "Failed to insert data into BigQuery: %s",
+            "Failed to insert data into BigQuery: %s "
+            "(project=%s dataset=%s table=%s location=%s)",
             exc,
+            context["client_project"],
+            context["configured_dataset"],
+            context["configured_table"],
+            context["configured_bq_location"],
             exc_info=True,
         )
 
@@ -443,6 +490,7 @@ def fetch_active_tickers() -> List[str]:
     """Return list of active tickers from ``acao_bovespa`` table."""
     table_id = f"{client.project}.{DATASET_ID}.acao_bovespa"
     query = f"SELECT ticker FROM `{table_id}` WHERE ativo = TRUE"
+    logger.warning("Fetching active tickers using query table %s", table_id)
     try:
         query_job = client.query(query)
         tickers: List[str] = []
@@ -492,6 +540,11 @@ def is_b3_holiday(reference_date: datetime.date) -> bool:
         logger.warning("BigQuery client without project; skipping holiday gate.")
         return False
     table_id = f"{project_id}.{DATASET_ID}.{FERIADOS_TABLE_ID}"
+    logger.warning(
+        "Checking B3 holiday date=%s using table %s",
+        reference_date.isoformat(),
+        table_id,
+    )
     query = (
         "SELECT data_feriado "
         f"FROM `{table_id}` "
@@ -590,6 +643,7 @@ def google_finance_price(request: Any) -> Response:
     run_logger = StructuredLogger(JOB_NAME)
     run_logger.update_context(date_ref=data_atual)
     run_logger.started()
+    _log_bigquery_runtime_context()
     table_path = f"{client.project}.{DATASET_ID}.{TABELA_ID}"
 
     if is_b3_holiday(now.date()):
