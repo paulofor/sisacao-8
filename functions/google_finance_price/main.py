@@ -223,7 +223,9 @@ def _load_table_from_dataframe(df: Any, table_id: str, job_config: Any) -> Any:
         return client.load_table_from_dataframe(df, table_id, job_config=job_config)
 
 
-def _load_table_from_json(rows: List[Dict[str, Any]], table_id: str, job_config: Any) -> Any:
+def _load_table_from_json(
+    rows: List[Dict[str, Any]], table_id: str, job_config: Any
+) -> Any:
     """Load JSON rows handling clients that do not accept ``location``."""
 
     location = _resolve_intraday_location()
