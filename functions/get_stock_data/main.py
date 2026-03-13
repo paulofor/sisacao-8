@@ -61,7 +61,23 @@ FECHAMENTO_TABLE_ID = os.environ.get("BQ_DAILY_TABLE", "cotacao_ohlcv_diario")
 FERIADOS_TABLE_ID = os.environ.get("BQ_HOLIDAYS_TABLE", "feriados_b3")
 FONTE_FECHAMENTO = "B3_DAILY_COTAHIST"
 LOAD_STRATEGY = os.environ.get("BQ_DAILY_LOAD_STRATEGY", "MERGE")
-BQ_LOCATION = os.environ.get("BQ_LOCATION", "us-east1").strip()
+DEFAULT_BQ_LOCATION = "us-east1"
+
+
+def _normalize_bq_location(value: str | None, default: str = DEFAULT_BQ_LOCATION) -> str:
+    raw_value = default if value is None else value
+    text = str(raw_value).strip()
+    if not text:
+        text = default
+    lowered = text.lower()
+    if lowered.startswith("region-"):
+        lowered = lowered.split("region-", 1)[1]
+    if lowered == "east1":
+        return "us-east1"
+    return lowered
+
+
+BQ_LOCATION = _normalize_bq_location(os.environ.get("BQ_LOCATION"))
 JOB_NAME = os.environ.get("JOB_NAME", "get_stock_data")
 PIPELINE_CONFIG_TABLE_ID = os.environ.get("PIPELINE_CONFIG_TABLE", "pipeline_config")
 PIPELINE_CONFIG_ID = os.environ.get("PIPELINE_CONFIG_ID", "default")

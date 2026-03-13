@@ -101,13 +101,45 @@ except ImportError:  # pragma: no cover - fallback when imported as a package
 
 logger = logging.getLogger(__name__)
 
+BQ_DEFAULT_LOCATION = "us-east1"
+
+
+def _normalize_bq_location(
+    value: str | None,
+    default: str = BQ_DEFAULT_LOCATION,
+) -> str:
+    raw_value = default if value is None else value
+    text = str(raw_value).strip()
+    if not text:
+        text = default
+    lowered = text.lower()
+    if lowered.startswith("region-"):
+        lowered = lowered.split("region-", 1)[1]
+    if lowered == "east1":
+        return "us-east1"
+    return lowered
+
+
+def _parse_fallback_locations(raw_value: str | None) -> str:
+    if not raw_value:
+        raw_value = "US,us-east1"
+    locations: List[str] = []
+    for chunk in raw_value.split(","):
+        normalized = _normalize_bq_location(chunk, default="")
+        if normalized and normalized not in locations:
+            locations.append(normalized)
+    return ",".join(locations)
+
+
 DATASET_ID = os.environ.get("BQ_INTRADAY_DATASET", "cotacao_intraday")
 TABELA_ID = os.environ.get("BQ_INTRADAY_RAW_TABLE", "cotacao_b3")
 FERIADOS_TABLE_ID = os.environ.get("BQ_HOLIDAYS_TABLE", "feriados_b3")
 JOB_NAME = os.environ.get("JOB_NAME", "google_finance_price")
 INGESTION_SOURCE = os.environ.get("GOOGLE_FINANCE_SOURCE", "google_finance")
-BQ_LOCATION = os.environ.get("BQ_LOCATION", "us-east1")
-BQ_FALLBACK_LOCATIONS = os.environ.get("BQ_FALLBACK_LOCATIONS", "US,us-east1")
+BQ_LOCATION = _normalize_bq_location(os.environ.get("BQ_LOCATION"))
+BQ_FALLBACK_LOCATIONS = _parse_fallback_locations(
+    os.environ.get("BQ_FALLBACK_LOCATIONS")
+)
 
 client = bigquery.Client(location=BQ_LOCATION)
 _INTRADAY_LOCATION: Optional[str] = None
@@ -324,9 +356,24 @@ MAX_INTRADAY_TICKERS_ENV = "MAX_INTRADAY_TICKERS"
 MAX_WORKERS_ENV = "GOOGLE_FINANCE_MAX_WORKERS"
 FUNCTION_DEADLINE_SECONDS_ENV = "FUNCTION_DEADLINE_SECONDS"
 BATCH_SIZE_ENV = "GOOGLE_FINANCE_BATCH_SIZE"
-DEFAULT_TICKERS_FILE = (
-    Path(__file__).resolve().parent.parent / "get_stock_data" / "tickers.txt"
-)
+
+
+def _default_ticker_files() -> List[Path]:
+    module_path = Path(__file__).resolve()
+    search_roots = [
+        module_path.parent,
+        module_path.parent.parent,
+        Path.cwd(),
+    ]
+    files: List[Path] = []
+    for root in search_roots:
+        candidate = root / "get_stock_data" / "tickers.txt"
+        if candidate not in files:
+            files.append(candidate)
+    return files
+
+
+DEFAULT_TICKERS_FILES = tuple(_default_ticker_files())
 
 
 def _max_intraday_tickers() -> int:
@@ -453,17 +500,18 @@ def _fallback_tickers() -> List[str]:
             )
             return tickers[: _max_intraday_tickers()]
 
-    tickers = _load_tickers_from_file(DEFAULT_TICKERS_FILE)
-    if tickers:
-        logger.warning(
-            "Using fallback tickers from default file %s",
-            DEFAULT_TICKERS_FILE,
-        )
-        return tickers[: _max_intraday_tickers()]
+    for ticker_file in DEFAULT_TICKERS_FILES:
+        tickers = _load_tickers_from_file(ticker_file)
+        if tickers:
+            logger.warning(
+                "Using fallback tickers from default file %s",
+                ticker_file,
+            )
+            return tickers[: _max_intraday_tickers()]
 
     logger.warning(
-        "Fallback tickers file %s not found. Falling back to built-in defaults.",
-        DEFAULT_TICKERS_FILE,
+        "Fallback tickers files %s not found. Falling back to built-in defaults.",
+        ", ".join(str(path) for path in DEFAULT_TICKERS_FILES),
     )
     return DEFAULT_FALLBACK_TICKERS[: _max_intraday_tickers()]
 
