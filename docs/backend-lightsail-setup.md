@@ -91,7 +91,7 @@ Crie um arquivo `/opt/sisacao/app/.env` (ou utilize o gerenciador de segredos es
 ```bash
 GCP_PROJECT=ingestaokraken
 BQ_TABLE=ingestaokraken.cotacao_intraday.cotacao_ohlcv_diario
-GCP_REGION=us-central1
+GCP_REGION=us-east1
 SPRING_PROFILES_ACTIVE=prod
 ```
 

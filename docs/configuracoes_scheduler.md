@@ -20,7 +20,7 @@ Este documento consolida as configurações necessárias para que todos os jobs 
 | Campo | Valor recomendado |
 |-------|-------------------|
 | Serviço-alvo | Cloud Function `get_stock_data` |
-| Endpoint | `https://us-central1-<projeto>.cloudfunctions.net/get_stock_data` |
+| Endpoint | `https://us-east1-<projeto>.cloudfunctions.net/get_stock_data` |
 | Método HTTP | `POST` (body vazio) |
 | Cron | `0 20 * * 1-5` |
 | Time zone | `America/Sao_Paulo` |
@@ -50,7 +50,7 @@ Este documento consolida as configurações necessárias para que todos os jobs 
 | Campo | Valor recomendado |
 |-------|-------------------|
 | Serviço-alvo | Cloud Function `intraday_candles` |
-| Endpoint | `https://us-central1-<projeto>.cloudfunctions.net/intraday_candles` |
+| Endpoint | `https://us-east1-<projeto>.cloudfunctions.net/intraday_candles` |
 | Método HTTP | `POST` (body vazio ou `{ "date": "YYYY-MM-DD" }`) |
 | Cron | `10 18 * * 1-5` |
 | Time zone | `America/Sao_Paulo` |
@@ -63,7 +63,7 @@ Este documento consolida as configurações necessárias para que todos os jobs 
 | Campo | Valor recomendado |
 |-------|-------------------|
 | Serviço-alvo | Cloud Function `eod_signals` |
-| Endpoint | `https://us-central1-<projeto>.cloudfunctions.net/eod_signals` |
+| Endpoint | `https://us-east1-<projeto>.cloudfunctions.net/eod_signals` |
 | Método HTTP | `POST` |
 | Payload | `{ "date": "YYYY-MM-DD" }` (opcional) |
 | Cron | `0 19 * * 1-5` |
@@ -77,7 +77,7 @@ Este documento consolida as configurações necessárias para que todos os jobs 
 | Campo | Valor recomendado |
 |-------|-------------------|
 | Serviço-alvo | Cloud Function `alerts` |
-| Endpoint | `https://us-central1-<projeto>.cloudfunctions.net/alerts` |
+| Endpoint | `https://us-east1-<projeto>.cloudfunctions.net/alerts` |
 | Método HTTP | `POST` |
 | Payload | `{ "only_summary": true }` |
 | Cron | `0 18 * * 1-5` |
@@ -102,7 +102,7 @@ Mantendo este documento atualizado você garante que as rotinas automáticas do 
 | Campo | Valor recomendado |
 |-------|-------------------|
 | Serviço-alvo | Cloud Function `backtest_daily` |
-| Endpoint | `https://us-central1-<projeto>.cloudfunctions.net/backtest_daily` |
+| Endpoint | `https://us-east1-<projeto>.cloudfunctions.net/backtest_daily` |
 | Método HTTP | `POST` (corpo vazio ou `{ "date": "YYYY-MM-DD" }`) |
 | Cron | `15 19 * * 1-5` |
 | Time zone | `America/Sao_Paulo` |
@@ -114,7 +114,7 @@ Mantendo este documento atualizado você garante que as rotinas automáticas do 
 | Campo | Valor recomendado |
 |-------|-------------------|
 | Serviço-alvo | Cloud Function `dq_checks` |
-| Endpoint | `https://us-central1-<projeto>.cloudfunctions.net/dq_checks` |
+| Endpoint | `https://us-east1-<projeto>.cloudfunctions.net/dq_checks` |
 | Método HTTP | `POST` |
 | Cron | `30 19 * * 1-5` (logo após o backtest) |
 | Time zone | `America/Sao_Paulo` |

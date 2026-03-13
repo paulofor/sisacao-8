@@ -11,7 +11,7 @@ Este guia documenta como confirmar se o serviço `google_finance_price` está pu
    ```bash
    gcloud run services describe google-finance-price \
      --project=ingestaokraken \
-     --region=us-central1 \
+     --region=us-east1 \
      --format="value(status.url)"
    ```
 
@@ -23,7 +23,7 @@ Este guia documenta como confirmar se o serviço `google_finance_price` está pu
 
    ```bash
    gcloud scheduler jobs describe Intraday \
-     --location=us-central1 \
+     --location=us-east1 \
      --project=ingestaokraken
    ```
 
@@ -33,7 +33,7 @@ Este guia documenta como confirmar se o serviço `google_finance_price` está pu
    SERVICE_URL="https://google-finance-price-abcdefg-uc.a.run.app"  # substitua pela URL real
 
    gcloud scheduler jobs update http Intraday \
-     --location=us-central1 \
+     --location=us-east1 \
      --project=ingestaokraken \
      --uri="${SERVICE_URL}" \
      --http-method=POST \
@@ -43,7 +43,7 @@ Este guia documenta como confirmar se o serviço `google_finance_price` está pu
      --oidc-token-audience="${SERVICE_URL}"
    ```
 
-3. Caso o serviço esteja em Cloud Function, substitua `--uri` e `--oidc-token-audience` pelo endpoint `https://us-central1-ingestaokraken.cloudfunctions.net/google_finance_price` e garanta o papel **Cloud Functions Invoker**.
+3. Caso o serviço esteja em Cloud Function, substitua `--uri` e `--oidc-token-audience` pelo endpoint `https://us-east1-ingestaokraken.cloudfunctions.net/google_finance_price` e garanta o papel **Cloud Functions Invoker**.
 
 ## 3. Garantir permissões de invocação
 
@@ -53,7 +53,7 @@ A conta de serviço do Scheduler precisa do papel correto para autenticar via OI
 gcloud run services add-iam-policy-binding google-finance-price \
   --member="serviceAccount:agendamentos-sisacao@ingestaokraken.iam.gserviceaccount.com" \
   --role="roles/run.invoker" \
-  --region=us-central1 \
+  --region=us-east1 \
   --project=ingestaokraken
 ```
 
@@ -65,7 +65,7 @@ Para Cloud Functions, use `roles/cloudfunctions.invoker` e o comando `gcloud fun
 
    ```bash
    gcloud scheduler jobs run Intraday \
-     --location=us-central1 \
+     --location=us-east1 \
      --project=ingestaokraken
    ```
 

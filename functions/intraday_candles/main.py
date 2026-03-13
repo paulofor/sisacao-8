@@ -28,7 +28,7 @@ CANDLES_15M_TABLE_ID = os.environ.get("BQ_INTRADAY_15M_TABLE", "candles_intraday
 CANDLES_1H_TABLE_ID = os.environ.get("BQ_INTRADAY_1H_TABLE", "candles_intraday_1h")
 AGGREGATE_HOURLY = os.environ.get("INTRADAY_ENABLE_HOURLY", "true").lower() == "true"
 JOB_NAME = os.environ.get("JOB_NAME", "intraday_candles")
-BQ_LOCATION = os.environ.get("BQ_LOCATION", "us-central1")
+BQ_LOCATION = os.environ.get("BQ_LOCATION", "us-east1")
 
 client = bigquery.Client(location=BQ_LOCATION)
 

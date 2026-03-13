@@ -51,7 +51,7 @@ invoker). O script respeita `mode`, `date_ref`, `force` e registra
 ```bash
 python tools/reprocess.py 2024-08-12 \
   --project ingestaokraken \
-  --region us-central1 \
+  --region us-east1 \
   --service-account-key sa-invoker.json \
   --mode ALL \
   --force

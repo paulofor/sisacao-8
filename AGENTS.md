@@ -70,7 +70,7 @@ Este arquivo fornece contexto a agentes de IA (OpenAI Codex, ChatGPT, etc.) sob
 - Tabela intraday utilizada pelas funções `google_finance_price` e monitoramentos derivados:
   `ingestaokraken.cotacao_intraday.cotacao_bovespa`
 - `GCP_PROJECT` → `ingestaokraken`
-- `GCP_REGION` → `us-central1`
+- `GCP_REGION` → `us-east1`
 
 ---
 > **Importante:** Novas funções devem seguir o padrão deste repositório. Mantenha o guia atualizado a cada adição.

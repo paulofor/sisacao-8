@@ -9,7 +9,7 @@ on:
 
 env:
   PROJECT_ID: ingestaokraken
-  REGION: us-central1
+  REGION: us-east1
 
 jobs:
   deploy-cloud-functions:

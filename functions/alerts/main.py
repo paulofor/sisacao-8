@@ -20,7 +20,7 @@ CHAT_ID = os.environ.get("CHAT_ID")
 DATASET_ID = os.environ.get("BQ_INTRADAY_DATASET", "cotacao_intraday")
 SIGNALS_TABLE_ID = os.environ.get("BQ_SIGNALS_TABLE", "sinais_eod")
 JOB_NAME = os.environ.get("JOB_NAME", "alerts")
-BQ_LOCATION = os.environ.get("BQ_LOCATION", "us-central1")
+BQ_LOCATION = os.environ.get("BQ_LOCATION", "us-east1")
 
 
 def alerts(request: Any) -> Tuple[Dict[str, Any], int]:

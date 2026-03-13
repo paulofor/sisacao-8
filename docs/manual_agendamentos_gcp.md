@@ -33,7 +33,7 @@ Este manual descreve os agendamentos necessários para manter o fluxo de ingest�
    - **Frequency**: `0 20 * * 1-5` (dias úteis às 20:00);
    - **Time zone**: `America/Sao_Paulo`;
    - **Target type**: `HTTP`.
-3. Em **URL**, informe o endpoint da função (ex.: `https://us-central1-ingestaokraken.cloudfunctions.net/get_stock_data`).
+3. Em **URL**, informe o endpoint da função (ex.: `https://us-east1-ingestaokraken.cloudfunctions.net/get_stock_data`).
 4. Em **HTTP method**, selecione `POST`.
 5. Em **Body**, não é necessário enviar conteúdo. A função reaproveita os
    tickers ativos da tabela `cotacao_intraday.acao_bovespa`, a mesma consumida
@@ -51,14 +51,14 @@ Se preferir usar o Cloud SDK:
 gcloud scheduler jobs create http get-stock-data-diario \
     --schedule="0 20 * * 1-5" \
     --time-zone="America/Sao_Paulo" \
-    --uri="https://us-central1-ingestaokraken.cloudfunctions.net/get_stock_data" \
+    --uri="https://us-east1-ingestaokraken.cloudfunctions.net/get_stock_data" \
     --http-method=POST \
     --headers="Content-Type=application/json" \
     --oidc-service-account-email=agendamentos-sisacao@ingestaokraken.iam.gserviceaccount.com \
-    --oidc-token-audience="https://us-central1-ingestaokraken.cloudfunctions.net/get_stock_data"
+    --oidc-token-audience="https://us-east1-ingestaokraken.cloudfunctions.net/get_stock_data"
 ```
 
-Os exemplos acima já utilizam o projeto `ingestaokraken` na região `us-central1`. Ajuste apenas se precisar implantar em outro ambiente. O parâmetro `--oidc-token-audience` garante que a função reconheça o token emitido pelo Cloud Scheduler.
+Os exemplos acima já utilizam o projeto `ingestaokraken` na região `us-east1`. Ajuste apenas se precisar implantar em outro ambiente. O parâmetro `--oidc-token-audience` garante que a função reconheça o token emitido pelo Cloud Scheduler.
 
 ## 4. Agendamento do serviço `google_finance_price`
 
@@ -72,7 +72,7 @@ Os exemplos acima já utilizam o projeto `ingestaokraken` na região `us-central
 
 1. Implante a função `functions/eod_signals` no Cloud Functions ou Cloud Run.
 2. Crie um job no Cloud Scheduler com cron `0 19 * * 1-5` (19:00 em dias úteis).
-3. Configure método `POST` para o endpoint publicado (`https://us-central1-<projeto>.cloudfunctions.net/eod_signals`).
+3. Configure método `POST` para o endpoint publicado (`https://us-east1-<projeto>.cloudfunctions.net/eod_signals`).
 4. Opcionalmente envie `{ "date": "YYYY-MM-DD" }` no corpo para reprocessar um dia específico.
 5. Utilize a conta de serviço `agendamentos-sisacao` com permissão `Cloud Functions Invoker`.
 6. Verifique nos logs se a função gravou registros na tabela `cotacao_intraday.sinais_eod`.
@@ -81,7 +81,7 @@ Os exemplos acima já utilizam o projeto `ingestaokraken` na região `us-central
 
 1. Garanta que os segredos `BOT_TOKEN` e `CHAT_ID` estejam disponíveis no Secret Manager e vinculados à função `alerts`.
 2. Crie um job no Cloud Scheduler com cron `0 18 * * 1-5` para enviar o resumo após o horário de pregão.
-3. Configure o endpoint `https://us-central1-ingestaokraken.cloudfunctions.net/alerts` com método `POST` e corpo `{ "only_summary": true }` (ou conforme os parâmetros aceitos pela função).
+3. Configure o endpoint `https://us-east1-ingestaokraken.cloudfunctions.net/alerts` com método `POST` e corpo `{ "only_summary": true }` (ou conforme os parâmetros aceitos pela função).
 4. Associe a conta de serviço com permissão `Cloud Functions Invoker` e teste disparando manualmente.
 
 ## 7. Monitoramento e operação contínua
@@ -109,7 +109,7 @@ Seguindo estes passos você garante que todas as automações do projeto são ex
 1. Após confirmar que o job `eod-signals` está concluído, crie um novo Cloud Scheduler
    chamado `backtest-daily`.
 2. Frequência sugerida: `15 19 * * 1-5` (logo após a geração dos sinais).
-3. Endpoint: `https://us-central1-<projeto>.cloudfunctions.net/backtest_daily`.
+3. Endpoint: `https://us-east1-<projeto>.cloudfunctions.net/backtest_daily`.
 4. Método `POST`, corpo opcional `{ "date": "YYYY-MM-DD" }` para reprocessos.
 5. Autenticação OIDC com a mesma conta de serviço usada nos demais jobs.
 6. Verifique no Cloud Logging o log `job_name="backtest_daily" status="OK"` e as tabelas
@@ -118,7 +118,7 @@ Seguindo estes passos você garante que todas as automações do projeto são ex
 ## 8. Agendamento do `dq_checks`
 
 1. Crie o job `dq-checks` para rodar após o backtest (`30 19 * * 1-5`).
-2. Endpoint: `https://us-central1-<projeto>.cloudfunctions.net/dq_checks`.
+2. Endpoint: `https://us-east1-<projeto>.cloudfunctions.net/dq_checks`.
 3. Método `POST` (sem corpo) e autenticação OIDC.
 4. A execução grava `dq_checks_daily` e `dq_incidents`. Confirme a presença de um
    log `job_name="dq_checks" status="OK"` e revise a tabela para garantir que todos os
