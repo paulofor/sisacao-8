@@ -35,7 +35,9 @@ JOB_NAME = os.environ.get("JOB_NAME", "backtest_daily")
 DEFAULT_BQ_LOCATION = "us-east1"
 
 
-def _normalize_bq_location(value: str | None, default: str = DEFAULT_BQ_LOCATION) -> str:
+def _normalize_bq_location(
+    value: str | None, default: str = DEFAULT_BQ_LOCATION
+) -> str:
     raw_value = default if value is None else value
     text = str(raw_value).strip()
     if not text:
