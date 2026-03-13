@@ -222,7 +222,11 @@ def _load_table_from_dataframe(df: Any, table_id: str, job_config: Any) -> Any:
     for location in _candidate_query_locations():
         try:
             if not location:
-                return client.load_table_from_dataframe(df, table_id, job_config=job_config)
+                return client.load_table_from_dataframe(
+                    df,
+                    table_id,
+                    job_config=job_config,
+                )
             return client.load_table_from_dataframe(
                 df,
                 table_id,
@@ -230,12 +234,17 @@ def _load_table_from_dataframe(df: Any, table_id: str, job_config: Any) -> Any:
                 location=location,
             )
         except TypeError:
-            return client.load_table_from_dataframe(df, table_id, job_config=job_config)
+            return client.load_table_from_dataframe(
+                df,
+                table_id,
+                job_config=job_config,
+            )
         except Exception as exc:  # noqa: BLE001
             if not _is_location_not_found_error(exc):
                 raise
             logger.warning(
-                "BigQuery dataframe load failed for location %s: %s. Trying next fallback.",
+                "BigQuery dataframe load failed for location %s: %s. "
+                "Trying next fallback.",
                 location,
                 exc,
             )
@@ -250,7 +259,11 @@ def _load_table_from_json(
     for location in _candidate_query_locations():
         try:
             if not location:
-                return client.load_table_from_json(rows, table_id, job_config=job_config)
+                return client.load_table_from_json(
+                    rows,
+                    table_id,
+                    job_config=job_config,
+                )
             return client.load_table_from_json(
                 rows,
                 table_id,
@@ -258,7 +271,11 @@ def _load_table_from_json(
                 location=location,
             )
         except TypeError:
-            return client.load_table_from_json(rows, table_id, job_config=job_config)
+            return client.load_table_from_json(
+                rows,
+                table_id,
+                job_config=job_config,
+            )
         except Exception as exc:  # noqa: BLE001
             if not _is_location_not_found_error(exc):
                 raise
