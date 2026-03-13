@@ -74,7 +74,16 @@ TIMEOUT = 120
 MAX_B3_LOOKBACK_DAYS = int(os.environ.get("MAX_B3_LOOKBACK_DAYS", "5"))
 
 
-client = bigquery.Client(location=BQ_LOCATION)
+def _create_bigquery_client() -> Any:
+    """Instantiate BigQuery client with compatibility for lightweight test doubles."""
+
+    try:
+        return bigquery.Client(location=BQ_LOCATION)
+    except TypeError:
+        return bigquery.Client()
+
+
+client = _create_bigquery_client()
 
 
 @dataclass(frozen=True)
