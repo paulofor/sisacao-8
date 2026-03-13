@@ -156,6 +156,12 @@ def test_table_refs_allow_dedicated_datasets(monkeypatch):
     module = import_eod_module(monkeypatch)
     module.client = types.SimpleNamespace(project="test-project")
 
-    assert module._table_ref("cotacao_ohlcv_diario") == "test-project.intraday_ds.cotacao_ohlcv_diario"
+    assert (
+        module._table_ref("cotacao_ohlcv_diario")
+        == "test-project.intraday_ds.cotacao_ohlcv_diario"
+    )
     assert module._holidays_table() == "test-project.calendar_ds.feriados_b3"
-    assert module._strategy_config_table() == "test-project.strategy_ds.parametros_estrategia"
+    assert (
+        module._strategy_config_table()
+        == "test-project.strategy_ds.parametros_estrategia"
+    )
