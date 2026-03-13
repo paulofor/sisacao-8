@@ -109,6 +109,7 @@ INGESTION_SOURCE = os.environ.get("GOOGLE_FINANCE_SOURCE", "google_finance")
 BQ_LOCATION = os.environ.get("BQ_LOCATION", "us-east1")
 
 client = bigquery.Client(location=BQ_LOCATION)
+_INTRADAY_LOCATION: Optional[str] = None
 
 app: Optional[Any] = None
 
@@ -152,6 +153,91 @@ def _log_bigquery_runtime_context() -> None:
         context["k_service"],
         context["k_revision"],
     )
+
+
+def _resolve_intraday_location() -> Optional[str]:
+    """Resolve and cache the dataset location used by intraday tables."""
+
+    global _INTRADAY_LOCATION
+    if _INTRADAY_LOCATION:
+        return _INTRADAY_LOCATION
+
+    project_id = getattr(client, "project", None)
+    if not project_id:
+        _INTRADAY_LOCATION = BQ_LOCATION
+        return _INTRADAY_LOCATION
+
+    dataset_ref = f"{project_id}.{DATASET_ID}"
+    try:
+        dataset = client.get_dataset(dataset_ref)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "Failed to resolve BigQuery dataset location for %s: %s. "
+            "Falling back to BQ_LOCATION=%s",
+            dataset_ref,
+            exc,
+            BQ_LOCATION,
+        )
+        _INTRADAY_LOCATION = BQ_LOCATION
+        return _INTRADAY_LOCATION
+
+    resolved_location = getattr(dataset, "location", None) or BQ_LOCATION
+    _INTRADAY_LOCATION = resolved_location
+    if BQ_LOCATION and resolved_location and resolved_location != BQ_LOCATION:
+        logger.warning(
+            "BigQuery dataset %s location (%s) differs from BQ_LOCATION (%s). "
+            "Using dataset location for jobs.",
+            dataset_ref,
+            resolved_location,
+            BQ_LOCATION,
+        )
+    return _INTRADAY_LOCATION
+
+
+def _query_bigquery(query: str) -> Any:
+    """Execute BigQuery query preferring explicit dataset location."""
+
+    location = _resolve_intraday_location()
+    if not location:
+        return client.query(query)
+    try:
+        return client.query(query, location=location)
+    except TypeError:
+        return client.query(query)
+
+
+def _load_table_from_dataframe(df: Any, table_id: str, job_config: Any) -> Any:
+    """Load dataframe handling clients that do not accept ``location``."""
+
+    location = _resolve_intraday_location()
+    if not location:
+        return client.load_table_from_dataframe(df, table_id, job_config=job_config)
+    try:
+        return client.load_table_from_dataframe(
+            df,
+            table_id,
+            job_config=job_config,
+            location=location,
+        )
+    except TypeError:
+        return client.load_table_from_dataframe(df, table_id, job_config=job_config)
+
+
+def _load_table_from_json(rows: List[Dict[str, Any]], table_id: str, job_config: Any) -> Any:
+    """Load JSON rows handling clients that do not accept ``location``."""
+
+    location = _resolve_intraday_location()
+    if not location:
+        return client.load_table_from_json(rows, table_id, job_config=job_config)
+    try:
+        return client.load_table_from_json(
+            rows,
+            table_id,
+            job_config=job_config,
+            location=location,
+        )
+    except TypeError:
+        return client.load_table_from_json(rows, table_id, job_config=job_config)
 
 
 DEFAULT_FALLBACK_TICKERS = [
@@ -270,7 +356,7 @@ def _load_tickers_from_file(path: Path) -> List[str]:
     try:
         return _normalize_ticker_list(path.read_text(encoding="utf-8").splitlines())
     except OSError:
-        logger.warning("Fallback tickers file not accessible: %%s", path)
+        logger.warning("Fallback tickers file not accessible: %s", path)
         return []
 
 
@@ -399,7 +485,6 @@ def append_dataframe_to_bigquery(data: Any) -> None:
             schema=expected_schema,
             write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
         )
-
         inserted_rows: int
         if pd is not None and isinstance(data, pd.DataFrame):
             df = data.copy()
@@ -428,21 +513,13 @@ def append_dataframe_to_bigquery(data: Any) -> None:
             if "ingested_at" in df.columns:
                 df["ingested_at"] = pd.to_datetime(df["ingested_at"], utc=True)
 
-            job = client.load_table_from_dataframe(
-                df,
-                tabela_id,
-                job_config=job_config,
-            )
+            job = _load_table_from_dataframe(df, tabela_id, job_config)
             inserted_rows = len(df)
         else:
             rows = list(data) if not isinstance(data, list) else data
             logger.warning("Received %s rows without pandas installed", len(rows))
             normalized_rows = _normalize_rows(rows)
-            job = client.load_table_from_json(
-                normalized_rows,
-                tabela_id,
-                job_config=job_config,
-            )
+            job = _load_table_from_json(normalized_rows, tabela_id, job_config)
             inserted_rows = len(rows)
         logger.warning(
             "BigQuery load job submitted: id=%s table=%s rows=%s",
@@ -492,7 +569,7 @@ def fetch_active_tickers() -> List[str]:
     query = f"SELECT ticker FROM `{table_id}` WHERE ativo = TRUE"
     logger.warning("Fetching active tickers using query table %s", table_id)
     try:
-        query_job = client.query(query)
+        query_job = _query_bigquery(query)
         tickers: List[str] = []
         if pd is not None:
             df = query_job.to_dataframe()
@@ -552,7 +629,7 @@ def is_b3_holiday(reference_date: datetime.date) -> bool:
         "LIMIT 1"
     )
     try:
-        query_job = client.query(query)
+        query_job = _query_bigquery(query)
         if pd is not None:
             df = query_job.to_dataframe()
             if "data_feriado" not in df.columns:
