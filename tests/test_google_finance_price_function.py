@@ -485,7 +485,9 @@ def test_query_bigquery_retries_with_fallback_location(monkeypatch):
         def query(self, query, location=None):  # noqa: D401, ANN001
             self.calls.append(location)
             if location == "us-central1":
-                raise RuntimeError("Not found: Dataset x was not found in location us-central1")
+                raise RuntimeError(
+                    "Not found: Dataset x was not found in location us-central1"
+                )
             return SimpleNamespace(location=location, query=query)
 
     fake_bigquery.Client = lambda *a, **k: FakeClient()
