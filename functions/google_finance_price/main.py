@@ -107,6 +107,7 @@ FERIADOS_TABLE_ID = os.environ.get("BQ_HOLIDAYS_TABLE", "feriados_b3")
 JOB_NAME = os.environ.get("JOB_NAME", "google_finance_price")
 INGESTION_SOURCE = os.environ.get("GOOGLE_FINANCE_SOURCE", "google_finance")
 BQ_LOCATION = os.environ.get("BQ_LOCATION", "us-east1")
+BQ_FALLBACK_LOCATIONS = os.environ.get("BQ_FALLBACK_LOCATIONS", "US,us-east1")
 
 client = bigquery.Client(location=BQ_LOCATION)
 _INTRADAY_LOCATION: Optional[str] = None
@@ -197,30 +198,48 @@ def _resolve_intraday_location() -> Optional[str]:
 def _query_bigquery(query: str) -> Any:
     """Execute BigQuery query preferring explicit dataset location."""
 
-    location = _resolve_intraday_location()
-    if not location:
-        return client.query(query)
-    try:
-        return client.query(query, location=location)
-    except TypeError:
-        return client.query(query)
+    for location in _candidate_query_locations():
+        try:
+            if not location:
+                return client.query(query)
+            return client.query(query, location=location)
+        except TypeError:
+            return client.query(query)
+        except Exception as exc:  # noqa: BLE001
+            if not _is_location_not_found_error(exc):
+                raise
+            logger.warning(
+                "BigQuery query failed for location %s: %s. Trying next fallback.",
+                location,
+                exc,
+            )
+    return client.query(query)
 
 
 def _load_table_from_dataframe(df: Any, table_id: str, job_config: Any) -> Any:
     """Load dataframe handling clients that do not accept ``location``."""
 
-    location = _resolve_intraday_location()
-    if not location:
-        return client.load_table_from_dataframe(df, table_id, job_config=job_config)
-    try:
-        return client.load_table_from_dataframe(
-            df,
-            table_id,
-            job_config=job_config,
-            location=location,
-        )
-    except TypeError:
-        return client.load_table_from_dataframe(df, table_id, job_config=job_config)
+    for location in _candidate_query_locations():
+        try:
+            if not location:
+                return client.load_table_from_dataframe(df, table_id, job_config=job_config)
+            return client.load_table_from_dataframe(
+                df,
+                table_id,
+                job_config=job_config,
+                location=location,
+            )
+        except TypeError:
+            return client.load_table_from_dataframe(df, table_id, job_config=job_config)
+        except Exception as exc:  # noqa: BLE001
+            if not _is_location_not_found_error(exc):
+                raise
+            logger.warning(
+                "BigQuery dataframe load failed for location %s: %s. Trying next fallback.",
+                location,
+                exc,
+            )
+    return client.load_table_from_dataframe(df, table_id, job_config=job_config)
 
 
 def _load_table_from_json(
@@ -228,18 +247,50 @@ def _load_table_from_json(
 ) -> Any:
     """Load JSON rows handling clients that do not accept ``location``."""
 
-    location = _resolve_intraday_location()
-    if not location:
-        return client.load_table_from_json(rows, table_id, job_config=job_config)
-    try:
-        return client.load_table_from_json(
-            rows,
-            table_id,
-            job_config=job_config,
-            location=location,
-        )
-    except TypeError:
-        return client.load_table_from_json(rows, table_id, job_config=job_config)
+    for location in _candidate_query_locations():
+        try:
+            if not location:
+                return client.load_table_from_json(rows, table_id, job_config=job_config)
+            return client.load_table_from_json(
+                rows,
+                table_id,
+                job_config=job_config,
+                location=location,
+            )
+        except TypeError:
+            return client.load_table_from_json(rows, table_id, job_config=job_config)
+        except Exception as exc:  # noqa: BLE001
+            if not _is_location_not_found_error(exc):
+                raise
+            logger.warning(
+                "BigQuery JSON load failed for location %s: %s. Trying next fallback.",
+                location,
+                exc,
+            )
+    return client.load_table_from_json(rows, table_id, job_config=job_config)
+
+
+def _candidate_query_locations() -> List[Optional[str]]:
+    """Return deduplicated location candidates for BigQuery jobs."""
+
+    candidates: List[Optional[str]] = [_resolve_intraday_location()]
+    raw_fallbacks = [value.strip() for value in BQ_FALLBACK_LOCATIONS.split(",")]
+    candidates.extend(value for value in raw_fallbacks if value)
+    candidates.append(None)
+
+    deduplicated: List[Optional[str]] = []
+    for candidate in candidates:
+        if candidate in deduplicated:
+            continue
+        deduplicated.append(candidate)
+    return deduplicated
+
+
+def _is_location_not_found_error(error: BaseException) -> bool:
+    """Return ``True`` when BigQuery error indicates a location mismatch."""
+
+    message = str(error).lower()
+    return "not found" in message and "location" in message
 
 
 DEFAULT_FALLBACK_TICKERS = [
