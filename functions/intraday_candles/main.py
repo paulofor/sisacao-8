@@ -28,7 +28,23 @@ CANDLES_15M_TABLE_ID = os.environ.get("BQ_INTRADAY_15M_TABLE", "candles_intraday
 CANDLES_1H_TABLE_ID = os.environ.get("BQ_INTRADAY_1H_TABLE", "candles_intraday_1h")
 AGGREGATE_HOURLY = os.environ.get("INTRADAY_ENABLE_HOURLY", "true").lower() == "true"
 JOB_NAME = os.environ.get("JOB_NAME", "intraday_candles")
-BQ_LOCATION = os.environ.get("BQ_LOCATION", "us-east1")
+DEFAULT_BQ_LOCATION = "us-east1"
+
+
+def _normalize_bq_location(value: str | None, default: str = DEFAULT_BQ_LOCATION) -> str:
+    raw_value = default if value is None else value
+    text = str(raw_value).strip()
+    if not text:
+        text = default
+    lowered = text.lower()
+    if lowered.startswith("region-"):
+        lowered = lowered.split("region-", 1)[1]
+    if lowered == "east1":
+        return "us-east1"
+    return lowered
+
+
+BQ_LOCATION = _normalize_bq_location(os.environ.get("BQ_LOCATION"))
 
 client = bigquery.Client(location=BQ_LOCATION)
 

@@ -32,7 +32,23 @@ BACKTEST_METRICS_TABLE_ID = os.environ.get(
 FERIADOS_TABLE_ID = os.environ.get("BQ_HOLIDAYS_TABLE", "feriados_b3")
 METRICS_LOOKBACK_DAYS = int(os.environ.get("BACKTEST_METRICS_LOOKBACK_DAYS", "60"))
 JOB_NAME = os.environ.get("JOB_NAME", "backtest_daily")
-BQ_LOCATION = os.environ.get("BQ_LOCATION", "us-east1")
+DEFAULT_BQ_LOCATION = "us-east1"
+
+
+def _normalize_bq_location(value: str | None, default: str = DEFAULT_BQ_LOCATION) -> str:
+    raw_value = default if value is None else value
+    text = str(raw_value).strip()
+    if not text:
+        text = default
+    lowered = text.lower()
+    if lowered.startswith("region-"):
+        lowered = lowered.split("region-", 1)[1]
+    if lowered == "east1":
+        return "us-east1"
+    return lowered
+
+
+BQ_LOCATION = _normalize_bq_location(os.environ.get("BQ_LOCATION"))
 
 client = bigquery.Client(location=BQ_LOCATION)
 
