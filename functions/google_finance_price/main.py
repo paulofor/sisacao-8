@@ -106,8 +106,9 @@ TABELA_ID = os.environ.get("BQ_INTRADAY_RAW_TABLE", "cotacao_b3")
 FERIADOS_TABLE_ID = os.environ.get("BQ_HOLIDAYS_TABLE", "feriados_b3")
 JOB_NAME = os.environ.get("JOB_NAME", "google_finance_price")
 INGESTION_SOURCE = os.environ.get("GOOGLE_FINANCE_SOURCE", "google_finance")
+BQ_LOCATION = os.environ.get("BQ_LOCATION", "us-central1")
 
-client = bigquery.Client()
+client = bigquery.Client(location=BQ_LOCATION)
 
 app: Optional[Any] = None
 

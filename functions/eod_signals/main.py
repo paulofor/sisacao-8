@@ -67,6 +67,7 @@ STRATEGY_CONFIG_TABLE_ID = os.environ.get(
 )
 STRATEGY_CONFIG_ID = os.environ.get("STRATEGY_CONFIG_ID", "signals_v1")
 JOB_NAME = os.environ.get("JOB_NAME", "eod_signals")
+BQ_LOCATION = os.environ.get("BQ_LOCATION", "us-central1")
 
 
 @dataclass(frozen=True)
@@ -86,7 +87,7 @@ client: bigquery.Client | None = None
 def _get_client() -> bigquery.Client:
     global client
     if client is None:
-        client = bigquery.Client()
+        client = bigquery.Client(location=BQ_LOCATION)
     return client
 
 
