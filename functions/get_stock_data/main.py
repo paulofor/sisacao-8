@@ -61,8 +61,7 @@ FECHAMENTO_TABLE_ID = os.environ.get("BQ_DAILY_TABLE", "cotacao_ohlcv_diario")
 FERIADOS_TABLE_ID = os.environ.get("BQ_HOLIDAYS_TABLE", "feriados_b3")
 FONTE_FECHAMENTO = "B3_DAILY_COTAHIST"
 LOAD_STRATEGY = os.environ.get("BQ_DAILY_LOAD_STRATEGY", "MERGE")
-_raw_bq_location = os.environ.get("BQ_LOCATION", "").strip()
-BQ_LOCATION = _raw_bq_location or None
+BQ_LOCATION = os.environ.get("BQ_LOCATION", "us-central1").strip()
 JOB_NAME = os.environ.get("JOB_NAME", "get_stock_data")
 PIPELINE_CONFIG_TABLE_ID = os.environ.get("PIPELINE_CONFIG_TABLE", "pipeline_config")
 PIPELINE_CONFIG_ID = os.environ.get("PIPELINE_CONFIG_ID", "default")
@@ -75,7 +74,7 @@ TIMEOUT = 120
 MAX_B3_LOOKBACK_DAYS = int(os.environ.get("MAX_B3_LOOKBACK_DAYS", "5"))
 
 
-client = bigquery.Client()
+client = bigquery.Client(location=BQ_LOCATION)
 
 
 @dataclass(frozen=True)
@@ -86,9 +85,6 @@ class IngestionConfig:
 
 def _query_with_location(query: str, **kwargs: Any) -> Any:
     """Execute query using configured location when supported by the client."""
-
-    if BQ_LOCATION is None:
-        return client.query(query, **kwargs)
 
     try:
         return client.query(query, location=BQ_LOCATION, **kwargs)

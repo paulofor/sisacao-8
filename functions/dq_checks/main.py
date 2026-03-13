@@ -65,6 +65,7 @@ DEFAULT_SIGNALS_GRACE_MINUTES = int(os.environ.get("DQ_SIGNALS_GRACE_MINUTES", "
 DEFAULT_BACKTEST_DEADLINE = os.environ.get("DQ_BACKTEST_DEADLINE", "23:00:00")
 DEFAULT_BACKTEST_GRACE_MINUTES = int(os.environ.get("DQ_BACKTEST_GRACE_MINUTES", "60"))
 DEFAULT_INTRADAY_DUP_TOLERANCE = int(os.environ.get("DQ_INTRADAY_DUP_TOLERANCE", "0"))
+BQ_LOCATION = os.environ.get("BQ_LOCATION", "us-central1")
 
 SAO_PAULO_TZ = ZoneInfo("America/Sao_Paulo")
 
@@ -75,7 +76,7 @@ _BQ_CLIENT: bigquery.Client | None = None
 def _get_client() -> bigquery.Client:
     global _BQ_CLIENT
     if _BQ_CLIENT is None:
-        _BQ_CLIENT = bigquery.Client()
+        _BQ_CLIENT = bigquery.Client(location=BQ_LOCATION)
     return _BQ_CLIENT
 
 
