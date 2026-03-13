@@ -40,6 +40,8 @@ LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
 logging.basicConfig(level=getattr(logging, LOG_LEVEL, logging.INFO))
 
 DATASET_ID = os.environ.get("BQ_INTRADAY_DATASET", "cotacao_intraday")
+HOLIDAYS_DATASET_ID = os.environ.get("BQ_HOLIDAYS_DATASET", DATASET_ID)
+STRATEGY_CONFIG_DATASET_ID = os.environ.get("BQ_STRATEGY_CONFIG_DATASET", DATASET_ID)
 DAILY_TABLE_ID = os.environ.get("BQ_DAILY_TABLE", "cotacao_ohlcv_diario")
 SIGNALS_TABLE_ID = os.environ.get("BQ_SIGNALS_TABLE", "sinais_eod")
 FERIADOS_TABLE_ID = os.environ.get("BQ_HOLIDAYS_TABLE", "feriados_b3")
@@ -156,12 +158,20 @@ def _ensure_after_cutoff(force: bool) -> bool:
 
 
 def _table_ref(table_id: str) -> str:
+    return _table_ref_in_dataset(DATASET_ID, table_id)
+
+
+def _table_ref_in_dataset(dataset_id: str, table_id: str) -> str:
     bq_client = _get_client()
-    return f"{bq_client.project}.{DATASET_ID}.{table_id}"
+    return f"{bq_client.project}.{dataset_id}.{table_id}"
 
 
 def _holidays_table() -> str:
-    return _table_ref(FERIADOS_TABLE_ID)
+    return _table_ref_in_dataset(HOLIDAYS_DATASET_ID, FERIADOS_TABLE_ID)
+
+
+def _strategy_config_table() -> str:
+    return _table_ref_in_dataset(STRATEGY_CONFIG_DATASET_ID, STRATEGY_CONFIG_TABLE_ID)
 
 
 def _metrics_table() -> str:
@@ -191,7 +201,7 @@ def _default_strategy_config() -> StrategyConfig:
 
 
 def _load_strategy_config() -> StrategyConfig:
-    table_id = _table_ref(STRATEGY_CONFIG_TABLE_ID)
+    table_id = _strategy_config_table()
     query = (
         "SELECT parametro_id, x_pct, target_pct, stop_pct, horizon_days, "
         "allow_sell, max_signals, updated_at "

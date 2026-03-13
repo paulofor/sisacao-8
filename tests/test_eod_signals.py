@@ -147,3 +147,15 @@ def test_persist_signals_serializes_dates_before_bigquery_load(monkeypatch):
     assert loaded_row["created_at"] == "2026-01-10 18:30:00"
     assert loaded_row["job_run_id"] == "run-1"
     assert loaded_row["config_version"] == "config-v1"
+
+
+def test_table_refs_allow_dedicated_datasets(monkeypatch):
+    monkeypatch.setenv("BQ_INTRADAY_DATASET", "intraday_ds")
+    monkeypatch.setenv("BQ_HOLIDAYS_DATASET", "calendar_ds")
+    monkeypatch.setenv("BQ_STRATEGY_CONFIG_DATASET", "strategy_ds")
+    module = import_eod_module(monkeypatch)
+    module.client = types.SimpleNamespace(project="test-project")
+
+    assert module._table_ref("cotacao_ohlcv_diario") == "test-project.intraday_ds.cotacao_ohlcv_diario"
+    assert module._holidays_table() == "test-project.calendar_ds.feriados_b3"
+    assert module._strategy_config_table() == "test-project.strategy_ds.parametros_estrategia"
