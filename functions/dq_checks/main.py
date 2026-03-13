@@ -65,7 +65,7 @@ DEFAULT_SIGNALS_GRACE_MINUTES = int(os.environ.get("DQ_SIGNALS_GRACE_MINUTES", "
 DEFAULT_BACKTEST_DEADLINE = os.environ.get("DQ_BACKTEST_DEADLINE", "23:00:00")
 DEFAULT_BACKTEST_GRACE_MINUTES = int(os.environ.get("DQ_BACKTEST_GRACE_MINUTES", "60"))
 DEFAULT_INTRADAY_DUP_TOLERANCE = int(os.environ.get("DQ_INTRADAY_DUP_TOLERANCE", "0"))
-BQ_LOCATION = os.environ.get("BQ_LOCATION", "us-central1")
+BQ_LOCATION = os.environ.get("BQ_LOCATION", "us-east1")
 
 SAO_PAULO_TZ = ZoneInfo("America/Sao_Paulo")
 

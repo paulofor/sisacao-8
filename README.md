@@ -76,7 +76,7 @@ para o **Google Cloud Functions** sempre que houver push ou pull request para a
 branch `main`. Também é possível acioná-lo manualmente via *workflow_dispatch*.
 Configure o segredo `GCP_SA_KEY` (além do `BQ_TABLE` usado pela função) no
 repositório do GitHub. A função será publicada no projeto `ingestaokraken`,
-região `us-central1`.
+região `us-east1`.
 
 ### Troubleshooting do deploy Lightsail
 
@@ -124,7 +124,7 @@ gcloud functions deploy get_stock_data \
     --source functions/get_stock_data \
     --service-account sa-get-stock-data@ingestaokraken.iam.gserviceaccount.com \
     --project ingestaokraken \
-    --region us-central1
+    --region us-east1
 ```
 
 ## Monitoramento
@@ -156,7 +156,7 @@ do reprocesso. Exemplo:
 ```bash
 python tools/reprocess.py 2024-08-12 \
   --project ingestaokraken \
-  --region us-central1 \
+  --region us-east1 \
   --service-account-key sa-invoker.json \
   --mode ALL \
   --force

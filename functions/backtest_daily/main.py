@@ -32,7 +32,7 @@ BACKTEST_METRICS_TABLE_ID = os.environ.get(
 FERIADOS_TABLE_ID = os.environ.get("BQ_HOLIDAYS_TABLE", "feriados_b3")
 METRICS_LOOKBACK_DAYS = int(os.environ.get("BACKTEST_METRICS_LOOKBACK_DAYS", "60"))
 JOB_NAME = os.environ.get("JOB_NAME", "backtest_daily")
-BQ_LOCATION = os.environ.get("BQ_LOCATION", "us-central1")
+BQ_LOCATION = os.environ.get("BQ_LOCATION", "us-east1")
 
 client = bigquery.Client(location=BQ_LOCATION)
 

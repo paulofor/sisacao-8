@@ -53,7 +53,7 @@ Campos adicionais presentes na tabela BigQuery:
 
 ## Ambiente e credenciais
 
-- **Projeto padrão**: `ingestaokraken` com região `us-central1`.
+- **Projeto padrão**: `ingestaokraken` com região `us-east1`.
 - **Dataset**: `cotacao_intraday` (tabelas `cotacao_ohlcv_diario`, `candles_intraday_15m`, `candles_intraday_1h`, `sinais_eod`).
 - **Secrets obrigatórios**:
   - `BOT_TOKEN` e `CHAT_ID` (Secret Manager) para a função `alerts`.

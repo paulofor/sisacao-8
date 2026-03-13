@@ -104,7 +104,7 @@ def _parse_arguments() -> argparse.Namespace:
     )
     parser.add_argument("--project", required=True, help="ID do projeto GCP")
     parser.add_argument(
-        "--region", default="us-central1", help="Região das Cloud Functions"
+        "--region", default="us-east1", help="Região das Cloud Functions"
     )
     parser.add_argument(
         "--service-account-key",
