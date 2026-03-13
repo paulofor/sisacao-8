@@ -471,3 +471,39 @@ def test_is_b3_holiday_returns_true_when_query_has_rows(monkeypatch):
 
     assert result is True
     assert module.FERIADOS_TABLE_ID in module.client.last_query
+
+
+def test_query_bigquery_retries_with_fallback_location(monkeypatch):
+    fake_bigquery = types.ModuleType("bigquery")
+
+    class FakeClient:
+        project = "test-project"
+
+        def __init__(self):
+            self.calls = []
+
+        def query(self, query, location=None):  # noqa: D401, ANN001
+            self.calls.append(location)
+            if location == "us-central1":
+                raise RuntimeError("Not found: Dataset x was not found in location us-central1")
+            return SimpleNamespace(location=location, query=query)
+
+    fake_bigquery.Client = lambda *a, **k: FakeClient()
+    fake_cloud = types.ModuleType("cloud")
+    fake_cloud.bigquery = fake_bigquery
+    fake_google = types.ModuleType("google")
+    fake_google.cloud = fake_cloud
+    monkeypatch.setitem(sys.modules, "google", fake_google)
+    monkeypatch.setitem(sys.modules, "google.cloud", fake_cloud)
+    monkeypatch.setitem(sys.modules, "google.cloud.bigquery", fake_bigquery)
+
+    module = importlib.reload(
+        importlib.import_module("functions.google_finance_price.main")
+    )
+    monkeypatch.setattr(module, "_resolve_intraday_location", lambda: "us-central1")
+    monkeypatch.setattr(module, "BQ_FALLBACK_LOCATIONS", "US,us-east1", raising=False)
+
+    result = module._query_bigquery("SELECT 1")
+
+    assert result.location == "US"
+    assert module.client.calls[:2] == ["us-central1", "US"]
