@@ -123,6 +123,7 @@ jobs:
             gcloud functions deploy "${{ matrix.name }}"
             --runtime python311
             --trigger-http
+            --allow-unauthenticated
             --entry-point "${{ matrix.entry_point }}"
             --source "${{ matrix.source }}"
             --project "${PROJECT_ID}"
@@ -221,6 +222,7 @@ jobs:
             --source functions/google_finance_price
             --project "${PROJECT_ID}"
             --region "${REGION}"
+            --allow-unauthenticated
             --set-env-vars=FUNCTION_TARGET=google_finance_price,FUNCTION_SIGNATURE_TYPE=http,BQ_INTRADAY_DATASET=cotacao_intraday,BQ_INTRADAY_RAW_TABLE=cotacao_b3,BQ_HOLIDAYS_TABLE=feriados_b3
             --quiet
           )
