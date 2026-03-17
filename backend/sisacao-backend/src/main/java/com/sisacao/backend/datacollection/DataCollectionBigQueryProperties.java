@@ -17,6 +17,9 @@ public class DataCollectionBigQueryProperties {
     private String dailyDataset = "cotacao_intraday";
     private String dailyTable = "cotacao_ohlcv_diario";
     private int dailyDays = 5;
+    private String candlesDailyTable = "candles_diarios";
+    private String candlesIntraday15mTable = "candles_intraday_15m";
+    private String candlesIntraday1hTable = "candles_intraday_1h";
 
     public boolean isEnabled() {
         return enabled;
@@ -133,4 +136,34 @@ public class DataCollectionBigQueryProperties {
             this.dailyDays = dailyDays;
         }
     }
+    public String getCandlesDailyTable() {
+        return candlesDailyTable;
+    }
+
+    public void setCandlesDailyTable(String candlesDailyTable) {
+        if (candlesDailyTable != null && !candlesDailyTable.isBlank()) {
+            this.candlesDailyTable = candlesDailyTable;
+        }
+    }
+
+    public String getCandlesIntraday15mTable() {
+        return candlesIntraday15mTable;
+    }
+
+    public void setCandlesIntraday15mTable(String candlesIntraday15mTable) {
+        if (candlesIntraday15mTable != null && !candlesIntraday15mTable.isBlank()) {
+            this.candlesIntraday15mTable = candlesIntraday15mTable;
+        }
+    }
+
+    public String getCandlesIntraday1hTable() {
+        return candlesIntraday1hTable;
+    }
+
+    public void setCandlesIntraday1hTable(String candlesIntraday1hTable) {
+        if (candlesIntraday1hTable != null && !candlesIntraday1hTable.isBlank()) {
+            this.candlesIntraday1hTable = candlesIntraday1hTable;
+        }
+    }
+
 }

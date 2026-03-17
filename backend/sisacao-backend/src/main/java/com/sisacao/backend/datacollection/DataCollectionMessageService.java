@@ -108,6 +108,18 @@ public class DataCollectionMessageService {
         return buildIntradayDailyCountsFromMessages();
     }
 
+
+    public List<CandlesTableDailyCount> fetchCandlesTableDailyCounts() {
+        if (intradayMetricsClient.isPresent()) {
+            try {
+                return intradayMetricsClient.get().fetchCandlesTableDailyCounts();
+            } catch (RuntimeException ex) {
+                LOGGER.warn("Failed to fetch candles table daily counts from BigQuery.", ex);
+            }
+        }
+        return List.of();
+    }
+
     public List<IntradayLatestRecord> fetchLatestIntradayRecords() {
         int limit = Math.max(bigQueryProperties.getIntradayLatestLimit(), 1);
         if (intradayMetricsClient.isPresent()) {
