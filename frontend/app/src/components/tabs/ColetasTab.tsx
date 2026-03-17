@@ -18,11 +18,13 @@ import type {
   IntradayDailyCount,
   IntradayLatestRecord,
   IntradaySummary,
+  CandlesTableDailyCount,
 } from '../../api/dataCollections'
 import DataCollectionMessagesTable from '../DataCollectionMessagesTable'
 import IntradayDailyCountsCard from '../IntradayDailyCountsCard'
 import IntradayLatestRecordsCard from '../IntradayLatestRecordsCard'
 import IntradaySummaryCard from '../IntradaySummaryCard'
+import CandlesTableHealthCard from '../CandlesTableHealthCard'
 
 interface ColetasTabProps {
   severityOptions: Array<'all' | DataCollectionMessageSeverity>
@@ -44,6 +46,9 @@ interface ColetasTabProps {
   dailyTableCounts?: DailyTableCount[]
   dailyTableCountsError?: Error | null
   dailyTableCountsLoading: boolean
+  candlesTableDailyCounts?: CandlesTableDailyCount[]
+  candlesTableDailyCountsError?: Error | null
+  candlesTableDailyCountsLoading: boolean
 }
 
 const ColetasTab: FC<ColetasTabProps> = ({
@@ -66,6 +71,9 @@ const ColetasTab: FC<ColetasTabProps> = ({
   dailyTableCounts,
   dailyTableCountsError,
   dailyTableCountsLoading,
+  candlesTableDailyCounts,
+  candlesTableDailyCountsError,
+  candlesTableDailyCountsLoading,
 }) => {
   return (
     <Stack spacing={3}>
@@ -95,6 +103,13 @@ const ColetasTab: FC<ColetasTabProps> = ({
         lookbackDays={5}
         emptyMessage="Nenhum registro encontrado para os últimos dias na tabela de dados diários."
         tableAriaLabel="Contagem diária de registros em dados diários"
+      />
+
+
+      <CandlesTableHealthCard
+        counts={candlesTableDailyCounts}
+        isLoading={candlesTableDailyCountsLoading}
+        error={candlesTableDailyCountsError ?? null}
       />
 
       <IntradayLatestRecordsCard

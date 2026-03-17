@@ -39,6 +39,12 @@ public class DataCollectionMessageController {
         return service.fetchDailyTableCounts();
     }
 
+
+    @GetMapping("/candles-table-daily-counts")
+    public List<CandlesTableDailyCount> getCandlesTableDailyCounts() {
+        return service.fetchCandlesTableDailyCounts();
+    }
+
     @GetMapping("/intraday-latest-records")
     public List<IntradayLatestRecord> getIntradayLatestRecords() {
         return service.fetchLatestIntradayRecords();

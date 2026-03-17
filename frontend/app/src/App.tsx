@@ -20,6 +20,7 @@ import ColetasTab from './components/tabs/ColetasTab'
 import IncidentesTab from './components/tabs/IncidentesTab'
 import OperacaoTab from './components/tabs/OperacaoTab'
 import SinaisTab from './components/tabs/SinaisTab'
+import { useCandlesTableDailyCounts } from './hooks/useCandlesTableDailyCounts'
 import { useDataCollectionMessages } from './hooks/useDataCollectionMessages'
 import { useDailyTableCounts } from './hooks/useDailyTableCounts'
 import { useIntradayDailyCounts } from './hooks/useIntradayDailyCounts'
@@ -80,6 +81,7 @@ function App() {
   const intradayDailyCountsQuery = useIntradayDailyCounts()
   const intradayLatestRecordsQuery = useIntradayLatestRecords()
   const dailyTableCountsQuery = useDailyTableCounts()
+  const candlesTableDailyCountsQuery = useCandlesTableDailyCounts()
 
   const opsOverviewQuery = useOpsOverview()
   const opsPipelineQuery = useOpsPipeline()
@@ -104,6 +106,7 @@ function App() {
       intradayDailyCountsQuery,
       dailyTableCountsQuery,
       intradayLatestRecordsQuery,
+      candlesTableDailyCountsQuery,
     ] as QueryResult[],
     operacao: [opsOverviewQuery, opsPipelineQuery, opsDqLatestQuery] as QueryResult[],
     sinais: [opsSignalsNextQuery, opsSignalsHistoryQuery] as QueryResult[],
@@ -134,6 +137,8 @@ function App() {
   const intradayDailyCountsLoading = intradayDailyCountsQuery.isLoading && !intradayDailyCountsQuery.data
   const intradayLatestRecordsLoading = intradayLatestRecordsQuery.isLoading && !intradayLatestRecordsQuery.data
   const dailyTableCountsLoading = dailyTableCountsQuery.isLoading && !dailyTableCountsQuery.data
+  const candlesTableDailyCountsLoading =
+    candlesTableDailyCountsQuery.isLoading && !candlesTableDailyCountsQuery.data
   const signalsHistoryLoading = opsSignalsHistoryQuery.isLoading && !opsSignalsHistoryQuery.data
 
   return (
@@ -195,6 +200,9 @@ function App() {
             dailyTableCounts={dailyTableCountsQuery.data}
             dailyTableCountsError={dailyTableCountsQuery.error}
             dailyTableCountsLoading={dailyTableCountsLoading}
+            candlesTableDailyCounts={candlesTableDailyCountsQuery.data}
+            candlesTableDailyCountsError={candlesTableDailyCountsQuery.error}
+            candlesTableDailyCountsLoading={candlesTableDailyCountsLoading}
           />
         ) : null}
 

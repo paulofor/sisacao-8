@@ -41,6 +41,7 @@ class DataCollectionMessageControllerTest {
         given(intradayMetricsClient.fetchDailyCounts()).willReturn(sampleIntradayCounts());
         given(intradayMetricsClient.fetchDailyTableCounts()).willReturn(sampleDailyTableCounts());
         given(intradayMetricsClient.fetchLatestRecords(20)).willReturn(sampleIntradayLatestRecords());
+        given(intradayMetricsClient.fetchCandlesTableDailyCounts()).willReturn(sampleCandlesTableDailyCounts());
     }
 
     @Test
@@ -138,6 +139,19 @@ class DataCollectionMessageControllerTest {
                 .andExpect(jsonPath("$[1].totalRecords", is(64)));
     }
 
+
+    @Test
+    void shouldReturnCandlesTableDailyCounts() throws Exception {
+        mockMvc.perform(get("/data-collections/candles-table-daily-counts"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(3)))
+                .andExpect(jsonPath("$[0].tableName", is("candles_diarios")))
+                .andExpect(jsonPath("$[0].date", is("2024-11-03")))
+                .andExpect(jsonPath("$[0].totalRecords", is(68)))
+                .andExpect(jsonPath("$[1].tableName", is("candles_intraday_15m")))
+                .andExpect(jsonPath("$[2].tableName", is("candles_intraday_1h")));
+    }
+
     private List<PythonDataCollectionClient.PythonMessage> sampleMessages() {
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         return List.of(
@@ -189,6 +203,14 @@ class DataCollectionMessageControllerTest {
                         "gold.ordens_criticas",
                         now.minusMinutes(51),
                         Map.of("acaoRecomendada", "Acionar suporte")));
+    }
+
+
+    private List<CandlesTableDailyCount> sampleCandlesTableDailyCounts() {
+        return List.of(
+                new CandlesTableDailyCount("candles_diarios", java.time.LocalDate.parse("2024-11-03"), 68L),
+                new CandlesTableDailyCount("candles_intraday_15m", java.time.LocalDate.parse("2024-11-03"), 520L),
+                new CandlesTableDailyCount("candles_intraday_1h", java.time.LocalDate.parse("2024-11-03"), 130L));
     }
 
     private List<IntradayDailyCount> sampleIntradayCounts() {

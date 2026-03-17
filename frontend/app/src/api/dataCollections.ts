@@ -52,6 +52,12 @@ export interface DailyTableCount {
   totalRecords: number
 }
 
+export interface CandlesTableDailyCount {
+  tableName: string
+  date: string
+  totalRecords: number
+}
+
 export interface IntradayLatestRecord {
   ticker: string
   price?: number | null
@@ -328,6 +334,30 @@ export const fetchDailyTableCounts = async (): Promise<DailyTableCount[]> => {
     })
     .filter((item) => Boolean(item.date))
     .sort((a, b) => dayjs(b.date).valueOf() - dayjs(a.date).valueOf())
+}
+
+
+export const fetchCandlesTableDailyCounts = async (): Promise<CandlesTableDailyCount[]> => {
+  const response = await apiClient.get<unknown>('/data-collections/candles-table-daily-counts')
+  const items = Array.isArray(response.data) ? response.data : []
+
+  return items
+    .map((item) => {
+      const record = item as Record<string, unknown>
+      const tableName = asString(record.tableName ?? record.table_name)
+      const date = toIsoDateString(record.date ?? record.data ?? record.data_ref)
+      const totalRecords = toInteger(record.totalRecords ?? record.total_registros ?? record.total)
+
+      return { tableName, date, totalRecords }
+    })
+    .filter((item) => Boolean(item.tableName) && Boolean(item.date))
+    .sort((a, b) => {
+      const dateCompare = dayjs(b.date).valueOf() - dayjs(a.date).valueOf()
+      if (dateCompare !== 0) {
+        return dateCompare
+      }
+      return a.tableName.localeCompare(b.tableName)
+    })
 }
 
 export const fetchIntradayLatestRecords = async (): Promise<IntradayLatestRecord[]> => {

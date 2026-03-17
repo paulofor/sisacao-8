@@ -116,6 +116,71 @@ public class BigQueryIntradayMetricsClient {
         }
     }
 
+
+    public List<CandlesTableDailyCount> fetchCandlesTableDailyCounts() {
+        String dataset = Optional.ofNullable(properties.getDailyDataset())
+                .filter(value -> !value.isBlank())
+                .orElse("cotacao_intraday");
+        int lookbackDays = Math.max(properties.getDailyDays(), 1);
+
+        String candlesDailyTable = buildQualifiedTableName(dataset, properties.getCandlesDailyTable());
+        String candlesIntraday15mTable = buildQualifiedTableName(dataset, properties.getCandlesIntraday15mTable());
+        String candlesIntraday1hTable = buildQualifiedTableName(dataset, properties.getCandlesIntraday1hTable());
+
+        String query =
+                """
+                        SELECT *
+                        FROM (
+                          SELECT 'candles_diarios' AS table_name, data_pregao AS data_ref, COUNT(*) AS total_registros
+                          FROM %s
+                          WHERE data_pregao >= DATE_SUB(CURRENT_DATE(), INTERVAL @lookbackDays DAY)
+                          GROUP BY data_ref
+
+                          UNION ALL
+
+                          SELECT 'candles_intraday_15m' AS table_name, reference_date AS data_ref, COUNT(*) AS total_registros
+                          FROM %s
+                          WHERE reference_date >= DATE_SUB(CURRENT_DATE(), INTERVAL @lookbackDays DAY)
+                          GROUP BY data_ref
+
+                          UNION ALL
+
+                          SELECT 'candles_intraday_1h' AS table_name, reference_date AS data_ref, COUNT(*) AS total_registros
+                          FROM %s
+                          WHERE reference_date >= DATE_SUB(CURRENT_DATE(), INTERVAL @lookbackDays DAY)
+                          GROUP BY data_ref
+                        )
+                        ORDER BY data_ref DESC, table_name ASC;
+                        """
+                        .formatted(candlesDailyTable, candlesIntraday15mTable, candlesIntraday1hTable);
+
+        QueryJobConfiguration configuration =
+                QueryJobConfiguration.newBuilder(query)
+                        .addNamedParameter("lookbackDays", QueryParameterValue.int64(lookbackDays))
+                        .setUseLegacySql(false)
+                        .build();
+
+        try {
+            TableResult result = bigQuery.query(configuration);
+            List<CandlesTableDailyCount> counts = new ArrayList<>();
+            for (FieldValueList row : result.iterateAll()) {
+                String tableName = toStringValue(row.get("table_name"));
+                LocalDate date = toLocalDate(row.get("data_ref"));
+                long totalRecords = toLong(row.get("total_registros"));
+                if (tableName != null && !tableName.isBlank() && date != null) {
+                    counts.add(new CandlesTableDailyCount(tableName, date, totalRecords));
+                }
+            }
+            LOGGER.debug("Retrieved {} candles table daily counts from BigQuery", counts.size());
+            return counts;
+        } catch (BigQueryException ex) {
+            throw new IllegalStateException("Failed to query BigQuery for candles table daily counts", ex);
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while querying BigQuery for candles table daily counts", ex);
+        }
+    }
+
     public List<IntradayLatestRecord> fetchLatestRecords(int limit) {
         String qualifiedTable = buildQualifiedTableName(properties.getIntradayDataset(), properties.getIntradayTable());
         int safeLimit = Math.max(limit, 1);
