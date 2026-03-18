@@ -17,6 +17,7 @@ public class DataCollectionBigQueryProperties {
     private String dailyDataset = "cotacao_intraday";
     private String dailyTable = "cotacao_ohlcv_diario";
     private int dailyDays = 5;
+    private String candlesDataset = "cotacao_intraday";
     private String candlesDailyTable = "candles_diarios";
     private String candlesIntraday15mTable = "candles_intraday_15m";
     private String candlesIntraday1hTable = "candles_intraday_1h";
@@ -136,6 +137,17 @@ public class DataCollectionBigQueryProperties {
             this.dailyDays = dailyDays;
         }
     }
+
+    public String getCandlesDataset() {
+        return candlesDataset;
+    }
+
+    public void setCandlesDataset(String candlesDataset) {
+        if (candlesDataset != null && !candlesDataset.isBlank()) {
+            this.candlesDataset = candlesDataset;
+        }
+    }
+
     public String getCandlesDailyTable() {
         return candlesDailyTable;
     }

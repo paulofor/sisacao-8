@@ -57,12 +57,50 @@ class BigQueryIntradayMetricsClientTest {
         assertThat(queryCaptor.getValue().getQuery()).contains("data_pregao");
     }
 
+    @Test
+    void shouldQueryCandlesTablesUsingCandlesDatasetInsteadOfDailyDataset() throws Exception {
+        properties.setDailyDataset("cotacao_outro_dataset");
+        properties.setCandlesDataset("cotacao_intraday");
+
+        TableResult tableResult = mock(TableResult.class);
+        doReturn(List.of(candlesRow("candles_intraday_1h", "2024-07-04", 12L)))
+                .when(tableResult)
+                .iterateAll();
+        doReturn(tableResult).when(bigQuery).query(any(QueryJobConfiguration.class));
+
+        BigQueryIntradayMetricsClient client = new BigQueryIntradayMetricsClient(bigQuery, properties);
+
+        List<CandlesTableDailyCount> counts = client.fetchCandlesTableDailyCounts();
+
+        assertThat(counts).hasSize(1);
+        assertThat(counts.getFirst().tableName()).isEqualTo("candles_intraday_1h");
+        assertThat(counts.getFirst().date()).isEqualTo(LocalDate.parse("2024-07-04"));
+        assertThat(counts.getFirst().totalRecords()).isEqualTo(12L);
+
+        ArgumentCaptor<QueryJobConfiguration> queryCaptor = ArgumentCaptor.forClass(QueryJobConfiguration.class);
+        verify(bigQuery).query(queryCaptor.capture());
+        assertThat(queryCaptor.getValue().getQuery()).contains("`cotacao_intraday.candles_diarios`");
+        assertThat(queryCaptor.getValue().getQuery()).doesNotContain("`cotacao_outro_dataset.candles_diarios`");
+    }
+
     private static FieldValueList row(String date, long totalRecords) {
         return FieldValueList.of(
                 List.of(
                         FieldValue.of(FieldValue.Attribute.PRIMITIVE, date),
                         FieldValue.of(FieldValue.Attribute.PRIMITIVE, Long.toString(totalRecords))),
                 FieldList.of(
+                        Field.of("data_ref", LegacySQLTypeName.DATE),
+                        Field.of("total_registros", LegacySQLTypeName.INTEGER)));
+    }
+
+    private static FieldValueList candlesRow(String tableName, String date, long totalRecords) {
+        return FieldValueList.of(
+                List.of(
+                        FieldValue.of(FieldValue.Attribute.PRIMITIVE, tableName),
+                        FieldValue.of(FieldValue.Attribute.PRIMITIVE, date),
+                        FieldValue.of(FieldValue.Attribute.PRIMITIVE, Long.toString(totalRecords))),
+                FieldList.of(
+                        Field.of("table_name", LegacySQLTypeName.STRING),
                         Field.of("data_ref", LegacySQLTypeName.DATE),
                         Field.of("total_registros", LegacySQLTypeName.INTEGER)));
     }
