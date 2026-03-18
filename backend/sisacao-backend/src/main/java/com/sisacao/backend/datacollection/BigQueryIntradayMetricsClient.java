@@ -118,7 +118,7 @@ public class BigQueryIntradayMetricsClient {
 
 
     public List<CandlesTableDailyCount> fetchCandlesTableDailyCounts() {
-        String dataset = Optional.ofNullable(properties.getDailyDataset())
+        String dataset = Optional.ofNullable(properties.getCandlesDataset())
                 .filter(value -> !value.isBlank())
                 .orElse("cotacao_intraday");
         int lookbackDays = Math.max(properties.getDailyDays(), 1);
