@@ -79,8 +79,8 @@ class BigQueryIntradayMetricsClientTest {
 
         ArgumentCaptor<QueryJobConfiguration> queryCaptor = ArgumentCaptor.forClass(QueryJobConfiguration.class);
         verify(bigQuery).query(queryCaptor.capture());
-        assertThat(queryCaptor.getValue().getQuery()).contains("`cotacao_intraday.candles_diarios`");
-        assertThat(queryCaptor.getValue().getQuery()).doesNotContain("`cotacao_outro_dataset.candles_diarios`");
+        assertThat(queryCaptor.getValue().getQuery()).contains("`cotacao_intraday.cotacao_ohlcv_diario`");
+        assertThat(queryCaptor.getValue().getQuery()).doesNotContain("`cotacao_outro_dataset.cotacao_ohlcv_diario`");
     }
 
     private static FieldValueList row(String date, long totalRecords) {
