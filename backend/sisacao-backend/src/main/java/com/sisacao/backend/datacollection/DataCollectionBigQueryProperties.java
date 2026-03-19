@@ -18,7 +18,7 @@ public class DataCollectionBigQueryProperties {
     private String dailyTable = "cotacao_ohlcv_diario";
     private int dailyDays = 5;
     private String candlesDataset = "cotacao_intraday";
-    private String candlesDailyTable = "candles_diarios";
+    private String candlesDailyTable = "cotacao_ohlcv_diario";
     private String candlesIntraday15mTable = "candles_intraday_15m";
     private String candlesIntraday1hTable = "candles_intraday_1h";
 
