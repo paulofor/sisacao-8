@@ -140,6 +140,30 @@ def _request_payload(request: Any) -> Dict[str, Any]:
     return data
 
 
+def _log_run_context(
+    *,
+    run_id: str,
+    reference_date: dt.date,
+    reason: str | None,
+    mode: Any,
+    force: bool,
+    payload: Mapping[str, Any],
+) -> None:
+    payload_keys = sorted(payload.keys())
+    logging.info(
+        (
+            "[run_id=%s] Iniciando eod_signals | date_ref=%s | force=%s | mode=%s | "
+            "reason=%s | payload_keys=%s"
+        ),
+        run_id,
+        reference_date.isoformat(),
+        force,
+        mode,
+        reason,
+        payload_keys,
+    )
+
+
 def _get_first_value(payload: Mapping[str, Any], keys: tuple[str, ...]) -> str | None:
     for key in keys:
         value = payload.get(key)
@@ -330,6 +354,11 @@ def _fetch_daily_frame(reference_date: dt.date) -> pd.DataFrame:
         _query_rows(query, job_config=job_config),
         columns=expected_columns,
     )
+    logging.info(
+        "Consulta de candles diários concluída para %s: %s registros",
+        reference_date,
+        len(df),
+    )
     if "ticker" in df.columns:
         df.sort_values("ticker", inplace=True)
     return df
@@ -395,14 +424,25 @@ def _persist_signals(
         row["job_run_id"] = run_id
         row["config_version"] = config_version
     if not rows:
-        logging.warning("Nenhum sinal para gravar no BigQuery")
+        logging.warning(
+            "Nenhum sinal para gravar no BigQuery | run_id=%s | date_ref=%s",
+            run_id,
+            reference_date,
+        )
         return
     load_config = bigquery.LoadJobConfig(
         write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
     )
     job = _get_client().load_table_from_json(rows, table_id, job_config=load_config)
     job.result()
-    logging.info("%s sinais gravados em %s", len(rows), table_id)
+    logging.info(
+        "%s sinais gravados em %s | run_id=%s | valid_for=%s | config=%s",
+        len(rows),
+        table_id,
+        run_id,
+        valid_for,
+        config_version,
+    )
 
 
 def generate_eod_signals(request: Any) -> Dict[str, Any]:
@@ -424,14 +464,27 @@ def generate_eod_signals(request: Any) -> Dict[str, Any]:
         run_logger.update_context(mode=mode)
     run_logger.update_context(force=force)
 
-    if not _ensure_after_cutoff(force):
+    reference_date = _parse_request_date(payload)
+    run_logger.update_context(date_ref=reference_date.isoformat())
+    _log_run_context(
+        run_id=run_logger.run_id,
+        reference_date=reference_date,
+        reason=reason,
+        mode=mode,
+        force=force,
+        payload=payload,
+    )
+
+    after_cutoff = _ensure_after_cutoff(force)
+    logging.info(
+        "[run_id=%s] Janela de cutoff validada: %s", run_logger.run_id, after_cutoff
+    )
+    if not after_cutoff:
         message = "Execução bloqueada antes do cutoff (18:00 BRT)."
         run_logger.warn(message, reason="before_cutoff")
         logging.warning(message)
         return {"status": "skipped", "reason": message, "request_reason": reason}, 400
 
-    reference_date = _parse_request_date(payload)
-    run_logger.update_context(date_ref=reference_date.isoformat())
     run_logger.started()
 
     if not _is_trading_day(reference_date):
@@ -441,6 +494,17 @@ def generate_eod_signals(request: Any) -> Dict[str, Any]:
         return {"status": "skipped", "reason": message, "request_reason": reason}
 
     strategy_config = _load_strategy_config()
+    logging.info(
+        (
+            "[run_id=%s] Configuração carregada | version=%s | max_signals=%s | "
+            "allow_sell=%s | horizon_days=%s"
+        ),
+        run_logger.run_id,
+        strategy_config.config_version,
+        strategy_config.max_signals,
+        strategy_config.allow_sell,
+        strategy_config.horizon_days,
+    )
     run_logger.update_context(
         config_version=strategy_config.config_version,
         horizon_days=strategy_config.horizon_days,
@@ -481,9 +545,10 @@ def generate_eod_signals(request: Any) -> Dict[str, Any]:
     if MIN_VOLUME > 0 and "volume_financeiro" in frame.columns:
         frame = frame[frame["volume_financeiro"].fillna(0) >= MIN_VOLUME]
         logging.info(
-            "Filtrando por volume financeiro mínimo %.0f: %s tickers",
+            "Filtrando por volume financeiro mínimo %.0f: %s/%s tickers",
             MIN_VOLUME,
             len(frame),
+            initial_rows,
         )
         if frame.empty:
             run_logger.warn(
@@ -516,6 +581,18 @@ def generate_eod_signals(request: Any) -> Dict[str, Any]:
     created_at_naive = _naive_sp(created_at)
     source_snapshot = compute_source_snapshot(frame.to_dict("records"))
     code_version = os.environ.get("CODE_VERSION", "local")
+    logging.info(
+        (
+            "[run_id=%s] Geração concluída | requested=%s | eligible=%s | generated=%s | "
+            "ranking_key=%s | model=%s"
+        ),
+        run_logger.run_id,
+        initial_rows,
+        len(frame),
+        len(signals),
+        RANKING_KEY,
+        MODEL_VERSION,
+    )
     response = {
         "date_ref": reference_date.isoformat(),
         "valid_for": valid_for.isoformat(),
