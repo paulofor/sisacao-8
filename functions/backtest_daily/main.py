@@ -257,7 +257,10 @@ def backtest_daily(request: Any) -> Dict[str, Any]:
 
         history_start = reference_date - dt.timedelta(days=METRICS_LOOKBACK_DAYS)
         history_df = _fetch_trade_history(history_start, reference_date)
-        metrics = compute_backtest_metrics(history_df.to_dict("records"), reference_date)
+        metrics = compute_backtest_metrics(
+            history_df.to_dict("records"),
+            reference_date,
+        )
         metrics_table = _table_ref(BACKTEST_METRICS_TABLE_ID)
         _delete_by_date(metrics_table, "as_of_date", reference_date)
         metric_rows = []

@@ -583,8 +583,8 @@ def generate_eod_signals(request: Any) -> Dict[str, Any]:
     code_version = os.environ.get("CODE_VERSION", "local")
     logging.info(
         (
-            "[run_id=%s] Geração concluída | requested=%s | eligible=%s | generated=%s | "
-            "ranking_key=%s | model=%s"
+            "[run_id=%s] Geração concluída | requested=%s | eligible=%s | "
+            "generated=%s | ranking_key=%s | model=%s"
         ),
         run_logger.run_id,
         initial_rows,
