@@ -190,70 +190,107 @@ def backtest_daily(request: Any) -> Dict[str, Any]:
     """Run the deterministic daily backtest for stored signals."""
 
     run_logger = StructuredLogger(JOB_NAME)
-    reference_date = _parse_request_date(request)
-    run_logger.update_context(date_ref=reference_date.isoformat())
-    run_logger.started()
-    if not _is_trading_day(reference_date):
-        message = f"{reference_date} não é dia útil para backtest"
-        run_logger.warn(message, reason="non_trading_day")
-        logging.warning(message)
-        return {"status": "skipped", "reason": message}
+    try:
+        reference_date = _parse_request_date(request)
+        run_logger.update_context(date_ref=reference_date.isoformat())
+        run_logger.started(
+            bq_location=BQ_LOCATION,
+            intraday_dataset=DATASET_ID,
+            signals_table=_table_ref(SIGNALS_TABLE_ID),
+            daily_table=_table_ref(DAILY_TABLE_ID),
+            metrics_lookback_days=METRICS_LOOKBACK_DAYS,
+        )
+        if not _is_trading_day(reference_date):
+            message = f"{reference_date} não é dia útil para backtest"
+            run_logger.warn(message, reason="non_trading_day")
+            logging.warning(message)
+            return {"status": "skipped", "reason": message}
 
-    signals_df = _fetch_signals(reference_date)
-    if signals_df.empty:
-        message = f"Nenhum sinal encontrado para {reference_date}"
-        run_logger.warn(message, reason="missing_signals")
-        logging.warning(message)
-        return {"status": "empty", "reason": message}
+        signals_df = _fetch_signals(reference_date)
+        if signals_df.empty:
+            message = f"Nenhum sinal encontrado para {reference_date}"
+            run_logger.warn(message, reason="missing_signals")
+            logging.warning(message)
+            return {"status": "empty", "reason": message}
 
-    signals = build_signal_payloads(signals_df.to_dict("records"))
-    min_valid = min(signal.valid_for for signal in signals)
-    max_valid = max(signal.valid_for for signal in signals)
-    max_horizon = max(signal.horizon_days for signal in signals)
-    end_date = max_valid + dt.timedelta(days=max_horizon * 2)
-    candles_df = _fetch_candles(
-        [signal.ticker for signal in signals],
-        min_valid,
-        end_date,
-    )
-    candles = build_candle_lookup(candles_df.to_dict("records"))
-    trades = run_backtest(signals, candles)
+        run_logger.ok(
+            "Sinais carregados",
+            signals_found=int(len(signals_df)),
+            unique_tickers=int(signals_df["ticker"].nunique()),
+        )
 
-    created_at = _as_naive_datetime(_now_sp())
-    trades_table = _table_ref(BACKTEST_TRADES_TABLE_ID)
-    _delete_by_date(trades_table, "date_ref", reference_date)
-    trade_rows = []
-    for trade in trades:
-        record = dict(trade.to_dict())
-        record["created_at"] = created_at
-        trade_rows.append(record)
-    _load_table(trades_table, trade_rows)
+        signals = build_signal_payloads(signals_df.to_dict("records"))
+        min_valid = min(signal.valid_for for signal in signals)
+        max_valid = max(signal.valid_for for signal in signals)
+        max_horizon = max(signal.horizon_days for signal in signals)
+        end_date = max_valid + dt.timedelta(days=max_horizon * 2)
+        candles_df = _fetch_candles(
+            [signal.ticker for signal in signals],
+            min_valid,
+            end_date,
+        )
+        run_logger.ok(
+            "Candles carregados",
+            candles_found=int(len(candles_df)),
+            candles_start=min_valid.isoformat(),
+            candles_end=end_date.isoformat(),
+        )
 
-    history_start = reference_date - dt.timedelta(days=METRICS_LOOKBACK_DAYS)
-    history_df = _fetch_trade_history(history_start, reference_date)
-    metrics = compute_backtest_metrics(history_df.to_dict("records"), reference_date)
-    metrics_table = _table_ref(BACKTEST_METRICS_TABLE_ID)
-    _delete_by_date(metrics_table, "as_of_date", reference_date)
-    metric_rows = []
-    for metric in metrics:
-        payload = dict(metric)
-        payload["created_at"] = created_at
-        metric_rows.append(payload)
-    _load_table(metrics_table, metric_rows)
+        candles = build_candle_lookup(candles_df.to_dict("records"))
+        trades = run_backtest(signals, candles)
 
-    result = {
-        "status": "ok",
-        "date_ref": reference_date.isoformat(),
-        "processed_signals": len(signals),
-        "trades": len(trade_rows),
-        "metrics": len(metric_rows),
-    }
-    run_logger.ok(
-        "Backtest diário atualizado",
-        processed_signals=len(signals),
-        trades=len(trade_rows),
-        metrics=len(metric_rows),
-        trades_table=_table_ref(BACKTEST_TRADES_TABLE_ID),
-        metrics_table=_table_ref(BACKTEST_METRICS_TABLE_ID),
-    )
-    return result
+        created_at = _as_naive_datetime(_now_sp())
+        trades_table = _table_ref(BACKTEST_TRADES_TABLE_ID)
+        _delete_by_date(trades_table, "date_ref", reference_date)
+        trade_rows = []
+        for trade in trades:
+            record = dict(trade.to_dict())
+            record["created_at"] = created_at
+            trade_rows.append(record)
+        _load_table(trades_table, trade_rows)
+        run_logger.ok(
+            "Backtest executado e trades persistidos",
+            trades_generated=len(trade_rows),
+            entries_hit=sum(1 for row in trade_rows if bool(row["entry_hit"])),
+            trades_table=trades_table,
+        )
+
+        history_start = reference_date - dt.timedelta(days=METRICS_LOOKBACK_DAYS)
+        history_df = _fetch_trade_history(history_start, reference_date)
+        metrics = compute_backtest_metrics(history_df.to_dict("records"), reference_date)
+        metrics_table = _table_ref(BACKTEST_METRICS_TABLE_ID)
+        _delete_by_date(metrics_table, "as_of_date", reference_date)
+        metric_rows = []
+        for metric in metrics:
+            payload = dict(metric)
+            payload["created_at"] = created_at
+            metric_rows.append(payload)
+        _load_table(metrics_table, metric_rows)
+        run_logger.ok(
+            "Métricas calculadas e persistidas",
+            history_rows=len(history_df),
+            metrics_rows=len(metric_rows),
+            metrics_table=metrics_table,
+            history_start=history_start.isoformat(),
+            history_end=reference_date.isoformat(),
+        )
+
+        result = {
+            "status": "ok",
+            "date_ref": reference_date.isoformat(),
+            "processed_signals": len(signals),
+            "trades": len(trade_rows),
+            "metrics": len(metric_rows),
+        }
+        run_logger.ok(
+            "Backtest diário atualizado",
+            processed_signals=len(signals),
+            trades=len(trade_rows),
+            metrics=len(metric_rows),
+            trades_table=_table_ref(BACKTEST_TRADES_TABLE_ID),
+            metrics_table=_table_ref(BACKTEST_METRICS_TABLE_ID),
+        )
+        return result
+    except Exception as exc:  # noqa: BLE001
+        run_logger.exception(exc)
+        raise
