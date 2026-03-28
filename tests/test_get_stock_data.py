@@ -106,7 +106,8 @@ def test_get_stock_data_success(monkeypatch):
     response = module.get_stock_data(None)
     assert response == "Success"
     expected_reference = datetime.datetime.now(module.SAO_PAULO_TZ).date()
-    assert captured["date"] == expected_reference
+    assert captured["date"] <= expected_reference
+    assert captured["date"] >= expected_reference - datetime.timedelta(days=4)
 
 
 def test_load_tickers_from_file(monkeypatch, tmp_path):
@@ -264,7 +265,7 @@ def test_get_stock_data_skips_on_holiday(monkeypatch):
 
     response = module.get_stock_data(None)
 
-    assert response == "Skipped holiday"
+    assert response == "No missing days"
 
 
 def test_get_stock_data_skips_when_already_loaded(monkeypatch):
@@ -275,7 +276,44 @@ def test_get_stock_data_skips_when_already_loaded(monkeypatch):
 
     response = module.get_stock_data(None)
 
-    assert response == "Skipped already loaded"
+    assert response == "No missing days"
+
+
+def test_get_stock_data_reconciles_recent_missing_days(monkeypatch):
+    module = import_get_stock_module(monkeypatch)
+    base_date = datetime.date(2026, 1, 8)
+    candle = make_candle(module, date=base_date.isoformat())
+
+    class DummyRequest:
+        args = {}
+
+        @staticmethod
+        def get_json(silent=True):  # noqa: D401, ANN001
+            return {"date_ref": base_date.isoformat(), "lookback_days": 5}
+
+    monkeypatch.setattr(module, "is_b3_holiday", lambda date: False)
+    monkeypatch.setattr(
+        module,
+        "has_daily_data",
+        lambda date: date != datetime.date(2026, 1, 7),
+    )
+    monkeypatch.setattr(module, "load_configured_tickers", lambda path=None: ["YDUQ3"])
+    monkeypatch.setattr(
+        module,
+        "download_from_b3",
+        lambda tickers, date=None, diagnostics=None, **kwargs: {"YDUQ3": candle},
+    )
+    captured = {"dates": []}
+
+    def fake_append(data, reference_date):
+        captured["dates"].append(reference_date)
+
+    monkeypatch.setattr(module, "append_dataframe_to_bigquery", fake_append)
+
+    response = module.get_stock_data(DummyRequest())
+
+    assert response == "Success"
+    assert captured["dates"] == [datetime.date(2026, 1, 7)]
 
 
 def test_is_b3_holiday_true_when_row_exists(monkeypatch):
