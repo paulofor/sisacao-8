@@ -90,6 +90,7 @@ ALLOW_OFFLINE_FALLBACK_ENV = (
 # Timeout em segundos para requisições HTTP
 TIMEOUT = 120
 MAX_B3_LOOKBACK_DAYS = int(os.environ.get("MAX_B3_LOOKBACK_DAYS", "5"))
+MISSING_DAYS_LOOKBACK = int(os.environ.get("MISSING_DAYS_LOOKBACK", "5"))
 
 
 def _create_bigquery_client() -> Any:
@@ -796,6 +797,144 @@ def has_daily_data(reference_date: datetime.date) -> bool:
         return False
 
 
+def _resolve_target_dates(
+    payload: Dict[str, Any],
+    *,
+    reference_date: datetime.date,
+    force: bool,
+) -> List[datetime.date]:
+    """Return ordered dates that should be processed in the current run."""
+
+    if _is_single_date_mode(payload):
+        return [reference_date]
+
+    lookback_value = payload.get("lookback_days", MISSING_DAYS_LOOKBACK)
+    try:
+        lookback_days = max(1, int(lookback_value))
+    except (TypeError, ValueError):
+        lookback_days = MISSING_DAYS_LOOKBACK
+
+    missing_dates: List[datetime.date] = []
+    for day_offset in range(lookback_days - 1, -1, -1):
+        candidate = reference_date - datetime.timedelta(days=day_offset)
+        if candidate.weekday() >= 5:
+            continue
+        if is_b3_holiday(candidate):
+            continue
+        if force or not has_daily_data(candidate):
+            missing_dates.append(candidate)
+    return missing_dates
+
+
+def _is_single_date_mode(payload: Dict[str, Any]) -> bool:
+    """Return True when request targets only one date (legacy behavior)."""
+
+    if not _get_first_value(payload, ("date_ref", "date")):
+        return False
+    lookback_value = payload.get("lookback_days")
+    if lookback_value is None:
+        return True
+    try:
+        return int(lookback_value) <= 1
+    except (TypeError, ValueError):
+        return True
+
+
+def _rows_from_candles(
+    tickers: List[str],
+    data_dict: Dict[str, Candle],
+) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+    for ticker in tickers:
+        candle = data_dict.get(ticker)
+        if candle is None:
+            logging.warning("Dados não disponíveis para %s", ticker)
+            continue
+        logging.warning(
+            "Candle diário %s - O:%.2f H:%.2f L:%.2f C:%.2f Vol:%.0f",
+            ticker,
+            candle.open,
+            candle.high,
+            candle.low,
+            candle.close,
+            candle.volume or 0,
+        )
+        rows.append(candle.to_bq_row())
+    return rows
+
+
+def _ingest_single_date(
+    *,
+    reference_date: datetime.date,
+    tickers: List[str],
+    config: IngestionConfig,
+    run_logger: StructuredLogger,
+    dataset_path: str,
+) -> bool:
+    diagnostics: List[str] = []
+    logging.warning("Iniciando download de %s tickers...", len(tickers))
+    data_dict = download_from_b3(
+        tickers,
+        date=reference_date,
+        diagnostics=diagnostics,
+        allow_fallback=config.allow_offline_fallback,
+    )
+    run_logger.ok(
+        "Download concluído",
+        stage="download",
+        date_ref=reference_date.isoformat(),
+        tickers_with_data=len(data_dict),
+        diagnostics=diagnostics[:5],
+    )
+
+    if not data_dict:
+        log_method = run_logger.warn
+        reason_tag = "empty_source"
+        if not config.allow_offline_fallback:
+            log_method = run_logger.error
+            reason_tag = "cotahist_download_failed"
+        log_method(
+            "Nenhum dado oficial retornado",
+            reason=reason_tag,
+            diagnostics=diagnostics,
+            allow_offline_fallback=config.allow_offline_fallback,
+            date_ref=reference_date.isoformat(),
+        )
+        return False
+
+    rows = _rows_from_candles(tickers, data_dict)
+    if not rows:
+        run_logger.warn(
+            "Nenhum registro válido para inserir na tabela de candles",
+            reason="no_rows",
+            date_ref=reference_date.isoformat(),
+        )
+        return False
+
+    if pd is not None:
+        df = pd.DataFrame(rows)
+        logging.warning(
+            "DataFrame final com %s linhas será enviado ao BigQuery.",
+            len(df),
+        )
+        logging.warning("Pré-visualização do DataFrame:\n%s", df.head())
+        append_dataframe_to_bigquery(df, reference_date)
+    else:
+        logging.warning(
+            "Pandas não está instalado. Enviando %s linhas como JSON.",
+            len(rows),
+        )
+        append_dataframe_to_bigquery(rows, reference_date)
+
+    run_logger.ok(
+        "Candles diários armazenados",
+        date_ref=reference_date.isoformat(),
+        rows_inserted=len(rows),
+        table=dataset_path,
+    )
+    return True
+
+
 def get_stock_data(request):
     """Entry point for the Cloud Function that stores daily closing prices."""
     payload = _request_payload(request)
@@ -812,7 +951,9 @@ def get_stock_data(request):
     )
     run_logger.started()
 
-    if is_b3_holiday(reference_date) and not force:
+    single_date_mode = _is_single_date_mode(payload)
+
+    if is_b3_holiday(reference_date) and not force and single_date_mode:
         run_logger.warn(
             "Coleta ignorada por feriado da B3",
             reason="holiday",
@@ -820,7 +961,7 @@ def get_stock_data(request):
         )
         return "Skipped holiday"
 
-    if has_daily_data(reference_date) and not force:
+    if has_daily_data(reference_date) and not force and single_date_mode:
         run_logger.warn(
             "Coleta ignorada por já existir carga do dia",
             reason="already_loaded",
@@ -844,82 +985,33 @@ def get_stock_data(request):
         "Iniciando processamento de %s tickers configurados.",
         len(tickers),
     )
-    diagnostics: List[str] = []
     dataset_path = f"{_project_id()}.{DATASET_ID}.{FECHAMENTO_TABLE_ID}"
+    target_dates = _resolve_target_dates(
+        payload,
+        reference_date=reference_date,
+        force=force,
+    )
+    run_logger.update_context(target_dates=[d.isoformat() for d in target_dates])
+    if not target_dates:
+        run_logger.ok(
+            "Nenhum dia pendente nos últimos dias consultados",
+            stage="reconciliation",
+        )
+        return "No missing days"
 
     try:
-        logging.warning("Iniciando download de %s tickers...", len(tickers))
-        data_dict = download_from_b3(
-            tickers,
-            date=reference_date,
-            diagnostics=diagnostics,
-            allow_fallback=config.allow_offline_fallback,
-        )
-        run_logger.ok(
-            "Download concluído",
-            stage="download",
-            tickers_with_data=len(data_dict),
-            diagnostics=diagnostics[:5],
-        )
-
-        if not data_dict:
-            log_method = run_logger.warn
-            reason_tag = "empty_source"
-            if not config.allow_offline_fallback:
-                log_method = run_logger.error
-                reason_tag = "cotahist_download_failed"
-            log_method(
-                "Nenhum dado oficial retornado",
-                reason=reason_tag,
-                diagnostics=diagnostics,
-                allow_offline_fallback=config.allow_offline_fallback,
-            )
+        success_count = 0
+        for target_date in target_dates:
+            if _ingest_single_date(
+                reference_date=target_date,
+                tickers=tickers,
+                config=config,
+                run_logger=run_logger,
+                dataset_path=dataset_path,
+            ):
+                success_count += 1
+        if success_count == 0:
             return "No data fetched"
-
-        rows: List[Dict[str, Any]] = []
-        for ticker in tickers:
-            candle = data_dict.get(ticker)
-            if candle is None:
-                logging.warning("Dados não disponíveis para %s", ticker)
-                continue
-            logging.warning(
-                "Candle diário %s - O:%.2f H:%.2f L:%.2f C:%.2f Vol:%.0f",
-                ticker,
-                candle.open,
-                candle.high,
-                candle.low,
-                candle.close,
-                candle.volume or 0,
-            )
-            rows.append(candle.to_bq_row())
-
-        if not rows:
-            run_logger.warn(
-                "Nenhum registro válido para inserir na tabela de candles",
-                reason="no_rows",
-            )
-            return "No data loaded"
-
-        if pd is not None:
-            df = pd.DataFrame(rows)
-            logging.warning(
-                "DataFrame final com %s linhas será enviado ao BigQuery.",
-                len(df),
-            )
-            logging.warning("Pré-visualização do DataFrame:\n%s", df.head())
-            append_dataframe_to_bigquery(df, reference_date)
-        else:
-            logging.warning(
-                "Pandas não está instalado. Enviando %s linhas como JSON.",
-                len(rows),
-            )
-            append_dataframe_to_bigquery(rows, reference_date)
-
-        run_logger.ok(
-            "Candles diários armazenados",
-            rows_inserted=len(rows),
-            table=dataset_path,
-        )
         return "Success"
 
     except Exception as exc:  # noqa: BLE001
