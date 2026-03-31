@@ -935,7 +935,11 @@ def _ingest_single_date(
         if candle.reference_date == reference_date
     }
     mismatched_dates = sorted(
-        {candle.reference_date for candle in data_dict.values() if candle.reference_date != reference_date}
+        {
+            candle.reference_date
+            for candle in data_dict.values()
+            if candle.reference_date != reference_date
+        }
     )
     if mismatched_dates:
         logging.warning(
@@ -944,10 +948,13 @@ def _ingest_single_date(
             [item.isoformat() for item in mismatched_dates],
         )
     if not filtered_data_dict:
-        effective_date = mismatched_dates[0].isoformat() if mismatched_dates else "desconhecida"
+        effective_date = (
+            mismatched_dates[0].isoformat() if mismatched_dates else "desconhecida"
+        )
         warning_message = (
             "Sem linhas após filtro de data: "
-            f"arquivo disponível é de {effective_date}, alvo era {reference_date.isoformat()}"
+            "arquivo disponível é de "
+            f"{effective_date}, alvo era {reference_date.isoformat()}"
         )
         logging.warning(warning_message)
         run_logger.warn(

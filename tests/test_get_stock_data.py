@@ -89,7 +89,9 @@ def test_get_stock_data_success(monkeypatch):
         module,
         "download_from_b3",
         lambda tickers, date=None, diagnostics=None, **kwargs: {
-            "YDUQ3": make_candle(module, date=(date or datetime.date.today()).isoformat())
+            "YDUQ3": make_candle(
+                module, date=(date or datetime.date.today()).isoformat()
+            )
         },
     )
     monkeypatch.setattr(
