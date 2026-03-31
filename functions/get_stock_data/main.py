@@ -814,16 +814,31 @@ def _resolve_target_dates(
     except (TypeError, ValueError):
         lookback_days = MISSING_DAYS_LOOKBACK
 
+    candidate_dates = _iter_previous_business_days(reference_date, lookback_days)
     missing_dates: List[datetime.date] = []
-    for day_offset in range(lookback_days - 1, -1, -1):
-        candidate = reference_date - datetime.timedelta(days=day_offset)
-        if candidate.weekday() >= 5:
-            continue
-        if is_b3_holiday(candidate):
-            continue
+    for candidate in candidate_dates:
         if force or not has_daily_data(candidate):
             missing_dates.append(candidate)
     return missing_dates
+
+
+def _iter_previous_business_days(
+    reference_date: datetime.date, business_days: int
+) -> List[datetime.date]:
+    """Return ``business_days`` B3 business dates ending at ``reference_date``."""
+
+    total_days = max(1, int(business_days))
+    candidates: List[datetime.date] = []
+    cursor = reference_date
+    max_calendar_checks = max(total_days * 10, 366)
+    checked_days = 0
+    while len(candidates) < total_days and checked_days < max_calendar_checks:
+        if cursor.weekday() < 5 and not is_b3_holiday(cursor):
+            candidates.append(cursor)
+        cursor -= datetime.timedelta(days=1)
+        checked_days += 1
+    candidates.reverse()
+    return candidates
 
 
 def _is_single_date_mode(payload: Dict[str, Any]) -> bool:
