@@ -316,6 +316,37 @@ def test_get_stock_data_reconciles_recent_missing_days(monkeypatch):
     assert captured["dates"] == [datetime.date(2026, 1, 7)]
 
 
+def test_resolve_target_dates_uses_business_day_window(monkeypatch):
+    module = import_get_stock_module(monkeypatch)
+    reference_date = datetime.date(2026, 3, 30)
+    payload = {"lookback_days": 5}
+
+    monkeypatch.setattr(
+        module,
+        "is_b3_holiday",
+        lambda date: False,
+    )
+    monkeypatch.setattr(
+        module,
+        "has_daily_data",
+        lambda date: False,
+    )
+
+    result = module._resolve_target_dates(
+        payload,
+        reference_date=reference_date,
+        force=False,
+    )
+
+    assert result == [
+        datetime.date(2026, 3, 24),
+        datetime.date(2026, 3, 25),
+        datetime.date(2026, 3, 26),
+        datetime.date(2026, 3, 27),
+        datetime.date(2026, 3, 30),
+    ]
+
+
 def test_is_b3_holiday_true_when_row_exists(monkeypatch):
     module = import_get_stock_module(monkeypatch)
     monkeypatch.setattr(module, "pd", None, raising=False)
