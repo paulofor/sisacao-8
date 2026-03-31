@@ -473,6 +473,7 @@ def download_from_b3(
     *,
     diagnostics: Optional[List[str]] = None,
     allow_fallback: bool = True,
+    strict_trade_date: bool = False,
 ) -> Dict[str, Candle]:
     """Download daily candles from the official B3 file."""
 
@@ -530,6 +531,16 @@ def download_from_b3(
             continue
         result = candles_by_ticker(candles)
         if result:
+            if strict_trade_date and attempt_date != date:
+                message = (
+                    "modo estrito ativo: arquivo disponível é de "
+                    f"{attempt_date.isoformat()}, alvo era {date.isoformat()}"
+                )
+                logging.warning(message)
+                if diag_list is not None:
+                    diag_list.append(_format_diagnostic(message))
+                result = {}
+                continue
             if day_offset > 0:
                 logging.warning(
                     "Dados obtidos com fallback de %s dia(s).",
@@ -893,6 +904,7 @@ def _ingest_single_date(
         date=reference_date,
         diagnostics=diagnostics,
         allow_fallback=config.allow_offline_fallback,
+        strict_trade_date=True,
     )
     run_logger.ok(
         "Download concluído",
@@ -917,7 +929,37 @@ def _ingest_single_date(
         )
         return False
 
-    rows = _rows_from_candles(tickers, data_dict)
+    filtered_data_dict = {
+        ticker: candle
+        for ticker, candle in data_dict.items()
+        if candle.reference_date == reference_date
+    }
+    mismatched_dates = sorted(
+        {candle.reference_date for candle in data_dict.values() if candle.reference_date != reference_date}
+    )
+    if mismatched_dates:
+        logging.warning(
+            "Ignorando candles com data divergente. alvo=%s efetivas=%s",
+            reference_date.isoformat(),
+            [item.isoformat() for item in mismatched_dates],
+        )
+    if not filtered_data_dict:
+        effective_date = mismatched_dates[0].isoformat() if mismatched_dates else "desconhecida"
+        warning_message = (
+            "Sem linhas após filtro de data: "
+            f"arquivo disponível é de {effective_date}, alvo era {reference_date.isoformat()}"
+        )
+        logging.warning(warning_message)
+        run_logger.warn(
+            "Arquivo disponível diverge da data alvo; ingestão ignorada",
+            reason="trade_date_mismatch",
+            date_ref=reference_date.isoformat(),
+            effective_dates=[item.isoformat() for item in mismatched_dates],
+            diagnostics=diagnostics[:5],
+        )
+        return False
+
+    rows = _rows_from_candles(tickers, filtered_data_dict)
     if not rows:
         run_logger.warn(
             "Nenhum registro válido para inserir na tabela de candles",
