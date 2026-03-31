@@ -85,11 +85,12 @@ def make_candle(module, ticker="YDUQ3", date="2025-01-01", price=10.0):
 def test_get_stock_data_success(monkeypatch):
     module = import_get_stock_module(monkeypatch)
 
-    candle = make_candle(module)
     monkeypatch.setattr(
         module,
         "download_from_b3",
-        lambda tickers, date=None, diagnostics=None, **kwargs: {"YDUQ3": candle},
+        lambda tickers, date=None, diagnostics=None, **kwargs: {
+            "YDUQ3": make_candle(module, date=(date or datetime.date.today()).isoformat())
+        },
     )
     monkeypatch.setattr(
         module,
@@ -282,7 +283,6 @@ def test_get_stock_data_skips_when_already_loaded(monkeypatch):
 def test_get_stock_data_reconciles_recent_missing_days(monkeypatch):
     module = import_get_stock_module(monkeypatch)
     base_date = datetime.date(2026, 1, 8)
-    candle = make_candle(module, date=base_date.isoformat())
 
     class DummyRequest:
         args = {}
@@ -301,7 +301,9 @@ def test_get_stock_data_reconciles_recent_missing_days(monkeypatch):
     monkeypatch.setattr(
         module,
         "download_from_b3",
-        lambda tickers, date=None, diagnostics=None, **kwargs: {"YDUQ3": candle},
+        lambda tickers, date=None, diagnostics=None, **kwargs: {
+            "YDUQ3": make_candle(module, date=(date or base_date).isoformat())
+        },
     )
     captured = {"dates": []}
 
@@ -314,6 +316,55 @@ def test_get_stock_data_reconciles_recent_missing_days(monkeypatch):
 
     assert response == "Success"
     assert captured["dates"] == [datetime.date(2026, 1, 7)]
+
+
+def test_ingest_single_date_skips_mismatched_trade_date(monkeypatch):
+    module = import_get_stock_module(monkeypatch)
+    target_date = datetime.date(2026, 3, 30)
+    stale_candle = make_candle(module, date="2026-03-27")
+    captured = {"append_called": False, "events": []}
+
+    monkeypatch.setattr(
+        module,
+        "download_from_b3",
+        lambda tickers, date=None, diagnostics=None, **kwargs: {"YDUQ3": stale_candle},
+    )
+    monkeypatch.setattr(
+        module,
+        "append_dataframe_to_bigquery",
+        lambda data, reference_date: captured.__setitem__("append_called", True),
+    )
+
+    class FakeLogger:
+        def ok(self, *_args, **_kwargs):  # noqa: D401
+            return None
+
+        def warn(self, message, **kwargs):  # noqa: D401
+            captured["events"].append(("warn", message, kwargs))
+
+        def error(self, message, **kwargs):  # noqa: D401
+            captured["events"].append(("error", message, kwargs))
+
+    config = module.IngestionConfig(
+        config_version="test",
+        allow_offline_fallback=True,
+    )
+    result = module._ingest_single_date(
+        reference_date=target_date,
+        tickers=["YDUQ3"],
+        config=config,
+        run_logger=FakeLogger(),
+        dataset_path="test.dataset.table",
+    )
+
+    assert result is False
+    assert captured["append_called"] is False
+    warn_events = [event for event in captured["events"] if event[0] == "warn"]
+    assert warn_events
+    _, _, warn_payload = warn_events[-1]
+    assert warn_payload["reason"] == "trade_date_mismatch"
+    assert warn_payload["date_ref"] == "2026-03-30"
+    assert warn_payload["effective_dates"] == ["2026-03-27"]
 
 
 def test_resolve_target_dates_uses_business_day_window(monkeypatch):
