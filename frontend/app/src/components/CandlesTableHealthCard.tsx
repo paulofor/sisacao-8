@@ -27,6 +27,10 @@ const CandlesTableHealthCard: FC<CandlesTableHealthCardProps> = ({ counts, isLoa
     const tableRecords = (counts ?? []).filter((item) => item.tableName === tableName)
     const latest = tableRecords[0]
     const todayTotal = tableRecords.find((item) => item.date === today)?.totalRecords ?? 0
+    const lastFiveDaysTotals = tableRecords
+      .slice(0, 5)
+      .map((item) => `${item.date}: ${item.totalRecords}`)
+      .join(' | ')
 
     let status: TableStatus = 'ERRO'
     if (latest) {
@@ -38,6 +42,7 @@ const CandlesTableHealthCard: FC<CandlesTableHealthCardProps> = ({ counts, isLoa
       latestDate: latest?.date ?? '—',
       latestTotal: latest?.totalRecords ?? 0,
       todayTotal,
+      lastFiveDaysTotals: lastFiveDaysTotals || 'Sem dados',
       status,
     }
   })
@@ -68,6 +73,7 @@ const CandlesTableHealthCard: FC<CandlesTableHealthCardProps> = ({ counts, isLoa
                   <TableCell>Última data</TableCell>
                   <TableCell align="right">Registros na última data</TableCell>
                   <TableCell align="right">Registros hoje</TableCell>
+                  <TableCell>Totais dos últimos 5 dias</TableCell>
                   <TableCell align="right">Status</TableCell>
                 </TableRow>
               </TableHead>
@@ -78,6 +84,7 @@ const CandlesTableHealthCard: FC<CandlesTableHealthCardProps> = ({ counts, isLoa
                     <TableCell>{row.latestDate}</TableCell>
                     <TableCell align="right">{row.latestTotal}</TableCell>
                     <TableCell align="right">{row.todayTotal}</TableCell>
+                    <TableCell>{row.lastFiveDaysTotals}</TableCell>
                     <TableCell align="right">
                       <Chip label={row.status} color={statusColor[row.status]} size="small" />
                     </TableCell>
