@@ -146,6 +146,29 @@ _INTRADAY_LOCATION: Optional[str] = None
 app: Optional[Any] = None
 
 
+def _get_client() -> Any:
+    """Return initialized BigQuery client, recreating when unset."""
+
+    global client
+    if client is None:
+        runtime_bigquery = importlib.import_module("google.cloud.bigquery")
+        client = runtime_bigquery.Client(location=BQ_LOCATION)
+    return client
+
+
+def _project_id() -> str:
+    """Return project id from client or environment with safe fallback."""
+
+    project_id = getattr(_get_client(), "project", None)
+    if project_id:
+        return str(project_id)
+    return (
+        os.environ.get("GCP_PROJECT")
+        or os.environ.get("GOOGLE_CLOUD_PROJECT")
+        or "unknown-project"
+    )
+
+
 def _runtime_context_snapshot() -> Dict[str, Any]:
     """Return key runtime context values used by BigQuery operations."""
 
@@ -194,14 +217,14 @@ def _resolve_intraday_location() -> Optional[str]:
     if _INTRADAY_LOCATION:
         return _INTRADAY_LOCATION
 
-    project_id = getattr(client, "project", None)
+    project_id = getattr(_get_client(), "project", None)
     if not project_id:
         _INTRADAY_LOCATION = BQ_LOCATION
         return _INTRADAY_LOCATION
 
     dataset_ref = f"{project_id}.{DATASET_ID}"
     try:
-        dataset = client.get_dataset(dataset_ref)
+        dataset = _get_client().get_dataset(dataset_ref)
     except Exception as exc:  # noqa: BLE001
         logger.warning(
             "Failed to resolve BigQuery dataset location for %s: %s. "
@@ -232,10 +255,10 @@ def _query_bigquery(query: str) -> Any:
     for location in _candidate_query_locations():
         try:
             if not location:
-                return client.query(query)
-            return client.query(query, location=location)
+                return _get_client().query(query)
+            return _get_client().query(query, location=location)
         except TypeError:
-            return client.query(query)
+            return _get_client().query(query)
         except Exception as exc:  # noqa: BLE001
             if not _is_location_not_found_error(exc):
                 raise
@@ -244,7 +267,7 @@ def _query_bigquery(query: str) -> Any:
                 location,
                 exc,
             )
-    return client.query(query)
+    return _get_client().query(query)
 
 
 def _load_table_from_dataframe(df: Any, table_id: str, job_config: Any) -> Any:
@@ -253,19 +276,19 @@ def _load_table_from_dataframe(df: Any, table_id: str, job_config: Any) -> Any:
     for location in _candidate_query_locations():
         try:
             if not location:
-                return client.load_table_from_dataframe(
+                return _get_client().load_table_from_dataframe(
                     df,
                     table_id,
                     job_config=job_config,
                 )
-            return client.load_table_from_dataframe(
+            return _get_client().load_table_from_dataframe(
                 df,
                 table_id,
                 job_config=job_config,
                 location=location,
             )
         except TypeError:
-            return client.load_table_from_dataframe(
+            return _get_client().load_table_from_dataframe(
                 df,
                 table_id,
                 job_config=job_config,
@@ -279,7 +302,11 @@ def _load_table_from_dataframe(df: Any, table_id: str, job_config: Any) -> Any:
                 location,
                 exc,
             )
-    return client.load_table_from_dataframe(df, table_id, job_config=job_config)
+    return _get_client().load_table_from_dataframe(
+        df,
+        table_id,
+        job_config=job_config,
+    )
 
 
 def _load_table_from_json(
@@ -290,19 +317,19 @@ def _load_table_from_json(
     for location in _candidate_query_locations():
         try:
             if not location:
-                return client.load_table_from_json(
+                return _get_client().load_table_from_json(
                     rows,
                     table_id,
                     job_config=job_config,
                 )
-            return client.load_table_from_json(
+            return _get_client().load_table_from_json(
                 rows,
                 table_id,
                 job_config=job_config,
                 location=location,
             )
         except TypeError:
-            return client.load_table_from_json(
+            return _get_client().load_table_from_json(
                 rows,
                 table_id,
                 job_config=job_config,
@@ -315,7 +342,11 @@ def _load_table_from_json(
                 location,
                 exc,
             )
-    return client.load_table_from_json(rows, table_id, job_config=job_config)
+    return _get_client().load_table_from_json(
+        rows,
+        table_id,
+        job_config=job_config,
+    )
 
 
 def _candidate_query_locations() -> List[Optional[str]]:
@@ -571,7 +602,7 @@ def append_dataframe_to_bigquery(data: Any) -> None:
     """Append data to the BigQuery table accepting DataFrame or JSON rows."""
 
     try:
-        tabela_id = f"{client.project}.{DATASET_ID}.{TABELA_ID}"
+        tabela_id = f"{_project_id()}.{DATASET_ID}.{TABELA_ID}"
         logger.warning("Destination table: %s", tabela_id)
         try:
             ticker_field = bigquery.SchemaField("ticker", "STRING", mode="REQUIRED")
@@ -590,7 +621,7 @@ def append_dataframe_to_bigquery(data: Any) -> None:
             bigquery.SchemaField("job_run_id", "STRING"),
         ]
         try:
-            expected_schema = client.get_table(tabela_id).schema
+            expected_schema = _get_client().get_table(tabela_id).schema
         except Exception as exc:  # noqa: BLE001
             logger.warning(
                 "Failed to read destination schema from %s; using local fallback: %s",
@@ -682,7 +713,7 @@ def _append_rows(rows: List[Dict[str, Any]]) -> None:
 
 def fetch_active_tickers() -> List[str]:
     """Return list of active tickers from ``acao_bovespa`` table."""
-    table_id = f"{client.project}.{DATASET_ID}.acao_bovespa"
+    table_id = f"{_project_id()}.{DATASET_ID}.acao_bovespa"
     query = f"SELECT ticker FROM `{table_id}` WHERE ativo = TRUE"
     logger.warning("Fetching active tickers using query table %s", table_id)
     try:
@@ -729,7 +760,7 @@ def fetch_active_tickers() -> List[str]:
 def is_b3_holiday(reference_date: datetime.date) -> bool:
     """Return ``True`` when ``reference_date`` exists in the holidays table."""
 
-    project_id = getattr(client, "project", None)
+    project_id = getattr(_get_client(), "project", None)
     if not project_id:
         logger.warning("BigQuery client without project; skipping holiday gate.")
         return False
@@ -838,7 +869,7 @@ def google_finance_price(request: Any) -> Response:
     run_logger.update_context(date_ref=data_atual)
     run_logger.started()
     _log_bigquery_runtime_context()
-    table_path = f"{client.project}.{DATASET_ID}.{TABELA_ID}"
+    table_path = f"{_project_id()}.{DATASET_ID}.{TABELA_ID}"
 
     if is_b3_holiday(now.date()):
         run_logger.warn(
