@@ -126,11 +126,13 @@ def parse_b3_daily_zip(
                 else text_files[0]
             )
             with archive.open(filename) as handle:
-                lines = [
+                # Stream lines directly to avoid duplicating the full daily file
+                # in memory (important for lower-memory Cloud Functions).
+                lines = (
                     line.rstrip("\r\n")
                     for line in io.TextIOWrapper(handle, encoding="latin1")
-                ]
-            candles = parse_b3_daily_lines(lines, tickers=tickers)
+                )
+                candles = parse_b3_daily_lines(lines, tickers=tickers)
             if not candles:
                 diagnostics["empty_dataset"] = filename
             return candles
