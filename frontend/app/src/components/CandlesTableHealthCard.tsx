@@ -1,4 +1,19 @@
-import { Alert, Card, CardContent, Chip, Skeleton, Stack, Table, TableBody, TableCell, TableHead, TableRow, Typography } from '@mui/material'
+import {
+  Alert,
+  Box,
+  Card,
+  CardContent,
+  Chip,
+  Skeleton,
+  Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
+  Tooltip,
+  Typography,
+} from '@mui/material'
 import dayjs from 'dayjs'
 import type { FC } from 'react'
 
@@ -11,6 +26,7 @@ interface CandlesTableHealthCardProps {
 }
 
 const TARGET_TABLES = ['candles_diarios', 'candles_intraday_15m', 'candles_intraday_1h'] as const
+const LOOKBACK_DAYS = 5
 
 type TableStatus = 'OK' | 'WARN' | 'ERRO'
 
@@ -23,14 +39,24 @@ const statusColor: Record<TableStatus, 'success' | 'warning' | 'error'> = {
 const CandlesTableHealthCard: FC<CandlesTableHealthCardProps> = ({ counts, isLoading, error }) => {
   const today = dayjs().format('YYYY-MM-DD')
 
+  const availableDates = Array.from(new Set((counts ?? []).map((item) => item.date)))
+    .sort((a, b) => dayjs(b).valueOf() - dayjs(a).valueOf())
+    .slice(0, LOOKBACK_DAYS)
+
   const rows = TARGET_TABLES.map((tableName) => {
     const tableRecords = (counts ?? []).filter((item) => item.tableName === tableName)
     const latest = tableRecords[0]
-    const todayTotal = tableRecords.find((item) => item.date === today)?.totalRecords ?? 0
-    const lastFiveDaysTotals = tableRecords
-      .slice(0, 5)
-      .map((item) => `${item.date}: ${item.totalRecords}`)
-      .join(' | ')
+    const byDate = new Map(tableRecords.map((item) => [item.date, item.totalRecords]))
+
+    const dailyTotals = availableDates.map((date) => ({
+      date,
+      total: byDate.get(date) ?? 0,
+    }))
+
+    const nonZeroTotals = dailyTotals.map((entry) => entry.total).filter((total) => total > 0)
+    const minTotal = nonZeroTotals.length > 0 ? Math.min(...nonZeroTotals) : 0
+    const maxTotal = nonZeroTotals.length > 0 ? Math.max(...nonZeroTotals) : 0
+    const variation = maxTotal - minTotal
 
     let status: TableStatus = 'ERRO'
     if (latest) {
@@ -41,8 +67,9 @@ const CandlesTableHealthCard: FC<CandlesTableHealthCardProps> = ({ counts, isLoa
       tableName,
       latestDate: latest?.date ?? '—',
       latestTotal: latest?.totalRecords ?? 0,
-      todayTotal,
-      lastFiveDaysTotals: lastFiveDaysTotals || 'Sem dados',
+      todayTotal: byDate.get(today) ?? 0,
+      variation,
+      dailyTotals,
       status,
     }
   })
@@ -71,9 +98,13 @@ const CandlesTableHealthCard: FC<CandlesTableHealthCardProps> = ({ counts, isLoa
                 <TableRow>
                   <TableCell>Tabela</TableCell>
                   <TableCell>Última data</TableCell>
-                  <TableCell align="right">Registros na última data</TableCell>
                   <TableCell align="right">Registros hoje</TableCell>
-                  <TableCell>Totais dos últimos 5 dias</TableCell>
+                  <TableCell align="right">Variação (5 dias)</TableCell>
+                  {availableDates.map((date) => (
+                    <TableCell key={date} align="right">
+                      {dayjs(date).format('DD/MM')}
+                    </TableCell>
+                  ))}
                   <TableCell align="right">Status</TableCell>
                 </TableRow>
               </TableHead>
@@ -81,10 +112,25 @@ const CandlesTableHealthCard: FC<CandlesTableHealthCardProps> = ({ counts, isLoa
                 {rows.map((row) => (
                   <TableRow key={row.tableName}>
                     <TableCell>{row.tableName}</TableCell>
-                    <TableCell>{row.latestDate}</TableCell>
-                    <TableCell align="right">{row.latestTotal}</TableCell>
-                    <TableCell align="right">{row.todayTotal}</TableCell>
-                    <TableCell>{row.lastFiveDaysTotals}</TableCell>
+                    <TableCell>{row.latestDate === '—' ? row.latestDate : dayjs(row.latestDate).format('DD/MM/YYYY')}</TableCell>
+                    <TableCell align="right">{row.todayTotal.toLocaleString('pt-BR')}</TableCell>
+                    <TableCell align="right">
+                      <Chip
+                        label={row.variation.toLocaleString('pt-BR')}
+                        color={row.variation === 0 ? 'success' : 'warning'}
+                        size="small"
+                        variant="outlined"
+                      />
+                    </TableCell>
+                    {row.dailyTotals.map((entry) => (
+                      <TableCell key={`${row.tableName}-${entry.date}`} align="right">
+                        <Tooltip title={`${dayjs(entry.date).format('DD/MM/YYYY')}: ${entry.total.toLocaleString('pt-BR')} registros`}>
+                          <Box component="span" sx={{ fontWeight: 600, color: entry.total === 0 ? 'text.disabled' : 'text.primary' }}>
+                            {entry.total.toLocaleString('pt-BR')}
+                          </Box>
+                        </Tooltip>
+                      </TableCell>
+                    ))}
                     <TableCell align="right">
                       <Chip label={row.status} color={statusColor[row.status]} size="small" />
                     </TableCell>
