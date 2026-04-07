@@ -121,6 +121,7 @@ gcloud functions deploy get_stock_data \
     --runtime python311 \
     --trigger-http \
     --allow-unauthenticated \
+    --memory 512Mi \
     --entry-point get_stock_data \
     --source functions/get_stock_data \
     --service-account sa-get-stock-data@ingestaokraken.iam.gserviceaccount.com \

@@ -23,6 +23,7 @@ jobs:
             entry_point: get_stock_data
             source: functions/get_stock_data
             service_account: sa-get-stock-data@ingestaokraken.iam.gserviceaccount.com
+            memory: 512Mi
             env: BQ_INTRADAY_DATASET=cotacao_intraday,BQ_DAILY_TABLE=cotacao_ohlcv_diario,BQ_HOLIDAYS_TABLE=feriados_b3
           - name: intraday_candles
             entry_point: generate_intraday_candles
