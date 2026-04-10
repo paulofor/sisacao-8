@@ -26,9 +26,7 @@ interface CandlesTableHealthCardProps {
 }
 
 const TARGET_TABLES = ['candles_diarios', 'candles_intraday_15m', 'candles_intraday_1h'] as const
-const DISPLAY_DAYS = 5
-
-const COMPARISON_WINDOWS = [5, 10] as const
+const DISPLAY_DAYS = 10
 
 type TableStatus = 'OK' | 'WARN' | 'ERRO'
 
@@ -38,31 +36,13 @@ const statusColor: Record<TableStatus, 'success' | 'warning' | 'error'> = {
   ERRO: 'error',
 }
 
-const formatComparisonLabel = (difference: number, percentage: number | null): string => {
-  const signedDifference = `${difference > 0 ? '+' : ''}${difference.toLocaleString('pt-BR')}`
-  if (percentage === null) {
-    return signedDifference
-  }
-
-  return `${signedDifference} (${percentage > 0 ? '+' : ''}${percentage.toFixed(1)}%)`
-}
-
-const comparisonColor = (difference: number): 'success' | 'warning' | 'default' => {
-  if (difference > 0) {
-    return 'success'
-  }
-
-  if (difference < 0) {
-    return 'warning'
-  }
-
-  return 'default'
-}
-
 const CandlesTableHealthCard: FC<CandlesTableHealthCardProps> = ({ counts, isLoading, error }) => {
-  const allDates = Array.from(new Set((counts ?? []).map((item) => item.date))).sort((a, b) => dayjs(b).valueOf() - dayjs(a).valueOf())
-
-  const availableDates = allDates.slice(0, DISPLAY_DAYS)
+  const mostRecentDate = (counts ?? [])
+    .map((item) => dayjs(item.date))
+    .sort((a, b) => b.valueOf() - a.valueOf())[0] ?? dayjs()
+  const availableDates = Array.from({ length: DISPLAY_DAYS }, (_, index) =>
+    mostRecentDate.subtract(index, 'day').format('YYYY-MM-DD'),
+  )
 
   const rows = TARGET_TABLES.map((tableName) => {
     const tableRecords = (counts ?? [])
@@ -77,28 +57,6 @@ const CandlesTableHealthCard: FC<CandlesTableHealthCardProps> = ({ counts, isLoa
       total: byDate.get(date) ?? 0,
     }))
 
-    const comparisons = COMPARISON_WINDOWS.map((windowDays) => {
-      if (!latest || tableRecords.length <= windowDays) {
-        return {
-          windowDays,
-          date: null,
-          difference: null,
-          percentage: null,
-        }
-      }
-
-      const reference = tableRecords[windowDays]
-      const difference = latest.totalRecords - reference.totalRecords
-      const percentage = reference.totalRecords > 0 ? (difference / reference.totalRecords) * 100 : null
-
-      return {
-        windowDays,
-        date: reference.date,
-        difference,
-        percentage,
-      }
-    })
-
     let status: TableStatus = 'ERRO'
     if (latest) {
       status = latest.totalRecords > 0 ? 'OK' : 'WARN'
@@ -106,7 +64,6 @@ const CandlesTableHealthCard: FC<CandlesTableHealthCardProps> = ({ counts, isLoa
 
     return {
       tableName,
-      comparisons,
       dailyTotals,
       status,
     }
@@ -135,8 +92,6 @@ const CandlesTableHealthCard: FC<CandlesTableHealthCardProps> = ({ counts, isLoa
               <TableHead>
                 <TableRow>
                   <TableCell>Tabela</TableCell>
-                  <TableCell align="right">Comparação (5 dias)</TableCell>
-                  <TableCell align="right">Comparação (10 dias)</TableCell>
                   {availableDates.map((date) => (
                     <TableCell key={date} align="right">
                       {dayjs(date).format('DD/MM')}
@@ -149,27 +104,6 @@ const CandlesTableHealthCard: FC<CandlesTableHealthCardProps> = ({ counts, isLoa
                 {rows.map((row) => (
                   <TableRow key={row.tableName}>
                     <TableCell>{row.tableName}</TableCell>
-                    {row.comparisons.map((comparison) => (
-                      <TableCell key={`${row.tableName}-comparison-${comparison.windowDays}`} align="right">
-                        {comparison.difference === null ? (
-                          '—'
-                        ) : (
-                          <Tooltip
-                            title={`Base ${comparison.windowDays} dias (${dayjs(comparison.date).format('DD/MM/YYYY')}): ${formatComparisonLabel(
-                              comparison.difference,
-                              comparison.percentage,
-                            )}`}
-                          >
-                            <Chip
-                              label={formatComparisonLabel(comparison.difference, comparison.percentage)}
-                              color={comparisonColor(comparison.difference)}
-                              size="small"
-                              variant="outlined"
-                            />
-                          </Tooltip>
-                        )}
-                      </TableCell>
-                    ))}
                     {row.dailyTotals.map((entry) => (
                       <TableCell key={`${row.tableName}-${entry.date}`} align="right">
                         <Tooltip title={`${dayjs(entry.date).format('DD/MM/YYYY')}: ${entry.total.toLocaleString('pt-BR')} registros`}>
