@@ -37,12 +37,9 @@ const statusColor: Record<TableStatus, 'success' | 'warning' | 'error'> = {
 }
 
 const CandlesTableHealthCard: FC<CandlesTableHealthCardProps> = ({ counts, isLoading, error }) => {
-  const mostRecentDate = (counts ?? [])
-    .map((item) => dayjs(item.date))
-    .sort((a, b) => b.valueOf() - a.valueOf())[0] ?? dayjs()
-  const availableDates = Array.from({ length: DISPLAY_DAYS }, (_, index) =>
-    mostRecentDate.subtract(index, 'day').format('YYYY-MM-DD'),
-  )
+  const availableDates = Array.from(new Set((counts ?? []).map((item) => item.date)))
+    .sort((a, b) => dayjs(b).valueOf() - dayjs(a).valueOf())
+    .slice(0, DISPLAY_DAYS)
 
   const rows = TARGET_TABLES.map((tableName) => {
     const tableRecords = (counts ?? [])
