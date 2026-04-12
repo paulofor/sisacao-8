@@ -21,6 +21,7 @@ public class DataCollectionBigQueryProperties {
     private String candlesDailyTable = "cotacao_ohlcv_diario";
     private String candlesIntraday15mTable = "candles_intraday_15m";
     private String candlesIntraday1hTable = "candles_intraday_1h";
+    private int candlesDays = 10;
 
     public boolean isEnabled() {
         return enabled;
@@ -175,6 +176,16 @@ public class DataCollectionBigQueryProperties {
     public void setCandlesIntraday1hTable(String candlesIntraday1hTable) {
         if (candlesIntraday1hTable != null && !candlesIntraday1hTable.isBlank()) {
             this.candlesIntraday1hTable = candlesIntraday1hTable;
+        }
+    }
+
+    public int getCandlesDays() {
+        return candlesDays;
+    }
+
+    public void setCandlesDays(int candlesDays) {
+        if (candlesDays > 0) {
+            this.candlesDays = candlesDays;
         }
     }
 

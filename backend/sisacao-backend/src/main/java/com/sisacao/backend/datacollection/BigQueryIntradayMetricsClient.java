@@ -121,7 +121,7 @@ public class BigQueryIntradayMetricsClient {
         String dataset = Optional.ofNullable(properties.getCandlesDataset())
                 .filter(value -> !value.isBlank())
                 .orElse("cotacao_intraday");
-        int lookbackDays = Math.max(properties.getDailyDays(), 1);
+        int lookbackDays = Math.max(properties.getCandlesDays(), 1);
 
         String candlesDailyTable = buildQualifiedTableName(dataset, properties.getCandlesDailyTable());
         String candlesIntraday15mTable = buildQualifiedTableName(dataset, properties.getCandlesIntraday15mTable());
@@ -129,30 +129,52 @@ public class BigQueryIntradayMetricsClient {
 
         String query =
                 """
-                        SELECT *
-                        FROM (
+                        WITH recent_trading_days AS (
+                          SELECT DISTINCT data_pregao AS data_ref
+                          FROM %s
+                          WHERE data_pregao IS NOT NULL
+                          ORDER BY data_ref DESC
+                          LIMIT @lookbackDays
+                        ),
+                        target_tables AS (
+                          SELECT 'candles_diarios' AS table_name
+                          UNION ALL
+                          SELECT 'candles_intraday_15m' AS table_name
+                          UNION ALL
+                          SELECT 'candles_intraday_1h' AS table_name
+                        ),
+                        table_counts AS (
                           SELECT 'candles_diarios' AS table_name, data_pregao AS data_ref, COUNT(*) AS total_registros
                           FROM %s
-                          WHERE data_pregao >= DATE_SUB(CURRENT_DATE(), INTERVAL @lookbackDays DAY)
+                          WHERE data_pregao IN (SELECT data_ref FROM recent_trading_days)
                           GROUP BY data_ref
 
                           UNION ALL
 
                           SELECT 'candles_intraday_15m' AS table_name, reference_date AS data_ref, COUNT(*) AS total_registros
                           FROM %s
-                          WHERE reference_date >= DATE_SUB(CURRENT_DATE(), INTERVAL @lookbackDays DAY)
+                          WHERE reference_date IN (SELECT data_ref FROM recent_trading_days)
                           GROUP BY data_ref
 
                           UNION ALL
 
                           SELECT 'candles_intraday_1h' AS table_name, reference_date AS data_ref, COUNT(*) AS total_registros
                           FROM %s
-                          WHERE reference_date >= DATE_SUB(CURRENT_DATE(), INTERVAL @lookbackDays DAY)
+                          WHERE reference_date IN (SELECT data_ref FROM recent_trading_days)
                           GROUP BY data_ref
                         )
-                        ORDER BY data_ref DESC, table_name ASC;
+                        SELECT
+                          target_tables.table_name,
+                          recent_trading_days.data_ref,
+                          COALESCE(table_counts.total_registros, 0) AS total_registros
+                        FROM target_tables
+                        CROSS JOIN recent_trading_days
+                        LEFT JOIN table_counts
+                          ON table_counts.table_name = target_tables.table_name
+                         AND table_counts.data_ref = recent_trading_days.data_ref
+                        ORDER BY recent_trading_days.data_ref DESC, target_tables.table_name ASC;
                         """
-                        .formatted(candlesDailyTable, candlesIntraday15mTable, candlesIntraday1hTable);
+                        .formatted(candlesDailyTable, candlesDailyTable, candlesIntraday15mTable, candlesIntraday1hTable);
 
         QueryJobConfiguration configuration =
                 QueryJobConfiguration.newBuilder(query)
