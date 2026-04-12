@@ -53,6 +53,7 @@ const CandlesTableHealthCard: FC<CandlesTableHealthCardProps> = ({ counts, isLoa
       date,
       total: byDate.get(date) ?? 0,
     }))
+    const periodTotal = dailyTotals.reduce((acc, entry) => acc + entry.total, 0)
 
     let status: TableStatus = 'ERRO'
     if (latest) {
@@ -62,6 +63,7 @@ const CandlesTableHealthCard: FC<CandlesTableHealthCardProps> = ({ counts, isLoa
     return {
       tableName,
       dailyTotals,
+      periodTotal,
       status,
     }
   })
@@ -73,7 +75,7 @@ const CandlesTableHealthCard: FC<CandlesTableHealthCardProps> = ({ counts, isLoa
           <Typography variant="h6">Saúde de população das tabelas de candles</Typography>
           <Typography variant="body2" color="text.secondary">
             Acompanhamento das tabelas <code>candles_diarios</code>, <code>candles_intraday_15m</code> e{' '}
-            <code>candles_intraday_1h</code> para validar se o volume está sendo carregado.
+            <code>candles_intraday_1h</code> nos últimos 10 dias úteis, incluindo o total acumulado por tabela.
           </Typography>
 
           {error ? <Alert severity="error">Não foi possível carregar os indicadores de população das tabelas de candles.</Alert> : null}
@@ -94,6 +96,7 @@ const CandlesTableHealthCard: FC<CandlesTableHealthCardProps> = ({ counts, isLoa
                       {dayjs(date).format('DD/MM')}
                     </TableCell>
                   ))}
+                  <TableCell align="right">Total (10d úteis)</TableCell>
                   <TableCell align="right">Status</TableCell>
                 </TableRow>
               </TableHead>
@@ -110,6 +113,9 @@ const CandlesTableHealthCard: FC<CandlesTableHealthCardProps> = ({ counts, isLoa
                         </Tooltip>
                       </TableCell>
                     ))}
+                    <TableCell align="right" sx={{ fontWeight: 700 }}>
+                      {row.periodTotal.toLocaleString('pt-BR')}
+                    </TableCell>
                     <TableCell align="right">
                       <Chip label={row.status} color={statusColor[row.status]} size="small" />
                     </TableCell>
