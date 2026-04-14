@@ -13,6 +13,7 @@ import type { FC } from 'react'
 
 import type { OpsSignalNext } from '../../api/ops'
 import StatusChip from '../StatusChip'
+import { calculateSignalTradeMetrics } from './signalMetrics'
 
 interface SignalsNextTableProps {
   signals: OpsSignalNext[]
@@ -26,9 +27,28 @@ const currencyFormatter = new Intl.NumberFormat('pt-BR', {
   maximumFractionDigits: 2,
 })
 
+const percentFormatter = new Intl.NumberFormat('pt-BR', {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+})
+
 const formatPrice = (value: number | null) => {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return currencyFormatter.format(value)
+  }
+  return '—'
+}
+
+const formatPercent = (value: number | null) => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return `${percentFormatter.format(value)}%`
+  }
+  return '—'
+}
+
+const formatRatio = (value: number | null) => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return `${value.toFixed(2)}x`
   }
   return '—'
 }
@@ -66,6 +86,9 @@ const SignalsNextTable: FC<SignalsNextTableProps> = ({ signals, isLoading, error
             <TableCell>Entry</TableCell>
             <TableCell>Target</TableCell>
             <TableCell>Stop</TableCell>
+            <TableCell>Upside Potencial</TableCell>
+            <TableCell>Risco Potencial</TableCell>
+            <TableCell>Risco/Retorno</TableCell>
             <TableCell>Score</TableCell>
             <TableCell>Rank</TableCell>
             <TableCell>Válido para</TableCell>
@@ -74,7 +97,7 @@ const SignalsNextTable: FC<SignalsNextTableProps> = ({ signals, isLoading, error
         <TableBody>
           {isLoading && signals.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={8} align="center">
+              <TableCell colSpan={11} align="center">
                 <Typography variant="body2" color="text.secondary">
                   Carregando sinais...
                 </Typography>
@@ -82,28 +105,35 @@ const SignalsNextTable: FC<SignalsNextTableProps> = ({ signals, isLoading, error
             </TableRow>
           ) : null}
 
-          {signals.map((signal) => (
-            <TableRow key={`${signal.ticker}-${signal.rank}`} hover>
-              <TableCell>
-                <Typography variant="body2" fontWeight={600} color="text.primary">
-                  {signal.ticker}
-                </Typography>
-              </TableCell>
-              <TableCell>
-                <StatusChip status={signal.side ?? '—'} />
-              </TableCell>
-              <TableCell>{formatPrice(signal.entry)}</TableCell>
-              <TableCell>{formatPrice(signal.target)}</TableCell>
-              <TableCell>{formatPrice(signal.stop)}</TableCell>
-              <TableCell>{formatScore(signal.score)}</TableCell>
-              <TableCell>{signal.rank ?? '—'}</TableCell>
-              <TableCell>{formatDate(signal.validFor)}</TableCell>
-            </TableRow>
-          ))}
+          {signals.map((signal) => {
+            const metrics = calculateSignalTradeMetrics(signal.side, signal.entry, signal.target, signal.stop)
+
+            return (
+              <TableRow key={`${signal.ticker}-${signal.rank}`} hover>
+                <TableCell>
+                  <Typography variant="body2" fontWeight={600} color="text.primary">
+                    {signal.ticker}
+                  </Typography>
+                </TableCell>
+                <TableCell>
+                  <StatusChip status={signal.side ?? '—'} />
+                </TableCell>
+                <TableCell>{formatPrice(signal.entry)}</TableCell>
+                <TableCell>{formatPrice(signal.target)}</TableCell>
+                <TableCell>{formatPrice(signal.stop)}</TableCell>
+                <TableCell>{formatPercent(metrics.upsidePct)}</TableCell>
+                <TableCell>{formatPercent(metrics.downsidePct)}</TableCell>
+                <TableCell>{formatRatio(metrics.riskReward)}</TableCell>
+                <TableCell>{formatScore(signal.score)}</TableCell>
+                <TableCell>{signal.rank ?? '—'}</TableCell>
+                <TableCell>{formatDate(signal.validFor)}</TableCell>
+              </TableRow>
+            )
+          })}
 
           {!isLoading && signals.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={8} align="center">
+              <TableCell colSpan={11} align="center">
                 <Typography variant="body2" color="text.secondary">
                   Nenhum sinal disponível para o próximo pregão.
                 </Typography>
