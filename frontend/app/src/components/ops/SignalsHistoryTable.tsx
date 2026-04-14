@@ -13,6 +13,7 @@ import type { FC } from 'react'
 
 import type { OpsSignalHistoryEntry } from '../../api/ops'
 import StatusChip from '../StatusChip'
+import { calculateSignalTradeMetrics } from './signalMetrics'
 
 interface SignalsHistoryTableProps {
   signals: OpsSignalHistoryEntry[]
@@ -26,9 +27,28 @@ const currencyFormatter = new Intl.NumberFormat('pt-BR', {
   maximumFractionDigits: 2,
 })
 
+const percentFormatter = new Intl.NumberFormat('pt-BR', {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+})
+
 const formatPrice = (value: number | null) => {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return currencyFormatter.format(value)
+  }
+  return '—'
+}
+
+const formatPercent = (value: number | null) => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return `${percentFormatter.format(value)}%`
+  }
+  return '—'
+}
+
+const formatRatio = (value: number | null) => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return `${value.toFixed(2)}x`
   }
   return '—'
 }
@@ -61,6 +81,9 @@ const SignalsHistoryTable: FC<SignalsHistoryTableProps> = ({ signals, isLoading,
             <TableCell>Entry</TableCell>
             <TableCell>Target</TableCell>
             <TableCell>Stop</TableCell>
+            <TableCell>Upside Potencial</TableCell>
+            <TableCell>Risco Potencial</TableCell>
+            <TableCell>Risco/Retorno</TableCell>
             <TableCell>Score</TableCell>
             <TableCell>Rank</TableCell>
           </TableRow>
@@ -68,7 +91,7 @@ const SignalsHistoryTable: FC<SignalsHistoryTableProps> = ({ signals, isLoading,
         <TableBody>
           {isLoading && signals.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={9} align="center">
+              <TableCell colSpan={12} align="center">
                 <Typography variant="body2" color="text.secondary">
                   Buscando histórico...
                 </Typography>
@@ -76,29 +99,36 @@ const SignalsHistoryTable: FC<SignalsHistoryTableProps> = ({ signals, isLoading,
             </TableRow>
           ) : null}
 
-          {signals.map((signal) => (
-            <TableRow key={`${signal.dateRef}-${signal.ticker}-${signal.rank}`} hover>
-              <TableCell>{formatDate(signal.dateRef)}</TableCell>
-              <TableCell>{formatDate(signal.validFor)}</TableCell>
-              <TableCell>
-                <Typography variant="body2" fontWeight={600} color="text.primary">
-                  {signal.ticker}
-                </Typography>
-              </TableCell>
-              <TableCell>
-                <StatusChip status={signal.side ?? '—'} />
-              </TableCell>
-              <TableCell>{formatPrice(signal.entry)}</TableCell>
-              <TableCell>{formatPrice(signal.target)}</TableCell>
-              <TableCell>{formatPrice(signal.stop)}</TableCell>
-              <TableCell>{signal.score ?? '—'}</TableCell>
-              <TableCell>{signal.rank ?? '—'}</TableCell>
-            </TableRow>
-          ))}
+          {signals.map((signal) => {
+            const metrics = calculateSignalTradeMetrics(signal.side, signal.entry, signal.target, signal.stop)
+
+            return (
+              <TableRow key={`${signal.dateRef}-${signal.ticker}-${signal.rank}`} hover>
+                <TableCell>{formatDate(signal.dateRef)}</TableCell>
+                <TableCell>{formatDate(signal.validFor)}</TableCell>
+                <TableCell>
+                  <Typography variant="body2" fontWeight={600} color="text.primary">
+                    {signal.ticker}
+                  </Typography>
+                </TableCell>
+                <TableCell>
+                  <StatusChip status={signal.side ?? '—'} />
+                </TableCell>
+                <TableCell>{formatPrice(signal.entry)}</TableCell>
+                <TableCell>{formatPrice(signal.target)}</TableCell>
+                <TableCell>{formatPrice(signal.stop)}</TableCell>
+                <TableCell>{formatPercent(metrics.upsidePct)}</TableCell>
+                <TableCell>{formatPercent(metrics.downsidePct)}</TableCell>
+                <TableCell>{formatRatio(metrics.riskReward)}</TableCell>
+                <TableCell>{signal.score ?? '—'}</TableCell>
+                <TableCell>{signal.rank ?? '—'}</TableCell>
+              </TableRow>
+            )
+          })}
 
           {!isLoading && signals.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={9} align="center">
+              <TableCell colSpan={12} align="center">
                 <Typography variant="body2" color="text.secondary">
                   Nenhum sinal encontrado para o período informado.
                 </Typography>

@@ -1,7 +1,10 @@
 import {
   Alert,
   Button,
+  Card,
+  CardContent,
   FormControl,
+  Grid,
   InputLabel,
   MenuItem,
   Paper,
@@ -16,6 +19,7 @@ import { type FC, type FormEvent, useEffect, useMemo, useState } from 'react'
 import type { OpsSignalHistoryEntry, OpsSignalNext, OpsSignalsHistoryFilters } from '../../api/ops'
 import SignalsHistoryTable from '../ops/SignalsHistoryTable'
 import SignalsNextTable from '../ops/SignalsNextTable'
+import { calculateSignalTradeMetrics } from '../ops/signalMetrics'
 
 interface SinaisTabProps {
   signalsNext: OpsSignalNext[]
@@ -26,6 +30,20 @@ interface SinaisTabProps {
   signalsHistoryLoading: boolean
   historyFilters: OpsSignalsHistoryFilters
   onHistoryFiltersChange: (filters: OpsSignalsHistoryFilters) => void
+}
+
+const formatPercent = (value: number | null) => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return `${value.toFixed(2)}%`
+  }
+  return '—'
+}
+
+const formatRatio = (value: number | null) => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return `${value.toFixed(2)}x`
+  }
+  return '—'
 }
 
 const SinaisTab: FC<SinaisTabProps> = ({
@@ -63,6 +81,53 @@ const SinaisTab: FC<SinaisTabProps> = ({
     })
   }, [signalsNext, tickerFilter, sideFilter])
 
+  const summary = useMemo(() => {
+    const allSignals = [...filteredNextSignals, ...signalsHistory]
+
+    const aggregated = allSignals.reduce(
+      (acc, signal) => {
+        const metrics = calculateSignalTradeMetrics(signal.side, signal.entry, signal.target, signal.stop)
+
+        if (
+          metrics.upsidePct !== null &&
+          metrics.downsidePct !== null &&
+          metrics.riskReward !== null &&
+          metrics.upsidePct > 0 &&
+          metrics.downsidePct > 0
+        ) {
+          acc.validCount += 1
+          acc.upsideSum += metrics.upsidePct
+          acc.downsideSum += metrics.downsidePct
+          acc.ratioSum += metrics.riskReward
+        }
+
+        return acc
+      },
+      {
+        validCount: 0,
+        upsideSum: 0,
+        downsideSum: 0,
+        ratioSum: 0,
+      },
+    )
+
+    if (aggregated.validCount === 0) {
+      return {
+        validCount: 0,
+        avgUpside: null,
+        avgDownside: null,
+        avgRatio: null,
+      }
+    }
+
+    return {
+      validCount: aggregated.validCount,
+      avgUpside: aggregated.upsideSum / aggregated.validCount,
+      avgDownside: aggregated.downsideSum / aggregated.validCount,
+      avgRatio: aggregated.ratioSum / aggregated.validCount,
+    }
+  }, [filteredNextSignals, signalsHistory])
+
   const handleHistoryFormSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setFormError(null)
@@ -98,6 +163,62 @@ const SinaisTab: FC<SinaisTabProps> = ({
           quantidade máxima de registros.
         </Typography>
       </Stack>
+
+      <Grid container spacing={2}>
+        <Grid size={{ xs: 12, md: 3 }}>
+          <Card variant="outlined" sx={{ height: '100%' }}>
+            <CardContent>
+              <Typography variant="body2" color="text.secondary">
+                Sinais com cálculo válido
+              </Typography>
+              <Typography variant="h5" color="text.primary" fontWeight={700}>
+                {summary.validCount}
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid size={{ xs: 12, md: 3 }}>
+          <Card variant="outlined" sx={{ height: '100%' }}>
+            <CardContent>
+              <Typography variant="body2" color="text.secondary">
+                Upside médio potencial
+              </Typography>
+              <Typography variant="h5" color="success.main" fontWeight={700}>
+                {formatPercent(summary.avgUpside)}
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid size={{ xs: 12, md: 3 }}>
+          <Card variant="outlined" sx={{ height: '100%' }}>
+            <CardContent>
+              <Typography variant="body2" color="text.secondary">
+                Risco médio potencial
+              </Typography>
+              <Typography variant="h5" color="warning.main" fontWeight={700}>
+                {formatPercent(summary.avgDownside)}
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid size={{ xs: 12, md: 3 }}>
+          <Card variant="outlined" sx={{ height: '100%' }}>
+            <CardContent>
+              <Typography variant="body2" color="text.secondary">
+                Risco/Retorno médio
+              </Typography>
+              <Typography variant="h5" color="primary.main" fontWeight={700}>
+                {formatRatio(summary.avgRatio)}
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+
+      <Alert severity="info">
+        A tabela de backtrade ainda está vazia. Nesta tela mostramos o potencial de trade (target/stop) a partir dos sinais,
+        até que os resultados realizados estejam disponíveis.
+      </Alert>
 
       <Paper
         elevation={0}
