@@ -17,6 +17,7 @@ import dayjs from 'dayjs'
 import { type FC, type FormEvent, useEffect, useMemo, useState } from 'react'
 
 import type { OpsSignalHistoryEntry, OpsSignalNext, OpsSignalsHistoryFilters } from '../../api/ops'
+import PossibleTradesInsights from '../ops/PossibleTradesInsights'
 import SignalsHistoryTable from '../ops/SignalsHistoryTable'
 import SignalsNextTable from '../ops/SignalsNextTable'
 import { calculateSignalTradeMetrics } from '../ops/signalMetrics'
@@ -253,6 +254,13 @@ const SinaisTab: FC<SinaisTabProps> = ({
 
       <SignalsNextTable signals={filteredNextSignals} isLoading={signalsNextLoading} error={signalsNextError} />
 
+      <PossibleTradesInsights
+        signals={filteredNextSignals}
+        title="Simulação de possíveis trades — Próximo pregão"
+        subtitle="Estimativa baseada nas colunas Entry, Target e Stop da tabela de sinais."
+        emptyMessage="Sem sinais do próximo pregão para simular possíveis trades."
+      />
+
       <Paper
         elevation={0}
         sx={{ borderRadius: 2, border: '1px solid', borderColor: 'divider', p: 3 }}
@@ -296,6 +304,13 @@ const SinaisTab: FC<SinaisTabProps> = ({
           </Alert>
         ) : null}
       </Paper>
+
+      <PossibleTradesInsights
+        signals={signalsHistory}
+        title="Simulação de possíveis trades — Histórico filtrado"
+        subtitle="Use este bloco enquanto a tabela de backtrade estiver vazia para entender o potencial dos sinais."
+        emptyMessage="Sem histórico no período selecionado para estimar possíveis trades."
+      />
 
       <SignalsHistoryTable signals={signalsHistory} isLoading={signalsHistoryLoading} error={signalsHistoryError} />
     </Stack>
