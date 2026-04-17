@@ -90,8 +90,8 @@ public class BigQueryOpsClient {
         String sql =
                 "SELECT * FROM "
                         + qualifiedView(properties.getSignalsHistoryView())
-                        + " WHERE validFor BETWEEN @from AND @to"
-                        + " ORDER BY validFor DESC, rank ASC"
+                        + " WHERE (dateRef BETWEEN @from AND @to OR validFor BETWEEN @from AND @to)"
+                        + " ORDER BY dateRef DESC, rank ASC"
                         + " LIMIT @limit";
         Map<String, QueryParameterValue> params = new LinkedHashMap<>();
         params.put("from", QueryParameterValue.date(from.toString()));
