@@ -18,7 +18,7 @@ import org.mockito.ArgumentCaptor;
 class BigQueryOpsClientTest {
 
     @Test
-    void shouldFilterSignalsHistoryByDateRefOrValidFor() throws Exception {
+    void shouldQuerySignalsHistoryWithLimitParameter() throws Exception {
         BigQuery bigQuery = mock(BigQuery.class);
         TableResult tableResult = mock(TableResult.class);
         doReturn(List.of()).when(tableResult).iterateAll();
@@ -37,16 +37,10 @@ class BigQueryOpsClientTest {
         verify(bigQuery).query(queryCaptor.capture());
         QueryJobConfiguration queryConfig = queryCaptor.getValue();
 
-        assertThat(queryConfig.getQuery())
-                .contains("(dateRef BETWEEN @from AND @to OR validFor BETWEEN @from AND @to)")
-                .contains("ORDER BY dateRef DESC, rank ASC");
+        assertThat(queryConfig.getQuery()).contains("SELECT * FROM `ingestaokraken.monitoring.vw_ops_signals_history` LIMIT @limit");
 
-        QueryParameterValue fromParam = queryConfig.getNamedParameters().get("from");
-        QueryParameterValue toParam = queryConfig.getNamedParameters().get("to");
         QueryParameterValue limitParam = queryConfig.getNamedParameters().get("limit");
 
-        assertThat(fromParam.getValue()).isEqualTo("2026-04-10");
-        assertThat(toParam.getValue()).isEqualTo("2026-04-17");
         assertThat(limitParam.getValue()).isEqualTo("100");
     }
 }
