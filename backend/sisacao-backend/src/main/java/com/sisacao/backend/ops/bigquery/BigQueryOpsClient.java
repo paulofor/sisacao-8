@@ -22,10 +22,12 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 public class BigQueryOpsClient {
 
@@ -77,32 +79,37 @@ public class BigQueryOpsClient {
     }
 
     public List<Signal> fetchNextSignals() {
-        String sql = "SELECT * FROM " + qualifiedView(properties.getSignalsNextView()) + " ORDER BY rank";
+        String sql = "SELECT * FROM " + qualifiedView(properties.getSignalsNextView());
         TableResult result = runQuery(sql, Map.of());
         List<Signal> signals = new ArrayList<>();
         for (FieldValueList row : result.iterateAll()) {
             signals.add(toSignal(row));
         }
-        return Collections.unmodifiableList(signals);
+        List<Signal> orderedSignals = signals.stream()
+                .sorted(Comparator.comparing(
+                        Signal::rank,
+                        Comparator.nullsLast(Integer::compareTo)))
+                .toList();
+        return Collections.unmodifiableList(orderedSignals);
     }
 
     public List<SignalHistoryEntry> fetchSignalsHistory(LocalDate from, LocalDate to, int limit) {
-        String sql =
-                "SELECT * FROM "
-                        + qualifiedView(properties.getSignalsHistoryView())
-                        + " WHERE (dateRef BETWEEN @from AND @to OR validFor BETWEEN @from AND @to)"
-                        + " ORDER BY dateRef DESC, rank ASC"
-                        + " LIMIT @limit";
+        String sql = "SELECT * FROM " + qualifiedView(properties.getSignalsHistoryView()) + " LIMIT @limit";
         Map<String, QueryParameterValue> params = new LinkedHashMap<>();
-        params.put("from", QueryParameterValue.date(from.toString()));
-        params.put("to", QueryParameterValue.date(to.toString()));
         params.put("limit", QueryParameterValue.int64(limit));
         TableResult result = runQuery(sql, params);
         List<SignalHistoryEntry> history = new ArrayList<>();
         for (FieldValueList row : result.iterateAll()) {
             history.add(toSignalHistory(row));
         }
-        return Collections.unmodifiableList(history);
+        List<SignalHistoryEntry> filteredHistory = history.stream()
+                .filter(entry -> isWithinRange(entry.dateRef(), from, to) || isWithinRange(entry.validFor(), from, to))
+                .sorted(Comparator.comparing(
+                                SignalHistoryEntry::dateRef,
+                                Comparator.nullsLast(Comparator.reverseOrder()))
+                        .thenComparing(SignalHistoryEntry::rank, Comparator.nullsLast(Integer::compareTo)))
+                .collect(Collectors.toList());
+        return Collections.unmodifiableList(filteredHistory);
     }
 
     private TableResult runQuery(String sql, Map<String, QueryParameterValue> params) {
@@ -142,40 +149,40 @@ public class BigQueryOpsClient {
 
     private PipelineJobStatus toPipelineJobStatus(FieldValueList row) {
         return new PipelineJobStatus(
-                getString(row, "jobName"),
-                getTimestamp(row, "lastRunAt"),
-                getString(row, "lastStatus"),
-                getLong(row, "minutesSinceLastRun"),
-                getTimestamp(row, "deadlineAt"),
-                Optional.ofNullable(getBoolean(row, "isSilent")).orElse(false),
-                getString(row, "lastRunId"));
+                getString(row, "jobName", "job_name"),
+                getTimestamp(row, "lastRunAt", "last_run_at"),
+                getString(row, "lastStatus", "last_status"),
+                getLong(row, "minutesSinceLastRun", "minutes_since_last_run"),
+                getTimestamp(row, "deadlineAt", "deadline_at"),
+                Optional.ofNullable(getBoolean(row, "isSilent", "is_silent")).orElse(false),
+                getString(row, "lastRunId", "last_run_id"));
     }
 
     private DqCheck toDqCheck(FieldValueList row) {
         return new DqCheck(
-                getDate(row, "checkDate"),
-                getString(row, "checkName"),
+                getDate(row, "checkDate", "check_date"),
+                getString(row, "checkName", "check_name"),
                 getString(row, "status"),
                 getString(row, "details"),
-                getTimestamp(row, "createdAt"));
+                getTimestamp(row, "createdAt", "created_at"));
     }
 
     private OpsIncident toIncident(FieldValueList row) {
         return new OpsIncident(
-                getString(row, "incidentId"),
-                getString(row, "checkName"),
-                getDate(row, "checkDate"),
+                getString(row, "incidentId", "incident_id"),
+                getString(row, "checkName", "check_name"),
+                getDate(row, "checkDate", "check_date"),
                 getString(row, "severity"),
                 getString(row, "source"),
                 getString(row, "summary"),
                 getString(row, "status"),
-                getString(row, "runId"),
-                getTimestamp(row, "createdAt"));
+                getString(row, "runId", "run_id"),
+                getTimestamp(row, "createdAt", "created_at"));
     }
 
     private Signal toSignal(FieldValueList row) {
         return new Signal(
-                getDate(row, "validFor"),
+                getDate(row, "validFor", "valid_for"),
                 getString(row, "ticker"),
                 getString(row, "side"),
                 getDouble(row, "entry"),
@@ -183,13 +190,13 @@ public class BigQueryOpsClient {
                 getDouble(row, "stop"),
                 getDouble(row, "score"),
                 Optional.ofNullable(getLong(row, "rank")).map(Long::intValue).orElse(null),
-                getTimestamp(row, "createdAt"));
+                getTimestamp(row, "createdAt", "created_at"));
     }
 
     private SignalHistoryEntry toSignalHistory(FieldValueList row) {
         return new SignalHistoryEntry(
-                getDate(row, "dateRef"),
-                getDate(row, "validFor"),
+                getDate(row, "dateRef", "date_ref"),
+                getDate(row, "validFor", "valid_for"),
                 getString(row, "ticker"),
                 getString(row, "side"),
                 getDouble(row, "entry"),
@@ -197,7 +204,7 @@ public class BigQueryOpsClient {
                 getDouble(row, "stop"),
                 getDouble(row, "score"),
                 Optional.ofNullable(getLong(row, "rank")).map(Long::intValue).orElse(null),
-                getTimestamp(row, "createdAt"));
+                getTimestamp(row, "createdAt", "created_at"));
     }
 
     private String qualifiedView(String view) {
@@ -210,8 +217,8 @@ public class BigQueryOpsClient {
         return String.format("`%s.%s.%s`", projectId, dataset, viewName);
     }
 
-    private String getString(FieldValueList row, String fieldName) {
-        FieldValue value = safeGet(row, fieldName);
+    private String getString(FieldValueList row, String... fieldNames) {
+        FieldValue value = safeGet(row, fieldNames);
         if (value == null || value.isNull()) {
             return null;
         }
@@ -223,8 +230,8 @@ public class BigQueryOpsClient {
         }
     }
 
-    private Boolean getBoolean(FieldValueList row, String fieldName) {
-        FieldValue value = safeGet(row, fieldName);
+    private Boolean getBoolean(FieldValueList row, String... fieldNames) {
+        FieldValue value = safeGet(row, fieldNames);
         if (value == null || value.isNull()) {
             return null;
         }
@@ -239,8 +246,8 @@ public class BigQueryOpsClient {
         }
     }
 
-    private Long getLong(FieldValueList row, String fieldName) {
-        FieldValue value = safeGet(row, fieldName);
+    private Long getLong(FieldValueList row, String... fieldNames) {
+        FieldValue value = safeGet(row, fieldNames);
         if (value == null || value.isNull()) {
             return null;
         }
@@ -259,8 +266,8 @@ public class BigQueryOpsClient {
         }
     }
 
-    private Double getDouble(FieldValueList row, String fieldName) {
-        FieldValue value = safeGet(row, fieldName);
+    private Double getDouble(FieldValueList row, String... fieldNames) {
+        FieldValue value = safeGet(row, fieldNames);
         if (value == null || value.isNull()) {
             return null;
         }
@@ -279,8 +286,8 @@ public class BigQueryOpsClient {
         }
     }
 
-    private LocalDate getDate(FieldValueList row, String fieldName) {
-        FieldValue value = safeGet(row, fieldName);
+    private LocalDate getDate(FieldValueList row, String... fieldNames) {
+        FieldValue value = safeGet(row, fieldNames);
         if (value == null || value.isNull()) {
             return null;
         }
@@ -295,8 +302,8 @@ public class BigQueryOpsClient {
         }
     }
 
-    private OffsetDateTime getTimestamp(FieldValueList row, String fieldName) {
-        FieldValue value = safeGet(row, fieldName);
+    private OffsetDateTime getTimestamp(FieldValueList row, String... fieldNames) {
+        FieldValue value = safeGet(row, fieldNames);
         if (value == null || value.isNull()) {
             return null;
         }
@@ -326,11 +333,21 @@ public class BigQueryOpsClient {
         return null;
     }
 
-    private FieldValue safeGet(FieldValueList row, String fieldName) {
-        try {
-            return row.get(fieldName);
-        } catch (IllegalArgumentException ex) {
-            return null;
+    private FieldValue safeGet(FieldValueList row, String... fieldNames) {
+        for (String fieldName : fieldNames) {
+            if (fieldName == null || fieldName.isBlank()) {
+                continue;
+            }
+            try {
+                return row.get(fieldName);
+            } catch (IllegalArgumentException ignored) {
+                // try next alias
+            }
         }
+        return null;
+    }
+
+    private boolean isWithinRange(LocalDate date, LocalDate from, LocalDate to) {
+        return date != null && !date.isBefore(from) && !date.isAfter(to);
     }
 }
