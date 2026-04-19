@@ -14,6 +14,8 @@ public class OpsBigQueryProperties {
     private String incidentsView = "vw_ops_incidents_open";
     private String signalsNextView = "vw_ops_signals_next_session";
     private String signalsHistoryView = "vw_ops_signals_history";
+    private String signalsTableDataset = "cotacao_intraday";
+    private String signalsTableId = "sinais_eod";
     private int historyMaxRows = 200;
 
     public boolean isEnabled() {
@@ -99,6 +101,26 @@ public class OpsBigQueryProperties {
     public void setSignalsHistoryView(String signalsHistoryView) {
         if (signalsHistoryView != null && !signalsHistoryView.isBlank()) {
             this.signalsHistoryView = signalsHistoryView;
+        }
+    }
+
+    public String getSignalsTableDataset() {
+        return signalsTableDataset;
+    }
+
+    public void setSignalsTableDataset(String signalsTableDataset) {
+        if (signalsTableDataset != null && !signalsTableDataset.isBlank()) {
+            this.signalsTableDataset = signalsTableDataset;
+        }
+    }
+
+    public String getSignalsTableId() {
+        return signalsTableId;
+    }
+
+    public void setSignalsTableId(String signalsTableId) {
+        if (signalsTableId != null && !signalsTableId.isBlank()) {
+            this.signalsTableId = signalsTableId;
         }
     }
 
