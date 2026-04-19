@@ -79,11 +79,9 @@ public class BigQueryOpsClient {
     }
 
     public List<Signal> fetchNextSignals() {
-        String sql = "SELECT * FROM " + qualifiedView(properties.getSignalsNextView());
-        TableResult result = runQuery(sql, Map.of());
-        List<Signal> signals = new ArrayList<>();
-        for (FieldValueList row : result.iterateAll()) {
-            signals.add(toSignal(row));
+        List<Signal> signals = querySignals("SELECT * FROM " + qualifiedView(properties.getSignalsNextView()), Map.of());
+        if (signals.isEmpty()) {
+            signals = querySignals(buildSignalsNextFallbackSql(), Map.of());
         }
         List<Signal> orderedSignals = signals.stream()
                 .sorted(Comparator.comparing(
@@ -94,14 +92,17 @@ public class BigQueryOpsClient {
     }
 
     public List<SignalHistoryEntry> fetchSignalsHistory(LocalDate from, LocalDate to, int limit) {
-        String sql = "SELECT * FROM " + qualifiedView(properties.getSignalsHistoryView()) + " LIMIT @limit";
         Map<String, QueryParameterValue> params = new LinkedHashMap<>();
         params.put("limit", QueryParameterValue.int64(limit));
-        TableResult result = runQuery(sql, params);
-        List<SignalHistoryEntry> history = new ArrayList<>();
-        for (FieldValueList row : result.iterateAll()) {
-            history.add(toSignalHistory(row));
+        params.put("from", QueryParameterValue.date(from.toString()));
+        params.put("to", QueryParameterValue.date(to.toString()));
+
+        String viewSql = "SELECT * FROM " + qualifiedView(properties.getSignalsHistoryView()) + " LIMIT @limit";
+        List<SignalHistoryEntry> history = querySignalHistory(viewSql, Map.of("limit", params.get("limit")));
+        if (history.isEmpty()) {
+            history = querySignalHistory(buildSignalsHistoryFallbackSql(), params);
         }
+
         List<SignalHistoryEntry> filteredHistory = history.stream()
                 .filter(entry -> isWithinRange(entry.dateRef(), from, to) || isWithinRange(entry.validFor(), from, to))
                 .sorted(Comparator.comparing(
@@ -215,6 +216,75 @@ public class BigQueryOpsClient {
             return String.format("`%s.%s`", dataset, viewName);
         }
         return String.format("`%s.%s.%s`", projectId, dataset, viewName);
+    }
+
+    private String qualifiedSignalsTable() {
+        String dataset = Optional.ofNullable(properties.getSignalsTableDataset())
+                .filter(value -> !value.isBlank())
+                .orElse("cotacao_intraday");
+        String tableId = Optional.ofNullable(properties.getSignalsTableId())
+                .filter(value -> !value.isBlank())
+                .orElse("sinais_eod");
+        String projectId = Optional.ofNullable(properties.getProjectId()).filter(value -> !value.isBlank()).orElse(null);
+        if (projectId == null) {
+            return String.format("`%s.%s`", dataset, tableId);
+        }
+        return String.format("`%s.%s.%s`", projectId, dataset, tableId);
+    }
+
+    private String buildSignalsNextFallbackSql() {
+        String table = qualifiedSignalsTable();
+        return "SELECT "
+                + "valid_for AS validFor, "
+                + "ticker, "
+                + "side, "
+                + "entry, "
+                + "target, "
+                + "stop, "
+                + "NULL AS score, "
+                + "CAST(rank AS INT64) AS rank, "
+                + "created_at AS createdAt "
+                + "FROM "
+                + table
+                + " WHERE valid_for = (SELECT MAX(valid_for) FROM "
+                + table
+                + ") ORDER BY rank ASC NULLS LAST, score DESC NULLS LAST, createdAt DESC LIMIT 5";
+    }
+
+    private String buildSignalsHistoryFallbackSql() {
+        return "SELECT "
+                + "date_ref AS dateRef, "
+                + "valid_for AS validFor, "
+                + "ticker, "
+                + "side, "
+                + "entry, "
+                + "target, "
+                + "stop, "
+                + "NULL AS score, "
+                + "CAST(rank AS INT64) AS rank, "
+                + "created_at AS createdAt "
+                + "FROM "
+                + qualifiedSignalsTable()
+                + " WHERE (date_ref BETWEEN @from AND @to OR valid_for BETWEEN @from AND @to)"
+                + " ORDER BY dateRef DESC NULLS LAST, rank ASC NULLS LAST, createdAt DESC LIMIT @limit";
+    }
+
+    private List<Signal> querySignals(String sql, Map<String, QueryParameterValue> params) {
+        TableResult result = runQuery(sql, params);
+        List<Signal> signals = new ArrayList<>();
+        for (FieldValueList row : result.iterateAll()) {
+            signals.add(toSignal(row));
+        }
+        return signals;
+    }
+
+    private List<SignalHistoryEntry> querySignalHistory(String sql, Map<String, QueryParameterValue> params) {
+        TableResult result = runQuery(sql, params);
+        List<SignalHistoryEntry> history = new ArrayList<>();
+        for (FieldValueList row : result.iterateAll()) {
+            history.add(toSignalHistory(row));
+        }
+        return history;
     }
 
     private String getString(FieldValueList row, String... fieldNames) {
