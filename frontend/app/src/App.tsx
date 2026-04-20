@@ -56,7 +56,7 @@ const filterMessagesBySearch = (messages: DataCollectionMessage[], searchTerm: s
 
 const getDefaultSignalsHistoryFilters = (): OpsSignalsHistoryFilters => {
   return {
-    from: dayjs().subtract(7, 'day').format('YYYY-MM-DD'),
+    from: dayjs().subtract(10, 'day').format('YYYY-MM-DD'),
     to: dayjs().format('YYYY-MM-DD'),
     limit: 100,
   }
