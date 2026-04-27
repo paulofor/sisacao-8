@@ -136,6 +136,12 @@ estão descritos em [docs/monitoramento.md](docs/monitoramento.md).
 
 Consulte também [`docs/observabilidade.md`](docs/observabilidade.md) e o [`RUNBOOK`](RUNBOOK.md) para o checklist diário e configuração de alertas.
 
+## MCP Server (bootstrap)
+
+Foi adicionada a pasta `mcp-server/` com um bootstrap inicial para o futuro
+servidor MCP do projeto, focado em consultas de tabelas no BigQuery e logs das
+Cloud Functions. Consulte `mcp-server/README.md` para próximos passos.
+
 ## Configuração operacional e IaC (Sprint 5)
 
 - As tabelas de parâmetros (`parametros_estrategia`) e de operação (`pipeline_config`)
