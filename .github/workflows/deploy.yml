@@ -3,8 +3,14 @@ name: Deploy
 on:
   push:
     branches: [ main ]
+    paths-ignore:
+      - 'mcp-server/**'
+      - '.github/workflows/deploy-mcp-vps.yml'
   pull_request:
     branches: [ main ]
+    paths-ignore:
+      - 'mcp-server/**'
+      - '.github/workflows/deploy-mcp-vps.yml'
   workflow_dispatch:
 
 env:
