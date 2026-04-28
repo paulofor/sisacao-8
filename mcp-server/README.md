@@ -7,7 +7,8 @@ Estrutura inicial para um **MCP Server** dedicado a consultas operacionais do pr
 
 ## Objetivo desta etapa
 
-Esta pasta cria apenas o *bootstrap* do serviço para evoluirmos em próximas entregas.
+Esta pasta agora publica um MCP Server ativo para clientes remotos, com transporte
+`streamable-http` e endpoint em `/mcp`.
 
 ## Estrutura
 
@@ -20,6 +21,12 @@ mcp-server/
     └── server.py
 ```
 
+## Endereço padrão do servidor (VPS)
+
+- Host: `187.45.254.75`
+- Porta publicada no host: `8080`
+- Endpoint MCP: `http://187.45.254.75:8080/mcp`
+
 ## Próximos incrementos sugeridos
 
 - Implementar autenticação com Service Account (ADC ou arquivo JSON).
@@ -30,7 +37,7 @@ mcp-server/
 - Adicionar testes de integração com mocks de BigQuery e Logging.
 - Publicar container para execução local e em ambiente de homologação.
 
-## Execução local (placeholder)
+## Execução local
 
 ```bash
 python -m venv .venv
@@ -39,13 +46,20 @@ pip install -r mcp-server/requirements.txt
 python mcp-server/src/server.py
 ```
 
+Variáveis opcionais:
+
+- `MCP_HOST` (padrão `0.0.0.0`)
+- `MCP_PORT` (padrão `8080`)
+- `MCP_TRANSPORT` (padrão `streamable-http`)
+
 ## Deploy automatizado para VPS (GitHub Actions)
 
 Workflow: `.github/workflows/deploy-mcp-vps.yml`
 
 - Builda e publica a imagem Docker do MCP Server no `ghcr.io`.
 - Conecta via SSH no host `187.45.254.75`.
-- Atualiza o container `sisacao8-mcp-server` com `docker pull` + `docker run`.
+- Atualiza o container `sisacao8-mcp-server` com `docker pull` + `docker run`,
+  publicando a porta `8080:8080`.
 
 Secrets necessários no repositório:
 
