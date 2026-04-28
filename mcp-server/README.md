@@ -38,3 +38,20 @@ source .venv/bin/activate
 pip install -r mcp-server/requirements.txt
 python mcp-server/src/server.py
 ```
+
+## Deploy automatizado para VPS (GitHub Actions)
+
+Workflow: `.github/workflows/deploy-mcp-vps.yml`
+
+- Builda e publica a imagem Docker do MCP Server no `ghcr.io`.
+- Conecta via SSH no host `187.45.254.75`.
+- Atualiza o container `sisacao8-mcp-server` com `docker pull` + `docker run`.
+
+Secrets necessários no repositório:
+
+- `VPS_SSH_USER`
+- `VPS_SSH_PRIVATE_KEY`
+- `GHCR_USERNAME`
+- `GHCR_TOKEN` (com permissão de leitura de pacotes)
+- `GCP_PROJECT`
+- `GCP_REGION`
