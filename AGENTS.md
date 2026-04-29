@@ -52,7 +52,7 @@ Este arquivo fornece contexto a agentes de IA (OpenAI Codex, ChatGPT, etc.) sob
 
 ## Princípios de arquitetura da plataforma
 
-**Servidor MCP** : Chame o endpoint MCP https://mcpserversisacao.shop/mcp via JSON-RPC. Quando precisar analisar casos específicos acesse o BigQuery.
+**Servidor MCP** : Chame o endpoint MCP http://mcpserversisacao.shop/mcp via JSON-RPC. Quando precisar analisar casos específicos acesse o BigQuery.
 
 1. **Backend Java + BigQuery**: Um serviço REST (Spring Boot ou Quarkus) fornecerá APIs para consultar sinais, parâmetros e execuções de treinamento diretamente das tabelas no BigQuery, aplicando camadas de serviço/repositório para encapsular o acesso aos dados.
 2. **Frontend web moderno**: Uma aplicação single-page (React ou Vue) consumirá as APIs expostas pelo backend para construir dashboards ricos com controles de sinais, acompanhamento de jobs de treinamento e ajustes de parâmetros.
