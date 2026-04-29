@@ -12,7 +12,7 @@ from mcp.server.fastmcp import FastMCP
 
 
 DEFAULT_HOST = "0.0.0.0"
-DEFAULT_PORT = 8080
+DEFAULT_PORT = 80
 DEFAULT_TRANSPORT = "streamable-http"
 
 
