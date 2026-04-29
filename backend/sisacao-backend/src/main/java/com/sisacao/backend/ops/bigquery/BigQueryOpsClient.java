@@ -79,7 +79,12 @@ public class BigQueryOpsClient {
     }
 
     public List<Signal> fetchNextSignals() {
-        List<Signal> signals = querySignals("SELECT * FROM " + qualifiedView(properties.getSignalsNextView()), Map.of());
+        List<Signal> signals;
+        try {
+            signals = querySignals("SELECT * FROM " + qualifiedView(properties.getSignalsNextView()), Map.of());
+        } catch (OpsDataAccessException ex) {
+            signals = List.of();
+        }
         if (signals.isEmpty()) {
             signals = querySignals(buildSignalsNextFallbackSql(), Map.of());
         }
@@ -98,7 +103,12 @@ public class BigQueryOpsClient {
         params.put("to", QueryParameterValue.date(to.toString()));
 
         String viewSql = "SELECT * FROM " + qualifiedView(properties.getSignalsHistoryView()) + " LIMIT @limit";
-        List<SignalHistoryEntry> history = querySignalHistory(viewSql, Map.of("limit", params.get("limit")));
+        List<SignalHistoryEntry> history;
+        try {
+            history = querySignalHistory(viewSql, Map.of("limit", params.get("limit")));
+        } catch (OpsDataAccessException ex) {
+            history = List.of();
+        }
         if (history.isEmpty()) {
             history = querySignalHistory(buildSignalsHistoryFallbackSql(), params);
         }
@@ -235,7 +245,7 @@ public class BigQueryOpsClient {
     private String buildSignalsNextFallbackSql() {
         String table = qualifiedSignalsTable();
         return "SELECT "
-                + "valid_for AS validFor, "
+                + "COALESCE(valid_for, date_ref) AS validFor, "
                 + "ticker, "
                 + "side, "
                 + "entry, "
@@ -246,7 +256,7 @@ public class BigQueryOpsClient {
                 + "created_at AS createdAt "
                 + "FROM "
                 + table
-                + " WHERE valid_for = (SELECT MAX(valid_for) FROM "
+                + " WHERE COALESCE(valid_for, date_ref) = (SELECT MAX(COALESCE(valid_for, date_ref)) FROM "
                 + table
                 + ") ORDER BY rank ASC NULLS LAST, score DESC NULLS LAST, createdAt DESC LIMIT 5";
     }
@@ -254,7 +264,7 @@ public class BigQueryOpsClient {
     private String buildSignalsHistoryFallbackSql() {
         return "SELECT "
                 + "date_ref AS dateRef, "
-                + "valid_for AS validFor, "
+                + "COALESCE(valid_for, date_ref) AS validFor, "
                 + "ticker, "
                 + "side, "
                 + "entry, "
@@ -265,7 +275,7 @@ public class BigQueryOpsClient {
                 + "created_at AS createdAt "
                 + "FROM "
                 + qualifiedSignalsTable()
-                + " WHERE (date_ref BETWEEN @from AND @to OR valid_for BETWEEN @from AND @to)"
+                + " WHERE (date_ref BETWEEN @from AND @to OR COALESCE(valid_for, date_ref) BETWEEN @from AND @to)"
                 + " ORDER BY dateRef DESC NULLS LAST, rank ASC NULLS LAST, createdAt DESC LIMIT @limit";
     }
 

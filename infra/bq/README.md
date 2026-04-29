@@ -4,7 +4,7 @@ Os arquivos deste diretório versionam toda a estrutura necessária para o datas
 `cotacao_intraday` no BigQuery. Utilize-os como "IaC leve": basta substituir o
 *placeholder* `@@PROJECT_ID@@` pelo **ID do projeto** antes de executar os
 scripts com `bq query --use_legacy_sql=false`. O arquivo `views_ops.sql` também
-possui o placeholder `@@OPS_DATASET@@` para que as views da Ops API possam ser
+possui os placeholders `@@PROJECT_ID@@` e `@@OPS_DATASET@@` para que as views da Ops API possam ser
 implantadas em datasets diferentes por ambiente (ex.: `monitoring`,
 `monitoring_dev`).
 
@@ -32,3 +32,6 @@ done
 Os scripts podem ser reaplicados sem efeitos colaterais graças ao uso de
 `CREATE TABLE IF NOT EXISTS` e `MERGE`. Documente qualquer ajuste adicional no
 repositório para manter a reprodutibilidade do ambiente.
+
+
+> Importante: mantenha `cotacao_intraday` e o dataset de Ops (ex.: `monitoring`) na **mesma location** do BigQuery (recomendado `us-east1` para este projeto) para evitar erros de consulta entre datasets.

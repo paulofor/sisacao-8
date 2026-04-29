@@ -98,8 +98,63 @@ class BigQueryOpsClientTest {
         List<QueryJobConfiguration> queries = queryCaptor.getAllValues();
         assertThat(queries.get(0).getQuery()).contains("SELECT * FROM `ingestaokraken.monitoring.vw_ops_signals_history` LIMIT @limit");
         assertThat(queries.get(1).getQuery())
-                .contains("FROM `ingestaokraken.cotacao_intraday.sinais_eod` WHERE (date_ref BETWEEN @from AND @to OR valid_for BETWEEN @from AND @to)");
+                .contains("FROM `ingestaokraken.cotacao_intraday.sinais_eod` WHERE (date_ref BETWEEN @from AND @to OR COALESCE(valid_for, date_ref) BETWEEN @from AND @to)");
         assertThat(queries.get(1).getNamedParameters().get("from").getValue()).isEqualTo("2026-04-10");
         assertThat(queries.get(1).getNamedParameters().get("to").getValue()).isEqualTo("2026-04-17");
+    }
+
+
+    @Test
+    void shouldFallbackWhenSignalsNextViewQueryFails() throws Exception {
+        BigQuery bigQuery = mock(BigQuery.class);
+        TableResult fallbackResult = mock(TableResult.class);
+        doReturn(List.of()).when(fallbackResult).iterateAll();
+        org.mockito.Mockito.doThrow(new com.google.cloud.bigquery.BigQueryException(404, "dataset not found"))
+                .doReturn(fallbackResult)
+                .when(bigQuery)
+                .query(any(QueryJobConfiguration.class));
+
+        OpsBigQueryProperties properties = new OpsBigQueryProperties();
+        properties.setProjectId("ingestaokraken");
+        properties.setDataset("monitoring");
+        properties.setSignalsNextView("vw_ops_signals_next_session");
+        properties.setSignalsTableDataset("cotacao_intraday");
+        properties.setSignalsTableId("sinais_eod");
+
+        BigQueryOpsClient client = new BigQueryOpsClient(bigQuery, properties);
+        client.fetchNextSignals();
+
+        ArgumentCaptor<QueryJobConfiguration> queryCaptor = ArgumentCaptor.forClass(QueryJobConfiguration.class);
+        verify(bigQuery, times(2)).query(queryCaptor.capture());
+        List<QueryJobConfiguration> queries = queryCaptor.getAllValues();
+        assertThat(queries.get(0).getQuery()).contains("vw_ops_signals_next_session");
+        assertThat(queries.get(1).getQuery()).contains("FROM `ingestaokraken.cotacao_intraday.sinais_eod`");
+    }
+
+    @Test
+    void shouldFallbackWhenSignalsHistoryViewQueryFails() throws Exception {
+        BigQuery bigQuery = mock(BigQuery.class);
+        TableResult fallbackResult = mock(TableResult.class);
+        doReturn(List.of()).when(fallbackResult).iterateAll();
+        org.mockito.Mockito.doThrow(new com.google.cloud.bigquery.BigQueryException(404, "dataset not found"))
+                .doReturn(fallbackResult)
+                .when(bigQuery)
+                .query(any(QueryJobConfiguration.class));
+
+        OpsBigQueryProperties properties = new OpsBigQueryProperties();
+        properties.setProjectId("ingestaokraken");
+        properties.setDataset("monitoring");
+        properties.setSignalsHistoryView("vw_ops_signals_history");
+        properties.setSignalsTableDataset("cotacao_intraday");
+        properties.setSignalsTableId("sinais_eod");
+
+        BigQueryOpsClient client = new BigQueryOpsClient(bigQuery, properties);
+        client.fetchSignalsHistory(LocalDate.parse("2026-04-10"), LocalDate.parse("2026-04-17"), 100);
+
+        ArgumentCaptor<QueryJobConfiguration> queryCaptor = ArgumentCaptor.forClass(QueryJobConfiguration.class);
+        verify(bigQuery, times(2)).query(queryCaptor.capture());
+        List<QueryJobConfiguration> queries = queryCaptor.getAllValues();
+        assertThat(queries.get(0).getQuery()).contains("vw_ops_signals_history");
+        assertThat(queries.get(1).getQuery()).contains("FROM `ingestaokraken.cotacao_intraday.sinais_eod`");
     }
 }
