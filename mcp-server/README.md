@@ -23,9 +23,9 @@ mcp-server/
 
 ## Endereço padrão do servidor (VPS)
 
-- Host: `187.45.254.75`
+- Host: `www.mcpserversisacao.shop`
 - Porta publicada no host: `80`
-- Endpoint MCP: `http://187.45.254.75:80/mcp`
+- Endpoint MCP: `http://www.mcpserversisacao.shop/mcp`
 
 ## Próximos incrementos sugeridos
 
@@ -73,7 +73,7 @@ Ferramentas MCP disponíveis nesta etapa:
 Workflow: `.github/workflows/deploy-mcp-vps.yml`
 
 - Builda e publica a imagem Docker do MCP Server no `ghcr.io`.
-- Conecta via SSH no host `187.45.254.75`.
+- Conecta via SSH no host `www.mcpserversisacao.shop`.
 - Atualiza o container `sisacao8-mcp-server` com `docker pull` + `docker run`,
   publicando a porta `80:80`.
 
