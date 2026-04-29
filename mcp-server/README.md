@@ -52,6 +52,7 @@ Variáveis opcionais:
 - `MCP_PORT` (padrão `80`)
 - `MCP_TRANSPORT` (padrão `streamable-http`)
 - `GCP_PROJECT` e `GCP_REGION`
+  - Projeto esperado: `ingestaokraken` (minúsculo).
 
 Credenciais do GCP (mesmo padrão do backend):
 
