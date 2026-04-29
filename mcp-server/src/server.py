@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import os
 import re
 from typing import Any, Dict, Optional
@@ -11,12 +12,13 @@ from google.cloud import bigquery
 from google.oauth2 import service_account
 from mcp.server.fastmcp import FastMCP
 
-
 DEFAULT_HOST = "0.0.0.0"
 DEFAULT_PORT = 80
 DEFAULT_TRANSPORT = "streamable-http"
 DEFAULT_QUERY_MAX_ROWS = 200
 READ_ONLY_SQL_PATTERN = re.compile(r"^\s*(select|with)\b", re.IGNORECASE)
+
+LOGGER = logging.getLogger("sisacao8.mcp_server")
 
 
 def _normalize_project(project: str) -> str:
@@ -46,18 +48,54 @@ def _load_service_account_info() -> Optional[Dict[str, Any]]:
     """Carrega credenciais no mesmo padrão usado pelo backend Java."""
     raw_json = os.getenv("GCP_SERVICE_ACCOUNT_JSON", "").strip()
     if raw_json:
+        LOGGER.info("Credencial carregada de GCP_SERVICE_ACCOUNT_JSON")
         return json.loads(raw_json)
 
     raw_base64 = os.getenv("GCP_SERVICE_ACCOUNT_JSON_BASE64", "").strip()
     if raw_base64:
+        LOGGER.info("Credencial carregada de GCP_SERVICE_ACCOUNT_JSON_BASE64")
         decoded = base64.b64decode(raw_base64).decode("utf-8")
         return json.loads(decoded)
 
     location = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "").strip()
     if location:
-        with open(location, "r", encoding="utf-8") as credentials_file:
+        credentials_path = os.path.abspath(location)
+        exists = os.path.exists(credentials_path)
+        readable = os.access(credentials_path, os.R_OK) if exists else False
+        LOGGER.info(
+            "GOOGLE_APPLICATION_CREDENTIALS detectado: %s | exists=%s | readable=%s",
+            credentials_path,
+            exists,
+            readable,
+        )
+        if not exists:
+            raise FileNotFoundError(
+                f"Arquivo de credenciais não encontrado: {credentials_path}"
+            )
+        if not readable:
+            raise PermissionError(
+                f"Sem permissão de leitura no arquivo de credenciais: {credentials_path}"
+            )
+        with open(credentials_path, "r", encoding="utf-8") as credentials_file:
             return json.load(credentials_file)
 
+    fallback_path = "/opt/sisacao/chaves/codex.json"
+    fallback_exists = os.path.exists(fallback_path)
+    fallback_readable = os.access(fallback_path, os.R_OK) if fallback_exists else False
+    LOGGER.info(
+        "Fallback credentials path: %s | exists=%s | readable=%s",
+        fallback_path,
+        fallback_exists,
+        fallback_readable,
+    )
+    if fallback_exists and fallback_readable:
+        with open(fallback_path, "r", encoding="utf-8") as credentials_file:
+            LOGGER.info(
+                "Credencial carregada do fallback /opt/sisacao/chaves/codex.json"
+            )
+            return json.load(credentials_file)
+
+    LOGGER.warning("Nenhuma credencial explícita encontrada; usando ADC padrão")
     return None
 
 
@@ -174,8 +212,19 @@ def build_server(config: Dict[str, Any]) -> FastMCP:
 
 
 def main() -> None:
+    logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO").upper())
     load_dotenv()
     config = _runtime_config()
+
+    LOGGER.info(
+        "Runtime config carregada | project=%s | region=%s | host=%s | port=%s | transport=%s",
+        config["project"],
+        config["region"],
+        config["host"],
+        config["port"],
+        config["transport"],
+    )
+    _load_service_account_info()
 
     server = build_server(config)
 
