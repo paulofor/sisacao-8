@@ -41,9 +41,6 @@ Este arquivo fornece contexto a agentes de IA (OpenAI Codex, ChatGPT, etc.) sob
 
 ---
 > **Importante:** Novas funções devem seguir o padrão deste repositório. Mantenha o guia atualizado a cada adição.
-```
-
----
 
 --
 
