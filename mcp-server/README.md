@@ -51,6 +51,21 @@ Variáveis opcionais:
 - `MCP_HOST` (padrão `0.0.0.0`)
 - `MCP_PORT` (padrão `8080`)
 - `MCP_TRANSPORT` (padrão `streamable-http`)
+- `GCP_PROJECT` e `GCP_REGION`
+
+Credenciais do GCP (mesmo padrão do backend):
+
+- `GCP_SERVICE_ACCOUNT_JSON` (JSON bruto)
+- `GCP_SERVICE_ACCOUNT_JSON_BASE64` (JSON em Base64)
+- `GOOGLE_APPLICATION_CREDENTIALS` (caminho do arquivo JSON)
+
+Prioridade de leitura das credenciais: JSON bruto -> Base64 -> arquivo -> ADC padrão do ambiente.
+
+Ferramentas MCP disponíveis nesta etapa:
+
+- `ping`
+- `runtime_config`
+- `bigquery_access_check` (executa `SELECT 1 AS ok`)
 
 ## Deploy automatizado para VPS (GitHub Actions)
 

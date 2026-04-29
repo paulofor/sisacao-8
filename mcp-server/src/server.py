@@ -1,15 +1,13 @@
-"""MCP Server do sisacao-8 com transporte remoto via HTTP.
-
-Este servidor é intencionalmente enxuto nesta etapa: registra apenas
-ferramentas de diagnóstico para confirmar disponibilidade remota.
-"""
-
 from __future__ import annotations
 
+import base64
+import json
 import os
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from dotenv import load_dotenv
+from google.cloud import bigquery
+from google.oauth2 import service_account
 from mcp.server.fastmcp import FastMCP
 
 
@@ -33,6 +31,37 @@ def _runtime_config() -> Dict[str, Any]:
         "port": port,
         "transport": transport,
     }
+
+
+def _load_service_account_info() -> Optional[Dict[str, Any]]:
+    """Carrega credenciais no mesmo padrão usado pelo backend Java."""
+    raw_json = os.getenv("GCP_SERVICE_ACCOUNT_JSON", "").strip()
+    if raw_json:
+        return json.loads(raw_json)
+
+    raw_base64 = os.getenv("GCP_SERVICE_ACCOUNT_JSON_BASE64", "").strip()
+    if raw_base64:
+        decoded = base64.b64decode(raw_base64).decode("utf-8")
+        return json.loads(decoded)
+
+    location = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "").strip()
+    if location:
+        with open(location, "r", encoding="utf-8") as credentials_file:
+            return json.load(credentials_file)
+
+    return None
+
+
+def _build_bigquery_client(project: str) -> bigquery.Client:
+    """Cria cliente BigQuery com fallback para ADC quando não houver credencial explícita."""
+    service_account_info = _load_service_account_info()
+    if service_account_info:
+        credentials = service_account.Credentials.from_service_account_info(
+            service_account_info
+        )
+        return bigquery.Client(project=project, credentials=credentials)
+
+    return bigquery.Client(project=project)
 
 
 def build_server(config: Dict[str, Any]) -> FastMCP:
@@ -63,6 +92,26 @@ def build_server(config: Dict[str, Any]) -> FastMCP:
             "host": str(config["host"]),
             "port": str(config["port"]),
         }
+
+    @server.tool(name="bigquery_access_check")
+    def bigquery_access_check() -> Dict[str, str]:
+        """Valida se o servidor consegue autenticar e executar query simples no BigQuery."""
+        try:
+            client = _build_bigquery_client(project=str(config["project"]))
+            query_job = client.query("SELECT 1 AS ok")
+            rows = list(query_job.result(timeout=30))
+            ok_value = rows[0]["ok"] if rows else None
+            return {
+                "status": "ok",
+                "project": str(config["project"]),
+                "query_result": str(ok_value),
+            }
+        except Exception as exc:  # pragma: no cover - retorno para diagnóstico operacional.
+            return {
+                "status": "error",
+                "project": str(config["project"]),
+                "message": str(exc),
+            }
 
     return server
 
