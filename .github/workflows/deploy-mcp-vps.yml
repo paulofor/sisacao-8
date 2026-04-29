@@ -82,10 +82,10 @@ jobs:
             docker run -d \
               --name sisacao8-mcp-server \
               --restart unless-stopped \
-              -p 8080:8080 \
+              -p 80:80 \
               -e GCP_PROJECT="${{ secrets.GCP_PROJECT }}" \
               -e GCP_REGION="${{ secrets.GCP_REGION }}" \
               -e MCP_HOST="0.0.0.0" \
-              -e MCP_PORT="8080" \
+              -e MCP_PORT="80" \
               -e MCP_TRANSPORT="streamable-http" \
               "${MCP_IMAGE}"

@@ -24,8 +24,8 @@ mcp-server/
 ## Endereço padrão do servidor (VPS)
 
 - Host: `187.45.254.75`
-- Porta publicada no host: `8080`
-- Endpoint MCP: `http://187.45.254.75:8080/mcp`
+- Porta publicada no host: `80`
+- Endpoint MCP: `http://187.45.254.75:80/mcp`
 
 ## Próximos incrementos sugeridos
 
@@ -49,7 +49,7 @@ python mcp-server/src/server.py
 Variáveis opcionais:
 
 - `MCP_HOST` (padrão `0.0.0.0`)
-- `MCP_PORT` (padrão `8080`)
+- `MCP_PORT` (padrão `80`)
 - `MCP_TRANSPORT` (padrão `streamable-http`)
 - `GCP_PROJECT` e `GCP_REGION`
 
@@ -74,7 +74,7 @@ Workflow: `.github/workflows/deploy-mcp-vps.yml`
 - Builda e publica a imagem Docker do MCP Server no `ghcr.io`.
 - Conecta via SSH no host `187.45.254.75`.
 - Atualiza o container `sisacao8-mcp-server` com `docker pull` + `docker run`,
-  publicando a porta `8080:8080`.
+  publicando a porta `80:80`.
 
 Secrets necessários no repositório:
 
