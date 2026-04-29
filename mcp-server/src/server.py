@@ -19,9 +19,15 @@ DEFAULT_QUERY_MAX_ROWS = 200
 READ_ONLY_SQL_PATTERN = re.compile(r"^\s*(select|with)\b", re.IGNORECASE)
 
 
+def _normalize_project(project: str) -> str:
+    """Normaliza project id para o formato esperado no BigQuery."""
+    normalized = (project or "").strip().lower()
+    return normalized or "ingestaokraken"
+
+
 def _runtime_config() -> Dict[str, Any]:
     """Carrega configuração de runtime a partir de variáveis de ambiente."""
-    project = os.getenv("GCP_PROJECT", "ingestaokraken")
+    project = _normalize_project(os.getenv("GCP_PROJECT", "ingestaokraken"))
     region = os.getenv("GCP_REGION", "us-east1")
     host = os.getenv("MCP_HOST", DEFAULT_HOST)
     port = int(os.getenv("MCP_PORT", str(DEFAULT_PORT)))
