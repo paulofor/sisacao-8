@@ -61,6 +61,8 @@ Credenciais do GCP (mesmo padrão do backend):
 
 Prioridade de leitura das credenciais: JSON bruto -> Base64 -> arquivo -> ADC padrão do ambiente.
 
+- No deploy da VPS, o container monta automaticamente `/opt/sisacao/chaves/codex.json` e define `GOOGLE_APPLICATION_CREDENTIALS` para esse caminho.
+
 Ferramentas MCP disponíveis nesta etapa:
 
 - `ping`

@@ -88,4 +88,6 @@ jobs:
               -e MCP_HOST="0.0.0.0" \
               -e MCP_PORT="80" \
               -e MCP_TRANSPORT="streamable-http" \
+              -e GOOGLE_APPLICATION_CREDENTIALS="/opt/sisacao/chaves/codex.json" \
+              -v /opt/sisacao/chaves/codex.json:/opt/sisacao/chaves/codex.json:ro \
               "${MCP_IMAGE}"
