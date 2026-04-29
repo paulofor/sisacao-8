@@ -1,35 +1,4 @@
-# sisacao-8
 
-Estrutura inicial do repositório para automação de coleta de cotações de ações e carga no **BigQuery** via **Google Cloud Functions** (as funções serão adicionadas em etapas futuras – **nenhuma função será criada agora**).
-
----
-
-## Árvore de diretórios
-
-```text
-sisacao-8/
-├── .github/
-│   └── workflows/
-│       ├── ci.yml            # Lint + testes automáticos
-│       └── deploy.yml        # Deploy contínuo para o GCP (placeholder)
-├── .gitignore                # Padrão Python + VSCode + Mac & Linux
-├── AGENTS.md                 # Orienta o Codex sobre o projeto
-├── README.md                 # Visão geral e instruções de uso
-├── requirements.txt          # Dependências compartilhadas para dev local
-├── config/
-│   └── env.example           # Variáveis de ambiente de exemplo (BQ_TABLE, GCP_PROJECT…)
-├── functions/
-│   ├── README.md             # Instruções genéricas
-│   └── get_stock_data/
-│       ├── main.py           # Primeira Cloud Function
-│       └── requirements.txt  # Dependências da função
-├── scripts/
-│   └── local_test.py         # Framework para testes locais (ficará ocioso até existirem funções)
-└── tests/
-    └── test_placeholder.py   # Placeholder inicial para testes
-```
-
----
 
 ## Descrição dos principais arquivos e pastas
 
@@ -40,9 +9,7 @@ sisacao-8/
 
 ---
 
-## Conteúdo sugerido para `AGENTS.md`
 
-```markdown
 # Codex Agents Guide – sisacao‑8
 
 Este arquivo fornece contexto a agentes de IA (OpenAI Codex, ChatGPT, etc.) sobre este repositório.
@@ -78,14 +45,7 @@ Este arquivo fornece contexto a agentes de IA (OpenAI Codex, ChatGPT, etc.) sob
 
 ---
 
-## Próximos passos sugeridos
-
-1. **Secrets**: Configure no GitHub os segredos `GCP_SA_KEY`, `GCP_PROJECT`, `BQ_TABLE`.
-2. **Pre‑commit hooks**: Ative `black`, `flake8`, `isort` e `pre‑commit`.
-3. **Revisar AGENTS.md**: Após definição da primeira função, adicione detalhes no guia.
-4. **Planejamento**: Reunir requisitos e design da primeira Cloud Function antes de escrever qualquer código.
-
----
+--
 
 ## Serviços em execução
 
@@ -94,6 +54,8 @@ Este arquivo fornece contexto a agentes de IA (OpenAI Codex, ChatGPT, etc.) sob
 ---
 
 ## Princípios de arquitetura da plataforma
+
+**Servidor MCP** : Chame o endpoint MCP https://mcpserversisacao.shop/mcp via JSON-RPC. Quando precisar analisar casos específicos acesse o BigQuery.
 
 1. **Backend Java + BigQuery**: Um serviço REST (Spring Boot ou Quarkus) fornecerá APIs para consultar sinais, parâmetros e execuções de treinamento diretamente das tabelas no BigQuery, aplicando camadas de serviço/repositório para encapsular o acesso aos dados.
 2. **Frontend web moderno**: Uma aplicação single-page (React ou Vue) consumirá as APIs expostas pelo backend para construir dashboards ricos com controles de sinais, acompanhamento de jobs de treinamento e ajustes de parâmetros.
