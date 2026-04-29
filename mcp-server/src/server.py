@@ -117,7 +117,9 @@ def build_server(config: Dict[str, Any]) -> FastMCP:
             }
 
     @server.tool(name="bigquery_query")
-    def bigquery_query(sql: str, max_rows: int = DEFAULT_QUERY_MAX_ROWS) -> Dict[str, Any]:
+    def bigquery_query(
+        sql: str, max_rows: int = DEFAULT_QUERY_MAX_ROWS
+    ) -> Dict[str, Any]:
         """
         Executa query read-only no BigQuery com limite de linhas no resultado.
 
