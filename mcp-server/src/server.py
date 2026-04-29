@@ -74,7 +74,8 @@ def _load_service_account_info() -> Optional[Dict[str, Any]]:
             )
         if not readable:
             raise PermissionError(
-                f"Sem permissão de leitura no arquivo de credenciais: {credentials_path}"
+                "Sem permissão de leitura no arquivo de credenciais: "
+                f"{credentials_path}"
             )
         with open(credentials_path, "r", encoding="utf-8") as credentials_file:
             return json.load(credentials_file)
@@ -217,7 +218,8 @@ def main() -> None:
     config = _runtime_config()
 
     LOGGER.info(
-        "Runtime config carregada | project=%s | region=%s | host=%s | port=%s | transport=%s",
+        "Runtime config carregada | project=%s | region=%s | host=%s "
+        "| port=%s | transport=%s",
         config["project"],
         config["region"],
         config["host"],
