@@ -66,6 +66,7 @@ Ferramentas MCP disponíveis nesta etapa:
 - `ping`
 - `runtime_config`
 - `bigquery_access_check` (executa `SELECT 1 AS ok`)
+- `bigquery_query` (executa SQL read-only iniciado por `SELECT`/`WITH` com limite de linhas)
 
 ## Deploy automatizado para VPS (GitHub Actions)
 

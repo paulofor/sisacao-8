@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import re
 from typing import Any, Dict, Optional
 
 from dotenv import load_dotenv
@@ -14,6 +15,8 @@ from mcp.server.fastmcp import FastMCP
 DEFAULT_HOST = "0.0.0.0"
 DEFAULT_PORT = 80
 DEFAULT_TRANSPORT = "streamable-http"
+DEFAULT_QUERY_MAX_ROWS = 200
+READ_ONLY_SQL_PATTERN = re.compile(r"^\s*(select|with)\b", re.IGNORECASE)
 
 
 def _runtime_config() -> Dict[str, Any]:
@@ -105,6 +108,52 @@ def build_server(config: Dict[str, Any]) -> FastMCP:
                 "status": "ok",
                 "project": str(config["project"]),
                 "query_result": str(ok_value),
+            }
+        except Exception as exc:  # pragma: no cover - diagnóstico operacional.
+            return {
+                "status": "error",
+                "project": str(config["project"]),
+                "message": str(exc),
+            }
+
+    @server.tool(name="bigquery_query")
+    def bigquery_query(sql: str, max_rows: int = DEFAULT_QUERY_MAX_ROWS) -> Dict[str, Any]:
+        """
+        Executa query read-only no BigQuery com limite de linhas no resultado.
+
+        Regras de segurança:
+        - aceita apenas queries iniciadas em SELECT/WITH;
+        - bloqueia múltiplas instruções separadas por ';'.
+        """
+        normalized = sql.strip()
+        if not normalized:
+            return {"status": "error", "message": "sql vazio"}
+
+        if ";" in normalized.rstrip(";"):
+            return {
+                "status": "error",
+                "message": "múltiplas instruções SQL não são permitidas",
+            }
+
+        if not READ_ONLY_SQL_PATTERN.match(normalized):
+            return {
+                "status": "error",
+                "message": "apenas queries read-only iniciadas com SELECT ou WITH",
+            }
+
+        safe_max_rows = max(1, min(int(max_rows), 2000))
+
+        try:
+            client = _build_bigquery_client(project=str(config["project"]))
+            query_job = client.query(normalized)
+            rows_iter = query_job.result(timeout=60)
+            rows = [dict(row.items()) for row in rows_iter][:safe_max_rows]
+            return {
+                "status": "ok",
+                "project": str(config["project"]),
+                "row_count": len(rows),
+                "max_rows": safe_max_rows,
+                "rows": rows,
             }
         except Exception as exc:  # pragma: no cover - diagnóstico operacional.
             return {
