@@ -53,7 +53,7 @@ def _load_service_account_info() -> Optional[Dict[str, Any]]:
 
 
 def _build_bigquery_client(project: str) -> bigquery.Client:
-    """Cria cliente BigQuery com fallback para ADC quando não houver credencial explícita."""
+    """Cria cliente BigQuery com fallback para ADC sem credencial explícita."""
     service_account_info = _load_service_account_info()
     if service_account_info:
         credentials = service_account.Credentials.from_service_account_info(
@@ -95,7 +95,7 @@ def build_server(config: Dict[str, Any]) -> FastMCP:
 
     @server.tool(name="bigquery_access_check")
     def bigquery_access_check() -> Dict[str, str]:
-        """Valida se o servidor consegue autenticar e executar query simples no BigQuery."""
+        """Valida autenticação e execução de query simples no BigQuery."""
         try:
             client = _build_bigquery_client(project=str(config["project"]))
             query_job = client.query("SELECT 1 AS ok")
@@ -106,7 +106,7 @@ def build_server(config: Dict[str, Any]) -> FastMCP:
                 "project": str(config["project"]),
                 "query_result": str(ok_value),
             }
-        except Exception as exc:  # pragma: no cover - retorno para diagnóstico operacional.
+        except Exception as exc:  # pragma: no cover - diagnóstico operacional.
             return {
                 "status": "error",
                 "project": str(config["project"]),

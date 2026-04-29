@@ -142,6 +142,26 @@ Foi adicionada a pasta `mcp-server/` com um bootstrap inicial para o futuro
 servidor MCP do projeto, focado em consultas de tabelas no BigQuery e logs das
 Cloud Functions. Consulte `mcp-server/README.md` para próximos passos.
 
+### Troubleshooting de CI (pytest/flake8)
+
+Se o job de CI mostrar várias linhas como `Requirement already satisfied`, isso
+**não é erro**: é apenas o `pip` informando que os pacotes já estão presentes
+no runner do GitHub Actions.
+
+O erro real costuma aparecer nas linhas do `flake8`, por exemplo:
+
+- `./mcp-server/src/server.py:56:89: E501 line too long (93 > 88 characters)`
+
+Quando isso acontecer, ajuste as linhas sinalizadas para respeitar o limite de
+88 colunas e rode localmente:
+
+```bash
+flake8 .
+pytest
+```
+
+Se ambos passarem, o pipeline deve voltar a ficar verde.
+
 ## Configuração operacional e IaC (Sprint 5)
 
 - As tabelas de parâmetros (`parametros_estrategia`) e de operação (`pipeline_config`)
