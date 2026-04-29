@@ -31,6 +31,12 @@ sisacao-8/
 
 ---
 
+## Módulo principal
+
+- MCP Server : http://www.mcpserversisacao.shop/mcp
+
+---
+
 ## Descrição dos principais arquivos e pastas
 
 * **AGENTS.md**: Arquivo dedicado a fornecer contexto e diretrizes ao OpenAI Codex (ou outros agentes de IA) sobre o domínio do projeto, convenções de código, dependências externas e tarefas pendentes. **Não descreve nenhuma função ainda**.
