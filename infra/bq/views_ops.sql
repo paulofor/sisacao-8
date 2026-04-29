@@ -1,9 +1,9 @@
 -- Views operacionais utilizadas pelo módulo Ops API.
 -- Substitua os placeholders abaixo antes de executar este script:
---   ingestaokraken  → ID do projeto no GCP
+--   @@PROJECT_ID@@  → ID do projeto no GCP
 --   @@OPS_DATASET@@ → dataset onde as views de operação ficarão armazenadas (ex.: monitoring, monitoring_dev)
 
-CREATE OR REPLACE VIEW `ingestaokraken.@@OPS_DATASET@@.vw_ops_pipeline_status` AS
+CREATE OR REPLACE VIEW `@@PROJECT_ID@@.@@OPS_DATASET@@.vw_ops_pipeline_status` AS
 WITH latest_runs AS (
   SELECT
     job_name,
@@ -16,12 +16,12 @@ WITH latest_runs AS (
       ORDER BY COALESCE(finished_at, updated_at, started_at) DESC
       LIMIT 1
     )[SAFE_OFFSET(0)] AS last_run
-  FROM `ingestaokraken.@@OPS_DATASET@@.pipeline_runs`
+  FROM `@@PROJECT_ID@@.@@OPS_DATASET@@.pipeline_runs`
   GROUP BY job_name
 ),
 config AS (
   SELECT *
-  FROM `ingestaokraken.cotacao_intraday.pipeline_config`
+  FROM `@@PROJECT_ID@@.cotacao_intraday.pipeline_config`
   QUALIFY ROW_NUMBER() OVER (ORDER BY created_at DESC) = 1
 ),
 thresholds AS (
@@ -59,19 +59,19 @@ FROM latest_runs
 LEFT JOIN thresholds USING (job_name)
 ORDER BY jobName;
 
-CREATE OR REPLACE VIEW `ingestaokraken.@@OPS_DATASET@@.vw_ops_dq_latest` AS
+CREATE OR REPLACE VIEW `@@PROJECT_ID@@.@@OPS_DATASET@@.vw_ops_dq_latest` AS
 SELECT
   check_date AS checkDate,
   check_name AS checkName,
   status,
   details,
   TIMESTAMP(created_at, 'America/Sao_Paulo') AS createdAt
-FROM `ingestaokraken.cotacao_intraday.dq_checks_daily`
+FROM `@@PROJECT_ID@@.cotacao_intraday.dq_checks_daily`
 WHERE check_date >= DATE_SUB(CURRENT_DATE('America/Sao_Paulo'), INTERVAL 7 DAY)
 ORDER BY createdAt DESC
 LIMIT 200;
 
-CREATE OR REPLACE VIEW `ingestaokraken.@@OPS_DATASET@@.vw_ops_signals_history` AS
+CREATE OR REPLACE VIEW `@@PROJECT_ID@@.@@OPS_DATASET@@.vw_ops_signals_history` AS
 SELECT
   date_ref AS dateRef,
   valid_for AS validFor,
@@ -83,32 +83,29 @@ SELECT
   score,
   rank,
   TIMESTAMP(created_at, 'America/Sao_Paulo') AS createdAt
-FROM `ingestaokraken.cotacao_intraday.sinais_eod`
+FROM `@@PROJECT_ID@@.cotacao_intraday.sinais_eod`
 WHERE date_ref >= DATE_SUB(CURRENT_DATE('America/Sao_Paulo'), INTERVAL 365 DAY)
 ORDER BY dateRef DESC, rank ASC;
 
-CREATE OR REPLACE VIEW `ingestaokraken.@@OPS_DATASET@@.vw_ops_signals_next_session` AS
+CREATE OR REPLACE VIEW `@@PROJECT_ID@@.@@OPS_DATASET@@.vw_ops_signals_next_session` AS
 WITH last_day AS (
   SELECT IFNULL(MAX(data_pregao), CURRENT_DATE('America/Sao_Paulo')) AS last_trading_day
-  FROM `ingestaokraken.cotacao_intraday.cotacao_ohlcv_diario`
+  FROM `@@PROJECT_ID@@.cotacao_intraday.cotacao_ohlcv_diario`
 ),
 next_day AS (
-  SELECT MIN(candidate_day) AS next_trading_day
-  FROM (
-    SELECT day AS candidate_day
-    FROM UNNEST(
-      GENERATE_DATE_ARRAY(
-        (SELECT last_trading_day FROM last_day),
-        DATE_ADD((SELECT last_trading_day FROM last_day), INTERVAL 10 DAY),
-        INTERVAL 1 DAY
-      )
-    ) AS day
-    LEFT JOIN `ingestaokraken.cotacao_intraday.feriados_b3` f
-      ON f.data_feriado = day AND f.ativo
-    WHERE day > (SELECT last_trading_day FROM last_day)
-      AND EXTRACT(DAYOFWEEK FROM day) NOT IN (1, 7)
-      AND f.data_feriado IS NULL
-  )
+  SELECT MIN(day) AS next_trading_day
+  FROM last_day,
+  UNNEST(
+    GENERATE_DATE_ARRAY(
+      DATE_ADD(last_trading_day, INTERVAL 1 DAY),
+      DATE_ADD(last_trading_day, INTERVAL 10 DAY),
+      INTERVAL 1 DAY
+    )
+  ) AS day
+  LEFT JOIN `@@PROJECT_ID@@.cotacao_intraday.feriados_b3` f
+    ON f.data_feriado = day AND f.ativo
+  WHERE EXTRACT(DAYOFWEEK FROM day) NOT IN (1, 7)
+    AND f.data_feriado IS NULL
 )
 SELECT
   s.valid_for AS validFor,
@@ -120,12 +117,13 @@ SELECT
   s.score,
   s.rank,
   TIMESTAMP(s.created_at, 'America/Sao_Paulo') AS createdAt
-FROM `ingestaokraken.cotacao_intraday.sinais_eod` AS s
-WHERE s.valid_for = (SELECT next_trading_day FROM next_day)
+FROM `@@PROJECT_ID@@.cotacao_intraday.sinais_eod` AS s
+CROSS JOIN next_day nd
+WHERE s.valid_for = nd.next_trading_day
 ORDER BY s.rank ASC
 LIMIT 5;
 
-CREATE OR REPLACE VIEW `ingestaokraken.@@OPS_DATASET@@.vw_ops_incidents_open` AS
+CREATE OR REPLACE VIEW `@@PROJECT_ID@@.@@OPS_DATASET@@.vw_ops_incidents_open` AS
 SELECT
   incident_id AS incidentId,
   check_name AS checkName,
@@ -136,77 +134,76 @@ SELECT
   status,
   run_id AS runId,
   TIMESTAMP(created_at, 'America/Sao_Paulo') AS createdAt
-FROM `ingestaokraken.cotacao_intraday.dq_incidents`
+FROM `@@PROJECT_ID@@.cotacao_intraday.dq_incidents`
 WHERE status IN ('OPEN', 'INVESTIGATING') OR resolved_at IS NULL
 ORDER BY createdAt DESC
 LIMIT 200;
 
-CREATE OR REPLACE VIEW `ingestaokraken.@@OPS_DATASET@@.vw_ops_overview` AS
+CREATE OR REPLACE VIEW `@@PROJECT_ID@@.@@OPS_DATASET@@.vw_ops_overview` AS
 WITH pipeline AS (
-  SELECT * FROM `ingestaokraken.@@OPS_DATASET@@.vw_ops_pipeline_status`
+  SELECT * FROM `@@PROJECT_ID@@.@@OPS_DATASET@@.vw_ops_pipeline_status`
 ),
 dq AS (
-  SELECT * FROM `ingestaokraken.@@OPS_DATASET@@.vw_ops_dq_latest`
+  SELECT * FROM `@@PROJECT_ID@@.@@OPS_DATASET@@.vw_ops_dq_latest`
 ),
 last_day AS (
   SELECT IFNULL(MAX(data_pregao), CURRENT_DATE('America/Sao_Paulo')) AS last_trading_day
-  FROM `ingestaokraken.cotacao_intraday.cotacao_ohlcv_diario`
+  FROM `@@PROJECT_ID@@.cotacao_intraday.cotacao_ohlcv_diario`
 ),
 next_day AS (
-  SELECT MIN(candidate_day) AS next_trading_day
-  FROM (
-    SELECT day AS candidate_day
-    FROM UNNEST(
-      GENERATE_DATE_ARRAY(
-        (SELECT last_trading_day FROM last_day),
-        DATE_ADD((SELECT last_trading_day FROM last_day), INTERVAL 10 DAY),
-        INTERVAL 1 DAY
-      )
-    ) AS day
-    LEFT JOIN `ingestaokraken.cotacao_intraday.feriados_b3` f
-      ON f.data_feriado = day AND f.ativo
-    WHERE day > (SELECT last_trading_day FROM last_day)
-      AND EXTRACT(DAYOFWEEK FROM day) NOT IN (1, 7)
-      AND f.data_feriado IS NULL
-  )
+  SELECT MIN(day) AS next_trading_day
+  FROM last_day,
+  UNNEST(
+    GENERATE_DATE_ARRAY(
+      DATE_ADD(last_trading_day, INTERVAL 1 DAY),
+      DATE_ADD(last_trading_day, INTERVAL 10 DAY),
+      INTERVAL 1 DAY
+    )
+  ) AS day
+  LEFT JOIN `@@PROJECT_ID@@.cotacao_intraday.feriados_b3` f
+    ON f.data_feriado = day AND f.ativo
+  WHERE EXTRACT(DAYOFWEEK FROM day) NOT IN (1, 7)
+    AND f.data_feriado IS NULL
 ),
 signals AS (
   SELECT
     COUNT(*) AS total_signals,
     MAX(createdAt) AS last_created_at
-  FROM `ingestaokraken.@@OPS_DATASET@@.vw_ops_signals_next_session`
+  FROM `@@PROJECT_ID@@.@@OPS_DATASET@@.vw_ops_signals_next_session`
 ),
 pipeline_health AS (
   SELECT
-    CASE
-      WHEN EXISTS (SELECT 1 FROM pipeline WHERE isSilent) THEN 'FAIL'
-      WHEN EXISTS (
-        SELECT 1 FROM pipeline WHERE UPPER(lastStatus) IN ('FAIL', 'ERROR', 'CRITICAL')
-      ) THEN 'FAIL'
-      WHEN EXISTS (
-        SELECT 1 FROM pipeline WHERE UPPER(lastStatus) IN ('WARN', 'WARNING')
-      ) THEN 'WARN'
-      ELSE 'OK'
-    END AS status
+    IFNULL(MAX(CASE WHEN isSilent THEN 1 ELSE 0 END), 0) AS has_silent,
+    IFNULL(MAX(CASE WHEN UPPER(lastStatus) IN ('FAIL', 'ERROR', 'CRITICAL') THEN 1 ELSE 0 END), 0) AS has_fail,
+    IFNULL(MAX(CASE WHEN UPPER(lastStatus) IN ('WARN', 'WARNING') THEN 1 ELSE 0 END), 0) AS has_warn
+  FROM pipeline
 ),
 dq_health AS (
   SELECT
-    CASE
-      WHEN EXISTS (
-        SELECT 1 FROM dq WHERE UPPER(status) IN ('FAIL', 'ERROR', 'CRITICAL')
-      ) THEN 'FAIL'
-      WHEN EXISTS (
-        SELECT 1 FROM dq WHERE UPPER(status) = 'WARN'
-      ) THEN 'WARN'
-      ELSE 'PASS'
-    END AS status
+    IFNULL(MAX(CASE WHEN UPPER(status) IN ('FAIL', 'ERROR', 'CRITICAL') THEN 1 ELSE 0 END), 0) AS has_fail,
+    IFNULL(MAX(CASE WHEN UPPER(status) = 'WARN' THEN 1 ELSE 0 END), 0) AS has_warn
+  FROM dq
 )
 SELECT
   CURRENT_TIMESTAMP() AS asOf,
-  (SELECT last_trading_day FROM last_day) AS lastTradingDay,
-  COALESCE((SELECT next_trading_day FROM next_day), (SELECT last_trading_day FROM last_day)) AS nextTradingDay,
-  (SELECT status FROM pipeline_health) AS pipelineHealth,
-  (SELECT status FROM dq_health) AS dqHealth,
-  IFNULL((SELECT total_signals FROM signals), 0) > 0 AS signalsReady,
-  IFNULL((SELECT total_signals FROM signals), 0) AS signalsCount,
-  (SELECT last_created_at FROM signals) AS lastSignalsGeneratedAt;
+  ld.last_trading_day AS lastTradingDay,
+  COALESCE(nd.next_trading_day, ld.last_trading_day) AS nextTradingDay,
+  CASE
+    WHEN ph.has_silent = 1 THEN 'FAIL'
+    WHEN ph.has_fail = 1 THEN 'FAIL'
+    WHEN ph.has_warn = 1 THEN 'WARN'
+    ELSE 'OK'
+  END AS pipelineHealth,
+  CASE
+    WHEN dh.has_fail = 1 THEN 'FAIL'
+    WHEN dh.has_warn = 1 THEN 'WARN'
+    ELSE 'PASS'
+  END AS dqHealth,
+  IFNULL(sig.total_signals, 0) > 0 AS signalsReady,
+  IFNULL(sig.total_signals, 0) AS signalsCount,
+  sig.last_created_at AS lastSignalsGeneratedAt
+FROM last_day ld
+LEFT JOIN next_day nd ON TRUE
+LEFT JOIN signals sig ON TRUE
+LEFT JOIN pipeline_health ph ON TRUE
+LEFT JOIN dq_health dh ON TRUE;
