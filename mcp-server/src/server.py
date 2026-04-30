@@ -9,6 +9,7 @@ from typing import Any, Dict, Optional
 
 from dotenv import load_dotenv
 from google.cloud import bigquery
+from google.cloud import logging as cloud_logging
 from google.oauth2 import service_account
 from mcp.server.fastmcp import FastMCP
 
@@ -112,6 +113,18 @@ def _build_bigquery_client(project: str) -> bigquery.Client:
     return bigquery.Client(project=project)
 
 
+def _build_logging_client(project: str) -> cloud_logging.Client:
+    """Cria cliente Cloud Logging com o mesmo fluxo de credenciais do BigQuery."""
+    service_account_info = _load_service_account_info()
+    if service_account_info:
+        credentials = service_account.Credentials.from_service_account_info(
+            service_account_info
+        )
+        return cloud_logging.Client(project=project, credentials=credentials)
+
+    return cloud_logging.Client(project=project)
+
+
 def build_server(config: Dict[str, Any]) -> FastMCP:
     """Instancia e configura o servidor MCP."""
     server = FastMCP(
@@ -201,6 +214,76 @@ def build_server(config: Dict[str, Any]) -> FastMCP:
                 "row_count": len(rows),
                 "max_rows": safe_max_rows,
                 "rows": rows,
+            }
+        except Exception as exc:  # pragma: no cover - diagnóstico operacional.
+            return {
+                "status": "error",
+                "project": str(config["project"]),
+                "message": str(exc),
+            }
+
+    @server.tool(name="cloud_run_function_logs")
+    def cloud_run_function_logs(
+        function_name: str,
+        severity: str = "DEFAULT",
+        limit: int = 50,
+        order_by: str = "timestamp desc",
+        hours: int = 24,
+    ) -> Dict[str, Any]:
+        """Consulta logs de uma Cloud Run Function por nome e janela de tempo."""
+        normalized_function = function_name.strip()
+        if not normalized_function:
+            return {"status": "error", "message": "function_name vazio"}
+
+        normalized_severity = severity.strip().upper() or "DEFAULT"
+        safe_limit = max(1, min(int(limit), 200))
+        safe_hours = max(1, min(int(hours), 168))
+        safe_order = "timestamp asc" if order_by.strip().lower() == "timestamp asc" else "timestamp desc"
+
+        filter_parts = [
+            'resource.type="cloud_function"',
+            f'resource.labels.function_name="{normalized_function}"',
+            f'timestamp >= "-{safe_hours}h"',
+        ]
+        if normalized_severity != "DEFAULT":
+            filter_parts.append(f"severity>={normalized_severity}")
+        logs_filter = "\n".join(filter_parts)
+
+        try:
+            client = _build_logging_client(project=str(config["project"]))
+            entries_iter = client.list_entries(
+                filter_=logs_filter,
+                order_by=safe_order,
+                page_size=safe_limit,
+            )
+
+            entries = []
+            for entry in entries_iter:
+                message = entry.payload
+                if isinstance(message, dict):
+                    message = json.dumps(message, ensure_ascii=False)
+
+                entries.append(
+                    {
+                        "timestamp": str(entry.timestamp),
+                        "severity": str(entry.severity),
+                        "log_name": str(entry.log_name),
+                        "insert_id": str(entry.insert_id),
+                        "message": str(message),
+                    }
+                )
+                if len(entries) >= safe_limit:
+                    break
+
+            return {
+                "status": "ok",
+                "project": str(config["project"]),
+                "function_name": normalized_function,
+                "severity": normalized_severity,
+                "hours": safe_hours,
+                "order_by": safe_order,
+                "row_count": len(entries),
+                "entries": entries,
             }
         except Exception as exc:  # pragma: no cover - diagnóstico operacional.
             return {
