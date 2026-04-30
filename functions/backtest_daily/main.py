@@ -148,7 +148,9 @@ def _fetch_candles(
 
 def _load_table(table_id: str, rows: List[Dict[str, object]]) -> None:
     if not rows:
+        logging.info("Sem linhas para persistir em %s", table_id)
         return
+    logging.info("Iniciando carga no BigQuery: tabela=%s linhas=%s", table_id, len(rows))
     job = client.load_table_from_json(
         rows,
         table_id,
@@ -157,6 +159,12 @@ def _load_table(table_id: str, rows: List[Dict[str, object]]) -> None:
         ),
     )
     job.result()
+    logging.info(
+        "Carga concluída no BigQuery: tabela=%s job_id=%s linhas=%s",
+        table_id,
+        job.job_id,
+        len(rows),
+    )
 
 
 def _delete_by_date(table_id: str, column: str, date_value: dt.date) -> None:
@@ -164,7 +172,15 @@ def _delete_by_date(table_id: str, column: str, date_value: dt.date) -> None:
     job_config = bigquery.QueryJobConfig(
         query_parameters=[bigquery.ScalarQueryParameter("ref_date", "DATE", date_value)]
     )
-    client.query(query, job_config=job_config).result()
+    job = client.query(query, job_config=job_config)
+    job.result()
+    logging.info(
+        "DELETE executado: tabela=%s coluna=%s data=%s job_id=%s",
+        table_id,
+        column,
+        date_value.isoformat(),
+        job.job_id,
+    )
 
 
 def _fetch_trade_history(start_date: dt.date, end_date: dt.date) -> pd.DataFrame:
@@ -207,6 +223,11 @@ def backtest_daily(request: Any) -> Dict[str, Any]:
             return {"status": "skipped", "reason": message}
 
         signals_df = _fetch_signals(reference_date)
+        logging.info(
+            "Consulta de sinais concluída: date_ref=%s linhas=%s",
+            reference_date.isoformat(),
+            len(signals_df),
+        )
         if signals_df.empty:
             message = f"Nenhum sinal encontrado para {reference_date}"
             run_logger.warn(message, reason="missing_signals")
@@ -228,6 +249,12 @@ def backtest_daily(request: Any) -> Dict[str, Any]:
             [signal.ticker for signal in signals],
             min_valid,
             end_date,
+        )
+        logging.info(
+            "Consulta de candles concluída: linhas=%s intervalo=%s..%s",
+            len(candles_df),
+            min_valid.isoformat(),
+            end_date.isoformat(),
         )
         run_logger.ok(
             "Candles carregados",
@@ -257,6 +284,12 @@ def backtest_daily(request: Any) -> Dict[str, Any]:
 
         history_start = reference_date - dt.timedelta(days=METRICS_LOOKBACK_DAYS)
         history_df = _fetch_trade_history(history_start, reference_date)
+        logging.info(
+            "Histórico para métricas carregado: linhas=%s intervalo=%s..%s",
+            len(history_df),
+            history_start.isoformat(),
+            reference_date.isoformat(),
+        )
         metrics = compute_backtest_metrics(
             history_df.to_dict("records"),
             reference_date,
