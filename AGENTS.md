@@ -23,6 +23,7 @@ Este arquivo fornece contexto a agentes de IA (OpenAI Codex, ChatGPT, etc.) sob
 - **Formatação:** `black` + `isort`
 - **Lint:** `flake8` com `flake8-bugbear`
 - **Typing:** `mypy`
+- **Antes de abrir PR:** executar obrigatoriamente os testes e checks locais (`flake8` e `pytest`) e só abrir PR com tudo passando.
 - **Estrutura de futuras funções:** cada função residirá em `functions/<nome_da_funcao>/` com `main.py` e `requirements.txt` minimalista.
 
 ## 3. Dependências externas aprovadas (para uso futuro)
@@ -90,4 +91,3 @@ Objetivo operacional resumido:
 3. Rodar backtests e consolidar métricas.
 4. Executar DQ checks e registrar incidentes.
 5. Expor dados confiáveis para backend/frontend e observabilidade.
-

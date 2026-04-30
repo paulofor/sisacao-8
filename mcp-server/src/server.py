@@ -238,7 +238,11 @@ def build_server(config: Dict[str, Any]) -> FastMCP:
         normalized_severity = severity.strip().upper() or "DEFAULT"
         safe_limit = max(1, min(int(limit), 200))
         safe_hours = max(1, min(int(hours), 168))
-        safe_order = "timestamp asc" if order_by.strip().lower() == "timestamp asc" else "timestamp desc"
+        safe_order = (
+            "timestamp asc"
+            if order_by.strip().lower() == "timestamp asc"
+            else "timestamp desc"
+        )
 
         filter_parts = [
             'resource.type="cloud_function"',
