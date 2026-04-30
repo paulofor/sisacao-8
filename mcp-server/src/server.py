@@ -4,6 +4,7 @@ import base64
 import json
 import logging
 import os
+from datetime import datetime, timedelta, timezone
 import re
 from typing import Any, Dict, Optional
 
@@ -244,10 +245,15 @@ def build_server(config: Dict[str, Any]) -> FastMCP:
             else "timestamp desc"
         )
 
+        window_start = datetime.now(timezone.utc) - timedelta(hours=safe_hours)
+        window_start_rfc3339 = window_start.isoformat(timespec="seconds").replace(
+            "+00:00", "Z"
+        )
+
         filter_parts = [
             'resource.type="cloud_function"',
             f'resource.labels.function_name="{normalized_function}"',
-            f'timestamp >= "-{safe_hours}h"',
+            f'timestamp >= "{window_start_rfc3339}"',
         ]
         if normalized_severity != "DEFAULT":
             filter_parts.append(f"severity>={normalized_severity}")
