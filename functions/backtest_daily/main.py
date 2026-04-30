@@ -150,7 +150,11 @@ def _load_table(table_id: str, rows: List[Dict[str, object]]) -> None:
     if not rows:
         logging.info("Sem linhas para persistir em %s", table_id)
         return
-    logging.info("Iniciando carga no BigQuery: tabela=%s linhas=%s", table_id, len(rows))
+    logging.info(
+        "Iniciando carga no BigQuery: tabela=%s linhas=%s",
+        table_id,
+        len(rows),
+    )
     job = client.load_table_from_json(
         rows,
         table_id,
