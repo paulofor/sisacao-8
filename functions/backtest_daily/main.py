@@ -210,6 +210,11 @@ def backtest_daily(request: Any) -> Dict[str, Any]:
     """Run the deterministic daily backtest for stored signals."""
 
     run_logger = StructuredLogger(JOB_NAME)
+    logging.warning(
+        "BACKTEST_DAILY_INVOCATION_RECEIVED job=%s run_id=%s",
+        JOB_NAME,
+        run_logger.run_id,
+    )
     try:
         reference_date = _parse_request_date(request)
         run_logger.update_context(date_ref=reference_date.isoformat())
@@ -223,7 +228,14 @@ def backtest_daily(request: Any) -> Dict[str, Any]:
         if not _is_trading_day(reference_date):
             message = f"{reference_date} não é dia útil para backtest"
             run_logger.warn(message, reason="non_trading_day")
-            logging.warning(message)
+            logging.warning(
+                (
+                    "BACKTEST_DAILY_EARLY_EXIT run_id=%s "
+                    "reason=non_trading_day message=%s"
+                ),
+                run_logger.run_id,
+                message,
+            )
             return {"status": "skipped", "reason": message}
 
         signals_df = _fetch_signals(reference_date)
@@ -235,7 +247,14 @@ def backtest_daily(request: Any) -> Dict[str, Any]:
         if signals_df.empty:
             message = f"Nenhum sinal encontrado para {reference_date}"
             run_logger.warn(message, reason="missing_signals")
-            logging.warning(message)
+            logging.warning(
+                (
+                    "BACKTEST_DAILY_EARLY_EXIT run_id=%s "
+                    "reason=missing_signals message=%s"
+                ),
+                run_logger.run_id,
+                message,
+            )
             return {"status": "empty", "reason": message}
 
         run_logger.ok(
@@ -329,6 +348,17 @@ def backtest_daily(request: Any) -> Dict[str, Any]:
             metrics=len(metric_rows),
             trades_table=_table_ref(BACKTEST_TRADES_TABLE_ID),
             metrics_table=_table_ref(BACKTEST_METRICS_TABLE_ID),
+        )
+        logging.warning(
+            (
+                "BACKTEST_DAILY_COMPLETED run_id=%s date_ref=%s "
+                "processed_signals=%s trades=%s metrics=%s"
+            ),
+            run_logger.run_id,
+            reference_date.isoformat(),
+            len(signals),
+            len(trade_rows),
+            len(metric_rows),
         )
         return result
     except Exception as exc:  # noqa: BLE001
