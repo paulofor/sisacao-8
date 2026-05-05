@@ -17,3 +17,9 @@
 - Corrigida a persistência no BigQuery da função `backtest_daily` para evitar erro `TypeError: Object of type date is not JSON serializable` durante `load_table_from_json`.
 - Implementada normalização de payload antes da carga, convertendo automaticamente campos `datetime.date` e `datetime.datetime` para `ISO-8601` (`YYYY-MM-DD` e timestamp ISO).
 - A correção foi aplicada no fluxo genérico de `_load_table`, cobrindo tanto gravação de `backtest_trades` quanto de `backtest_metrics`.
+
+## 2026-05-05 20:10 UTC-3 — Hardening deploy MCP (healthcheck + smoke test)
+
+- Adicionado `HEALTHCHECK` no `mcp-server/Dockerfile` com chamada JSON-RPC para `tools/call` -> `ping` em `http://127.0.0.1:80/mcp`, incluindo `Accept: application/json, text/event-stream`.
+- Atualizado `.github/workflows/deploy-mcp-vps.yml` para executar smoke test pós-deploy com tentativas e retry, validando disponibilidade real do endpoint MCP antes de concluir o job.
+- Em caso de falha no smoke test, o workflow agora imprime status do container e últimos logs e encerra com erro para evitar deploy verde com serviço indisponível.
