@@ -4,9 +4,10 @@ import base64
 import json
 import logging
 import os
+import subprocess
 from datetime import datetime, timedelta, timezone
 import re
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from dotenv import load_dotenv
 from google.cloud import bigquery
@@ -21,6 +22,35 @@ DEFAULT_QUERY_MAX_ROWS = 200
 READ_ONLY_SQL_PATTERN = re.compile(r"^\s*(select|with)\b", re.IGNORECASE)
 
 LOGGER = logging.getLogger("sisacao8.mcp_server")
+
+
+def _extract_log_message(payload: Any) -> str:
+    """Extrai uma mensagem legível a partir do payload do Cloud Logging."""
+    if isinstance(payload, str):
+        return payload
+
+    if isinstance(payload, dict):
+        for key in ("message", "textPayload"):
+            value = payload.get(key)
+            if isinstance(value, str) and value.strip():
+                return value
+        return json.dumps(payload, ensure_ascii=False)
+
+    return str(payload)
+
+
+def _format_log_line(timestamp: Any, message: str) -> str:
+    """Formata linha legível de log em padrão próximo ao comando gcloud."""
+    ts = str(timestamp)
+    if "T" in ts:
+        ts = ts.replace("T", " ")
+    if "+" in ts:
+        ts = ts.split("+", maxsplit=1)[0]
+    if ts.endswith("Z"):
+        ts = ts[:-1]
+    if "." in ts:
+        ts = ts.split(".", maxsplit=1)[0]
+    return f"{ts} {message}".rstrip()
 
 
 def _normalize_project(project: str) -> str:
@@ -124,6 +154,51 @@ def _build_logging_client(project: str) -> cloud_logging.Client:
         return cloud_logging.Client(project=project, credentials=credentials)
 
     return cloud_logging.Client(project=project)
+
+
+def _read_logs_with_gcloud(
+    *,
+    project: str,
+    region: str,
+    service_name: str,
+    limit: int,
+    hours: int,
+) -> Dict[str, Any]:
+    """Executa `gcloud run services logs read` e retorna linhas normalizadas."""
+    cmd = [
+        "gcloud",
+        "run",
+        "services",
+        "logs",
+        "read",
+        service_name,
+        "--region",
+        region,
+        "--project",
+        project,
+        "--freshness",
+        f"{hours}h",
+        "--limit",
+        str(limit),
+        "--format",
+        "value(timestamp,textPayload)",
+    ]
+    result = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(result.stderr.strip() or "falha ao executar gcloud")
+
+    lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+    return {
+        "source": "gcloud",
+        "command": " ".join(cmd),
+        "lines": lines,
+        "output": "\n".join(lines),
+    }
 
 
 def build_server(config: Dict[str, Any]) -> FastMCP:
@@ -231,6 +306,8 @@ def build_server(config: Dict[str, Any]) -> FastMCP:
         order_by: str = "timestamp desc",
         hours: int = 24,
         include_audit_logs: bool = False,
+        gcloud_style: bool = True,
+        use_gcloud_cli: bool = True,
     ) -> Dict[str, Any]:
         """Consulta logs de uma Cloud Run Function por nome e janela de tempo."""
         normalized_function = function_name.strip()
@@ -288,6 +365,36 @@ def build_server(config: Dict[str, Any]) -> FastMCP:
             filter_parts.append(f"severity>={normalized_severity}")
         logs_filter = "\n".join(filter_parts)
 
+        if use_gcloud_cli:
+            try:
+                gcloud_response = _read_logs_with_gcloud(
+                    project=str(config["project"]),
+                    region=str(config["region"]),
+                    service_name=service_candidates[0],
+                    limit=safe_limit,
+                    hours=safe_hours,
+                )
+                return {
+                    "status": "ok",
+                    "project": str(config["project"]),
+                    "function_name": normalized_function,
+                    "severity": normalized_severity,
+                    "hours": safe_hours,
+                    "include_audit_logs": include_audit_logs,
+                    "order_by": safe_order,
+                    "row_count": len(gcloud_response["lines"]),
+                    "entries": [],
+                    "lines": gcloud_response["lines"],
+                    "output": gcloud_response["output"] if gcloud_style else None,
+                    "source": gcloud_response["source"],
+                    "command": gcloud_response["command"],
+                }
+            except Exception as exc:
+                LOGGER.warning(
+                    "Falha ao buscar logs via gcloud CLI; fallback para API. erro=%s",
+                    exc,
+                )
+
         try:
             client = _build_logging_client(project=str(config["project"]))
             entries_iter = client.list_entries(
@@ -297,10 +404,11 @@ def build_server(config: Dict[str, Any]) -> FastMCP:
             )
 
             entries = []
+            formatted_lines: List[str] = []
             for entry in entries_iter:
-                message = entry.payload
-                if isinstance(message, dict):
-                    message = json.dumps(message, ensure_ascii=False)
+                message = _extract_log_message(entry.payload)
+                formatted_line = _format_log_line(entry.timestamp, message)
+                formatted_lines.append(formatted_line)
 
                 entries.append(
                     {
@@ -324,6 +432,9 @@ def build_server(config: Dict[str, Any]) -> FastMCP:
                 "order_by": safe_order,
                 "row_count": len(entries),
                 "entries": entries,
+                "lines": formatted_lines,
+                "output": "\n".join(formatted_lines) if gcloud_style else None,
+                "source": "cloud_logging_api",
             }
         except Exception as exc:  # pragma: no cover - diagnóstico operacional.
             return {
