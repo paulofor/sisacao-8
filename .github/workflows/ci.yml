@@ -3,7 +3,13 @@ name: CI
 on:
   push:
     branches: [ main ]
+    paths-ignore:
+      - 'mcp-server/**'
+      - '.github/workflows/deploy-mcp-vps.yml'
   pull_request:
+    paths-ignore:
+      - 'mcp-server/**'
+      - '.github/workflows/deploy-mcp-vps.yml'
 
 jobs:
   build:
