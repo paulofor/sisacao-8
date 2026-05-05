@@ -156,7 +156,7 @@ def _load_table(table_id: str, rows: List[Dict[str, object]]) -> None:
         len(rows),
     )
     job = client.load_table_from_json(
-        rows,
+        [_json_safe_row(row) for row in rows],
         table_id,
         job_config=bigquery.LoadJobConfig(
             write_disposition=bigquery.WriteDisposition.WRITE_APPEND
@@ -204,6 +204,18 @@ def _fetch_trade_history(start_date: dt.date, end_date: dt.date) -> pd.DataFrame
 
 def _as_naive_datetime(value: dt.datetime) -> dt.datetime:
     return value.astimezone(SAO_PAULO_TZ).replace(tzinfo=None)
+
+
+def _json_safe_value(value: object) -> object:
+    if isinstance(value, dt.datetime):
+        return value.isoformat()
+    if isinstance(value, dt.date):
+        return value.isoformat()
+    return value
+
+
+def _json_safe_row(row: Dict[str, object]) -> Dict[str, object]:
+    return {key: _json_safe_value(value) for key, value in row.items()}
 
 
 def backtest_daily(request: Any) -> Dict[str, Any]:
