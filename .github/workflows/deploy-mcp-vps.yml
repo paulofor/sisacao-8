@@ -91,3 +91,25 @@ jobs:
               -e GOOGLE_APPLICATION_CREDENTIALS="/opt/sisacao/chaves/codex.json" \
               -v /opt/sisacao/chaves/codex.json:/opt/sisacao/chaves/codex.json:ro \
               "${MCP_IMAGE}"
+
+            echo "[deploy] aguardando inicialização e validando endpoint MCP..."
+            for i in $(seq 1 20); do
+              if curl -fsS --connect-timeout 5 --max-time 15 \
+                -X POST "http://127.0.0.1:80/mcp" \
+                -H "Content-Type: application/json" \
+                -H "Accept: application/json, text/event-stream" \
+                -d '{"jsonrpc":"2.0","id":"deploy-smoke","method":"tools/call","params":{"name":"ping","arguments":{}}}' \
+                | grep -q '"status":"ok"'; then
+                echo "[deploy] smoke test MCP OK"
+                break
+              fi
+
+              if [ "$i" -eq 20 ]; then
+                echo "[deploy] ERRO: endpoint MCP indisponível após deploy" >&2
+                docker ps -a --filter "name=sisacao8-mcp-server"
+                docker logs --tail 200 sisacao8-mcp-server || true
+                exit 1
+              fi
+
+              sleep 3
+            done
