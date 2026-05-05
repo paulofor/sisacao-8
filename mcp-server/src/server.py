@@ -163,6 +163,8 @@ def _read_logs_with_gcloud(
     service_name: str,
     limit: int,
     hours: int,
+    severity: str,
+    include_audit_logs: bool,
 ) -> Dict[str, Any]:
     """Executa `gcloud run services logs read` e retorna linhas normalizadas."""
     cmd = [
@@ -183,6 +185,15 @@ def _read_logs_with_gcloud(
         "--format",
         "value(timestamp,textPayload)",
     ]
+    log_filter_parts: List[str] = []
+    if severity != "DEFAULT":
+        log_filter_parts.append(f"severity>={severity}")
+    if not include_audit_logs:
+        log_filter_parts.append(
+            'logName !~ "cloudaudit.googleapis.com%2F(activity|data_access)"'
+        )
+    if log_filter_parts:
+        cmd.extend(["--log-filter", " AND ".join(log_filter_parts)])
     result = subprocess.run(
         cmd,
         capture_output=True,
@@ -367,12 +378,17 @@ def build_server(config: Dict[str, Any]) -> FastMCP:
 
         if use_gcloud_cli:
             try:
+                gcloud_service = service_candidates[0]
+                if hyphenated in service_candidates:
+                    gcloud_service = hyphenated
                 gcloud_response = _read_logs_with_gcloud(
                     project=str(config["project"]),
                     region=str(config["region"]),
-                    service_name=service_candidates[0],
+                    service_name=gcloud_service,
                     limit=safe_limit,
                     hours=safe_hours,
+                    severity=normalized_severity,
+                    include_audit_logs=include_audit_logs,
                 )
                 return {
                     "status": "ok",
