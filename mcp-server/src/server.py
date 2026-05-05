@@ -230,11 +230,19 @@ def build_server(config: Dict[str, Any]) -> FastMCP:
         limit: int = 50,
         order_by: str = "timestamp desc",
         hours: int = 24,
+        include_audit_logs: bool = False,
     ) -> Dict[str, Any]:
         """Consulta logs de uma Cloud Run Function por nome e janela de tempo."""
         normalized_function = function_name.strip()
         if not normalized_function:
             return {"status": "error", "message": "function_name vazio"}
+
+        service_candidates = [normalized_function]
+        hyphenated = normalized_function.replace("_", "-")
+        underscored = normalized_function.replace("-", "_")
+        for candidate in (hyphenated, underscored):
+            if candidate not in service_candidates:
+                service_candidates.append(candidate)
 
         normalized_severity = severity.strip().upper() or "DEFAULT"
         safe_limit = max(1, min(int(limit), 200))
@@ -250,11 +258,32 @@ def build_server(config: Dict[str, Any]) -> FastMCP:
             "+00:00", "Z"
         )
 
+        service_filter = " OR ".join(
+            [
+                (
+                    'resource.type="cloud_run_revision" '
+                    f'AND resource.labels.service_name="{candidate}"'
+                )
+                for candidate in service_candidates
+            ]
+        )
+        function_filter = " OR ".join(
+            [
+                (
+                    'resource.type="cloud_function" '
+                    f'AND resource.labels.function_name="{candidate}"'
+                )
+                for candidate in service_candidates
+            ]
+        )
         filter_parts = [
-            'resource.type="cloud_function"',
-            f'resource.labels.function_name="{normalized_function}"',
+            f"({service_filter} OR {function_filter})",
             f'timestamp >= "{window_start_rfc3339}"',
         ]
+        if not include_audit_logs:
+            filter_parts.append(
+                'logName !~ "cloudaudit.googleapis.com%2F(activity|data_access)"'
+            )
         if normalized_severity != "DEFAULT":
             filter_parts.append(f"severity>={normalized_severity}")
         logs_filter = "\n".join(filter_parts)
@@ -291,6 +320,7 @@ def build_server(config: Dict[str, Any]) -> FastMCP:
                 "function_name": normalized_function,
                 "severity": normalized_severity,
                 "hours": safe_hours,
+                "include_audit_logs": include_audit_logs,
                 "order_by": safe_order,
                 "row_count": len(entries),
                 "entries": entries,
