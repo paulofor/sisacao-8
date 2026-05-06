@@ -23,3 +23,9 @@
 - Adicionado `HEALTHCHECK` no `mcp-server/Dockerfile` com chamada JSON-RPC para `tools/call` -> `ping` em `http://127.0.0.1:80/mcp`, incluindo `Accept: application/json, text/event-stream`.
 - Atualizado `.github/workflows/deploy-mcp-vps.yml` para executar smoke test pós-deploy com tentativas e retry, validando disponibilidade real do endpoint MCP antes de concluir o job.
 - Em caso de falha no smoke test, o workflow agora imprime status do container e últimos logs e encerra com erro para evitar deploy verde com serviço indisponível.
+
+## 2026-05-06 09:40 UTC-3 — MCP logs com projeto/região fixos e sem filtros
+
+- Ajustado `mcp-server/src/server.py` para fixar `project=ingestaokraken` e `region=us-east1` no runtime do servidor MCP, garantindo padronização operacional na leitura de logs.
+- Removida a montagem de `--log-filter` na chamada `gcloud run services logs read`, mantendo saída sem filtros adicionais de severidade/auditoria.
+- Simplificado o filtro no fallback da Cloud Logging API para considerar apenas recurso (Cloud Run/Cloud Function) e janela de tempo.
