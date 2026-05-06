@@ -61,8 +61,8 @@ def _normalize_project(project: str) -> str:
 
 def _runtime_config() -> Dict[str, Any]:
     """Carrega configuração de runtime a partir de variáveis de ambiente."""
-    project = _normalize_project(os.getenv("GCP_PROJECT", "ingestaokraken"))
-    region = os.getenv("GCP_REGION", "us-east1")
+    project = "ingestaokraken"
+    region = "us-east1"
     host = os.getenv("MCP_HOST", DEFAULT_HOST)
     port = int(os.getenv("MCP_PORT", str(DEFAULT_PORT)))
     transport = os.getenv("MCP_TRANSPORT", DEFAULT_TRANSPORT)
@@ -185,15 +185,7 @@ def _read_logs_with_gcloud(
         "--format",
         "value(timestamp,textPayload)",
     ]
-    log_filter_parts: List[str] = []
-    if severity != "DEFAULT":
-        log_filter_parts.append(f"severity>={severity}")
-    if not include_audit_logs:
-        log_filter_parts.append(
-            'logName !~ "cloudaudit.googleapis.com%2F(activity|data_access)"'
-        )
-    if log_filter_parts:
-        cmd.extend(["--log-filter", " AND ".join(log_filter_parts)])
+    # Sem filtros adicionais por requisito operacional.
     result = subprocess.run(
         cmd,
         capture_output=True,
@@ -364,17 +356,12 @@ def build_server(config: Dict[str, Any]) -> FastMCP:
                 for candidate in service_candidates
             ]
         )
-        filter_parts = [
-            f"({service_filter} OR {function_filter})",
-            f'timestamp >= "{window_start_rfc3339}"',
-        ]
-        if not include_audit_logs:
-            filter_parts.append(
-                'logName !~ "cloudaudit.googleapis.com%2F(activity|data_access)"'
-            )
-        if normalized_severity != "DEFAULT":
-            filter_parts.append(f"severity>={normalized_severity}")
-        logs_filter = "\n".join(filter_parts)
+        logs_filter = "\n".join(
+            [
+                f"({service_filter} OR {function_filter})",
+                f'timestamp >= "{window_start_rfc3339}"',
+            ]
+        )
 
         if use_gcloud_cli:
             try:
