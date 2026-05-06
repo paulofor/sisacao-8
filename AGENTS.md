@@ -62,6 +62,34 @@ Este arquivo fornece contexto a agentes de IA (OpenAI Codex, ChatGPT, etc.) sob
 - **NUNCA** usar **HTTPS** para este endpoint MCP.
 - Em qualquer automação/script/comando, trate uso de `https://mcpserversisacao.shop/mcp` como configuração inválida.
 
+### Como acessar corretamente (passo a passo obrigatório)
+
+1. Envie `initialize` por **HTTP POST** para `http://mcpserversisacao.shop/mcp` com headers:
+   - `Content-Type: application/json`
+   - `Accept: application/json, text/event-stream`
+2. Capture o header de resposta `mcp-session-id`.
+3. Para qualquer chamada seguinte (`tools/list`, `tools/call`, etc.), reenvie:
+   - os mesmos headers de `Content-Type` e `Accept`;
+   - o header `mcp-session-id: <valor_da_sessao>`.
+4. Se houver `503`/timeout, aplicar retry com backoff e repetir o fluxo mantendo a regra de **HTTP** (sem HTTPS).
+
+Exemplo mínimo com `curl`:
+
+```bash
+# 1) initialize
+curl -sS -D - -X POST 'http://mcpserversisacao.shop/mcp' \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  --data '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"codex-cli","version":"1.0"}}}'
+
+# 2) tools/list (substituir <MCP_SESSION_ID>)
+curl -sS -D - -X POST 'http://mcpserversisacao.shop/mcp' \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -H 'mcp-session-id: <MCP_SESSION_ID>' \
+  --data '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}'
+```
+
 1. **Backend Java + BigQuery**: Um serviço REST (Spring Boot ou Quarkus) fornecerá APIs para consultar sinais, parâmetros e execuções de treinamento diretamente das tabelas no BigQuery, aplicando camadas de serviço/repositório para encapsular o acesso aos dados.
 2. **Frontend web moderno**: Uma aplicação single-page (React ou Vue) consumirá as APIs expostas pelo backend para construir dashboards ricos com controles de sinais, acompanhamento de jobs de treinamento e ajustes de parâmetros.
 3. **Integração desacoplada**: Comunicação exclusiva via HTTP/JSON (ou WebSockets quando necessário), com autenticação unificada (OAuth2/OpenID) e versionamento de endpoints para facilitar evoluções independentes entre frontend e backend.
