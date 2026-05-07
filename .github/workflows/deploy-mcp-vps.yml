@@ -79,6 +79,13 @@ jobs:
             docker pull "${MCP_IMAGE}"
             docker rm -f sisacao8-mcp-server-cpp || true
 
+            PORT_80_CONTAINERS="$(docker ps --filter publish=80 --format '{{.ID}} {{.Names}} {{.Image}}')"
+            if [ -n "${PORT_80_CONTAINERS}" ]; then
+              echo "[deploy] containers ocupando a porta 80 detectados; removendo para liberar bind:"
+              echo "${PORT_80_CONTAINERS}"
+              docker ps --filter publish=80 -q | xargs -r docker rm -f
+            fi
+
             docker run -d \
               --name sisacao8-mcp-server-cpp \
               --restart unless-stopped \
