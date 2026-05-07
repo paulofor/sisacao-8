@@ -4,11 +4,11 @@ on:
   push:
     branches: [ main ]
     paths-ignore:
-      - 'mcp-server/**'
+      - 'mcp-server-cpp/**'
       - '.github/workflows/deploy-mcp-vps.yml'
   pull_request:
     paths-ignore:
-      - 'mcp-server/**'
+      - 'mcp-server-cpp/**'
       - '.github/workflows/deploy-mcp-vps.yml'
 
 jobs:

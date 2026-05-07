@@ -29,3 +29,10 @@
 - Ajustado `mcp-server/src/server.py` para fixar `project=ingestaokraken` e `region=us-east1` no runtime do servidor MCP, garantindo padronização operacional na leitura de logs.
 - Removida a montagem de `--log-filter` na chamada `gcloud run services logs read`, mantendo saída sem filtros adicionais de severidade/auditoria.
 - Simplificado o filtro no fallback da Cloud Logging API para considerar apenas recurso (Cloud Run/Cloud Function) e janela de tempo.
+
+## 2026-05-07 10:45 UTC-3 — Migração workflow MCP Python -> C++
+
+- Desativado o gatilho de deploy do MCP baseado em alterações de `mcp-server/**` (Python) e ativado o gatilho para `mcp-server-cpp/**`.
+- Atualizado o workflow `.github/workflows/deploy-mcp-vps.yml` para build/push/deploy da imagem `mcp-server-cpp`, incluindo uso do novo `mcp-server-cpp/Dockerfile`.
+- Ajustados nome e referências do container na VPS para `sisacao8-mcp-server-cpp`, preservando validação de disponibilidade via smoke test do endpoint MCP.
+- Ajustados filtros de caminhos em `.github/workflows/ci.yml` e `.github/workflows/deploy.yml` para manter separação entre pipelines de funções/cloud e mudanças exclusivas do MCP.

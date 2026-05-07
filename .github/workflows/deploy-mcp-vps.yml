@@ -6,13 +6,13 @@ on:
       - main
       - master
     paths:
-      - 'mcp-server/**'
+      - 'mcp-server-cpp/**'
       - '.github/workflows/deploy-mcp-vps.yml'
   workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}/mcp-server
+  IMAGE_NAME: ${{ github.repository }}/mcp-server-cpp
   VPS_HOST: 187.45.254.75
   VPS_PORT: '22'
 
@@ -48,7 +48,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: mcp-server/Dockerfile
+          file: mcp-server-cpp/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -77,10 +77,10 @@ jobs:
             echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USER}" --password-stdin
 
             docker pull "${MCP_IMAGE}"
-            docker rm -f sisacao8-mcp-server || true
+            docker rm -f sisacao8-mcp-server-cpp || true
 
             docker run -d \
-              --name sisacao8-mcp-server \
+              --name sisacao8-mcp-server-cpp \
               --restart unless-stopped \
               -p 80:80 \
               -e GCP_PROJECT="${{ secrets.GCP_PROJECT }}" \
@@ -106,8 +106,8 @@ jobs:
 
               if [ "$i" -eq 20 ]; then
                 echo "[deploy] ERRO: endpoint MCP indisponível após deploy" >&2
-                docker ps -a --filter "name=sisacao8-mcp-server"
-                docker logs --tail 200 sisacao8-mcp-server || true
+                docker ps -a --filter "name=sisacao8-mcp-server-cpp"
+                docker logs --tail 200 sisacao8-mcp-server-cpp || true
                 exit 1
               fi
 
