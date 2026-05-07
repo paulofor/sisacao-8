@@ -36,3 +36,10 @@
 - Atualizado o workflow `.github/workflows/deploy-mcp-vps.yml` para build/push/deploy da imagem `mcp-server-cpp`, incluindo uso do novo `mcp-server-cpp/Dockerfile`.
 - Ajustados nome e referências do container na VPS para `sisacao8-mcp-server-cpp`, preservando validação de disponibilidade via smoke test do endpoint MCP.
 - Ajustados filtros de caminhos em `.github/workflows/ci.yml` e `.github/workflows/deploy.yml` para manter separação entre pipelines de funções/cloud e mudanças exclusivas do MCP.
+
+## 2026-05-07 01:40 UTC-3 — Novo MCP Server Java (Spring Boot)
+
+- Criado o módulo `mcp-server-java` com `Maven` + `Spring Boot 3.3.5` e `Java 21` como base para evolução de um servidor MCP em Java.
+- Implementado endpoint `POST /mcp` com suporte inicial aos métodos JSON-RPC `initialize` e `tools/list`, além de retorno de erro para métodos não mapeados.
+- Adicionado teste com `MockMvc` validando o fluxo de `initialize` e documentação de execução/testes no `mcp-server-java/README.md`.
+- Incluído `.gitignore` local para ignorar artefatos de build (`/target/`).
