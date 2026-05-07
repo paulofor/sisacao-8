@@ -1,7 +1,11 @@
 package com.sisacao.mcpserver;
 
 import jakarta.validation.constraints.NotBlank;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -122,14 +126,100 @@ public class McpController {
                     "project", project,
                     "sql", String.valueOf(arguments.getOrDefault("sql", "")),
                     "message", "Tool criada com mesma assinatura lógica da versão Python."));
-            case "cloud_run_function_logs" -> toolResult(id, Map.of(
-                    "status", "not_implemented",
-                    "project", project,
-                    "region", region,
-                    "service_name", String.valueOf(arguments.getOrDefault("service_name", "")),
-                    "message", "Tool criada com mesma assinatura lógica da versão Python."));
+            case "cloud_run_function_logs" -> toolResult(id, cloudRunFunctionLogs(arguments));
             default -> jsonRpcError(id, -32601, "Tool not found: " + name);
         };
+    }
+
+    private Map<String, Object> cloudRunFunctionLogs(Map<String, Object> arguments) {
+        String functionName = String.valueOf(arguments.getOrDefault("function_name", "")).trim();
+        if (functionName.isBlank()) {
+            return Map.of("status", "error", "message", "function_name vazio");
+        }
+
+        String severity = String.valueOf(arguments.getOrDefault("severity", "DEFAULT")).trim().toUpperCase();
+        if (severity.isBlank()) {
+            severity = "DEFAULT";
+        }
+        int limit = clampInt(arguments.get("limit"), 50, 1, 200);
+        int hours = clampInt(arguments.get("hours"), 24, 1, 168);
+        boolean includeAuditLogs = Boolean.parseBoolean(String.valueOf(arguments.getOrDefault("include_audit_logs", false)));
+
+        String serviceName = functionName.replace("_", "-");
+        List<String> command = new ArrayList<>(List.of(
+                "gcloud", "run", "services", "logs", "read", serviceName,
+                "--region", region,
+                "--project", project,
+                "--freshness", hours + "h",
+                "--limit", String.valueOf(limit),
+                "--format", "value(timestamp,textPayload)"));
+        List<String> filters = new ArrayList<>();
+        if (!"DEFAULT".equals(severity)) {
+            filters.add("severity>=" + severity);
+        }
+        if (!includeAuditLogs) {
+            filters.add("NOT logName:\"cloudaudit.googleapis.com\"");
+        }
+        if (!filters.isEmpty()) {
+            command.add("--log-filter");
+            command.add(String.join(" AND ", filters));
+        }
+
+        try {
+            ProcessBuilder pb = new ProcessBuilder(command);
+            Process process = pb.start();
+            List<String> lines = new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))
+                    .lines()
+                    .filter(line -> !line.isBlank())
+                    .limit(limit)
+                    .toList();
+            String stderr = new BufferedReader(new InputStreamReader(process.getErrorStream(), StandardCharsets.UTF_8))
+                    .lines()
+                    .reduce("", (a, b) -> a.isEmpty() ? b : a + "\n" + b);
+            int exitCode = process.waitFor();
+            if (exitCode != 0) {
+                return Map.of(
+                        "status", "error",
+                        "project", project,
+                        "region", region,
+                        "function_name", functionName,
+                        "service_name", serviceName,
+                        "command", String.join(" ", command),
+                        "message", stderr.isBlank() ? "Falha ao executar gcloud." : stderr);
+            }
+
+            Map<String, Object> response = new LinkedHashMap<>();
+            response.put("status", "ok");
+            response.put("project", project);
+            response.put("region", region);
+            response.put("function_name", functionName);
+            response.put("service_name", serviceName);
+            response.put("severity", severity);
+            response.put("hours", hours);
+            response.put("include_audit_logs", includeAuditLogs);
+            response.put("row_count", lines.size());
+            response.put("lines", lines);
+            response.put("source", "gcloud_cli");
+            response.put("command", String.join(" ", command));
+            return response;
+        } catch (Exception exc) {
+            return Map.of(
+                    "status", "error",
+                    "project", project,
+                    "region", region,
+                    "function_name", functionName,
+                    "service_name", serviceName,
+                    "message", exc.getMessage());
+        }
+    }
+
+    private int clampInt(Object rawValue, int defaultValue, int minValue, int maxValue) {
+        try {
+            int parsed = Integer.parseInt(String.valueOf(rawValue == null ? defaultValue : rawValue));
+            return Math.max(minValue, Math.min(maxValue, parsed));
+        } catch (NumberFormatException ignored) {
+            return defaultValue;
+        }
     }
 
     private ResponseEntity<Map<String, Object>> toolResult(Object id, Map<String, Object> content) {
