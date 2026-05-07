@@ -2,13 +2,18 @@ package com.sisacao.mcpserver;
 
 import jakarta.validation.constraints.NotBlank;
 import java.time.Instant;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -18,6 +23,10 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/mcp")
 @Validated
 public class McpController {
+
+    private static final String MCP_SESSION_ID_HEADER = "mcp-session-id";
+
+    private final Set<String> activeSessions = Collections.newSetFromMap(new ConcurrentHashMap<>());
 
     @Value("${GCP_PROJECT:ingestaokraken}")
     private String project;
@@ -35,17 +44,23 @@ public class McpController {
     private String transport;
 
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<Map<String, Object>> handle(@RequestBody McpRequest request) {
+    public ResponseEntity<Map<String, Object>> handle(
+            @RequestBody McpRequest request,
+            @RequestHeader(value = MCP_SESSION_ID_HEADER, required = false) String sessionId) {
         return switch (request.method()) {
             case "initialize" -> initialize(request.id());
-            case "tools/list" -> toolsList(request.id());
-            case "tools/call" -> toolsCall(request.id(), request.params());
+            case "tools/list" -> withValidSession(request.id(), sessionId, () -> toolsList(request.id()));
+            case "tools/call" -> withValidSession(request.id(), sessionId, () -> toolsCall(request.id(), request.params()));
             default -> jsonRpcError(request.id(), -32601, "Method not found");
         };
     }
 
     private ResponseEntity<Map<String, Object>> initialize(Object id) {
-        return ResponseEntity.ok(Map.of(
+        String sessionId = UUID.randomUUID().toString();
+        activeSessions.add(sessionId);
+        return ResponseEntity.ok()
+                .header(MCP_SESSION_ID_HEADER, sessionId)
+                .body(Map.of(
                 "jsonrpc", "2.0",
                 "id", id,
                 "result", Map.of(
@@ -53,6 +68,17 @@ public class McpController {
                         "serverInfo", Map.of("name", "sisacao-mcp-java", "version", "0.0.1"),
                         "capabilities", Map.of("tools", Map.of()),
                         "timestamp", Instant.now().toString())));
+    }
+
+    private ResponseEntity<Map<String, Object>> withValidSession(
+            Object id, String sessionId, SessionHandler handler) {
+        if (sessionId == null || sessionId.isBlank()) {
+            return jsonRpcError(id, -32001, "Missing mcp-session-id header");
+        }
+        if (!activeSessions.contains(sessionId)) {
+            return jsonRpcError(id, -32002, "Invalid mcp-session-id header");
+        }
+        return handler.handle();
     }
 
     private ResponseEntity<Map<String, Object>> toolsList(Object id) {
@@ -118,6 +144,11 @@ public class McpController {
                 "jsonrpc", "2.0",
                 "id", id,
                 "error", Map.of("code", code, "message", message)));
+    }
+
+    @FunctionalInterface
+    private interface SessionHandler {
+        ResponseEntity<Map<String, Object>> handle();
     }
 
     private Map<String, Object> tool(String name, String description) {
