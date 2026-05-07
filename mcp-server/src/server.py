@@ -14,6 +14,8 @@ from google.cloud import bigquery
 from google.cloud import logging as cloud_logging
 from google.oauth2 import service_account
 from mcp.server.fastmcp import FastMCP
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
 
 DEFAULT_HOST = "0.0.0.0"
 DEFAULT_PORT = 80
@@ -22,6 +24,33 @@ DEFAULT_QUERY_MAX_ROWS = 200
 READ_ONLY_SQL_PATTERN = re.compile(r"^\s*(select|with)\b", re.IGNORECASE)
 
 LOGGER = logging.getLogger("sisacao8.mcp_server")
+
+
+class RequestLoggingMiddleware(BaseHTTPMiddleware):
+    """Registra todas as requisições HTTP recebidas pelo MCP server."""
+
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        client_host = request.client.host if request.client else "unknown"
+        LOGGER.info(
+            "MCP request recebida | method=%s | path=%s | query=%s "
+            "| client=%s | status=%s",
+            request.method,
+            request.url.path,
+            request.url.query,
+            client_host,
+            response.status_code,
+        )
+        return response
+
+
+class LoggingFastMCP(FastMCP):
+    """Extensão do FastMCP com middleware de log de requests."""
+
+    def streamable_http_app(self):
+        app = super().streamable_http_app()
+        app.add_middleware(RequestLoggingMiddleware)
+        return app
 
 
 def _extract_log_message(payload: Any) -> str:
@@ -206,7 +235,7 @@ def _read_logs_with_gcloud(
 
 def build_server(config: Dict[str, Any]) -> FastMCP:
     """Instancia e configura o servidor MCP."""
-    server = FastMCP(
+    server = LoggingFastMCP(
         name="sisacao-8-mcp-server",
         instructions=(
             "Servidor MCP operacional do sisacao-8 para consultas operacionais "

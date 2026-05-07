@@ -1,6 +1,7 @@
 package com.sisacao.mcpserver;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.servlet.http.HttpServletRequest;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
@@ -13,6 +14,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -29,6 +32,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class McpController {
 
     private static final String MCP_SESSION_ID_HEADER = "mcp-session-id";
+    private static final Logger LOGGER = LoggerFactory.getLogger(McpController.class);
 
     private final Set<String> activeSessions = Collections.newSetFromMap(new ConcurrentHashMap<>());
 
@@ -50,13 +54,24 @@ public class McpController {
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<Map<String, Object>> handle(
             @RequestBody McpRequest request,
-            @RequestHeader(value = MCP_SESSION_ID_HEADER, required = false) String sessionId) {
-        return switch (request.method()) {
+            @RequestHeader(value = MCP_SESSION_ID_HEADER, required = false) String sessionId,
+            HttpServletRequest httpRequest) {
+        ResponseEntity<Map<String, Object>> response = switch (request.method()) {
             case "initialize" -> initialize(request.id());
             case "tools/list" -> withValidSession(request.id(), sessionId, () -> toolsList(request.id()));
             case "tools/call" -> withValidSession(request.id(), sessionId, () -> toolsCall(request.id(), request.params()));
             default -> jsonRpcError(request.id(), -32601, "Method not found");
         };
+
+        LOGGER.info(
+                "MCP request recebida | method={} | path={} | query={} | remoteAddr={} | mcpMethod={} | status={}",
+                httpRequest.getMethod(),
+                httpRequest.getRequestURI(),
+                httpRequest.getQueryString(),
+                httpRequest.getRemoteAddr(),
+                request.method(),
+                response.getStatusCode().value());
+        return response;
     }
 
     private ResponseEntity<Map<String, Object>> initialize(Object id) {
