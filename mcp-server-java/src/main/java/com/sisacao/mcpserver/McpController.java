@@ -51,6 +51,9 @@ public class McpController {
     @Value("${MCP_TRANSPORT:streamable-http}")
     private String transport;
 
+    @Value("${K_SERVICE:sisacao-mcp-java}")
+    private String cloudRunServiceName;
+
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<Map<String, Object>> handle(
             @RequestBody McpRequest request,
@@ -109,6 +112,7 @@ public class McpController {
                         tool("runtime_config", "Expõe configurações não sensíveis carregadas no runtime."),
                         tool("bigquery_access_check", "Valida autenticação e execução de query simples no BigQuery."),
                         tool("bigquery_query", "Executa query read-only no BigQuery (placeholder de migração Java)."),
+                        tool("mcp_server_logs", "Retorna logs do próprio MCP Server Java no Cloud Run."),
                         tool("cloud_run_function_logs", "Retorna logs básicos (placeholder de migração Java).")))));
     }
 
@@ -141,9 +145,25 @@ public class McpController {
                     "project", project,
                     "sql", String.valueOf(arguments.getOrDefault("sql", "")),
                     "message", "Tool criada com mesma assinatura lógica da versão Python."));
+            case "mcp_server_logs" -> toolResult(id, mcpServerLogs(arguments));
             case "cloud_run_function_logs" -> toolResult(id, cloudRunFunctionLogs(arguments));
             default -> jsonRpcError(id, -32601, "Tool not found: " + name);
         };
+    }
+
+    private Map<String, Object> mcpServerLogs(Map<String, Object> arguments) {
+        String serviceName = String.valueOf(arguments.getOrDefault("service_name", cloudRunServiceName)).trim();
+        if (serviceName.isBlank()) {
+            serviceName = cloudRunServiceName;
+        }
+        String severity = String.valueOf(arguments.getOrDefault("severity", "DEFAULT")).trim().toUpperCase();
+        if (severity.isBlank()) {
+            severity = "DEFAULT";
+        }
+        int limit = clampInt(arguments.get("limit"), 50, 1, 200);
+        int hours = clampInt(arguments.get("hours"), 24, 1, 168);
+        boolean includeAuditLogs = Boolean.parseBoolean(String.valueOf(arguments.getOrDefault("include_audit_logs", false)));
+        return cloudRunLogsRead(serviceName, severity, limit, hours, includeAuditLogs, "mcp_server_logs");
     }
 
     private Map<String, Object> cloudRunFunctionLogs(Map<String, Object> arguments) {
@@ -161,6 +181,17 @@ public class McpController {
         boolean includeAuditLogs = Boolean.parseBoolean(String.valueOf(arguments.getOrDefault("include_audit_logs", false)));
 
         String serviceName = functionName.replace("_", "-");
+        return cloudRunLogsRead(serviceName, severity, limit, hours, includeAuditLogs, "cloud_run_function_logs", functionName);
+    }
+
+    private Map<String, Object> cloudRunLogsRead(
+            String serviceName,
+            String severity,
+            int limit,
+            int hours,
+            boolean includeAuditLogs,
+            String toolName,
+            String... functionNameOpt) {
         List<String> command = new ArrayList<>(List.of(
                 "gcloud", "run", "services", "logs", "read", serviceName,
                 "--region", region,
@@ -180,6 +211,14 @@ public class McpController {
             command.add(String.join(" AND ", filters));
         }
 
+        String joinedCommand = String.join(" ", command);
+        LOGGER.info(
+                "Executando comando gcloud para {} | function_name={} | service_name={} | command={}",
+                toolName,
+                functionNameOpt.length > 0 ? functionNameOpt[0] : "<none>",
+                serviceName,
+                joinedCommand);
+
         try {
             ProcessBuilder pb = new ProcessBuilder(command);
             Process process = pb.start();
@@ -192,22 +231,44 @@ public class McpController {
                     .lines()
                     .reduce("", (a, b) -> a.isEmpty() ? b : a + "\n" + b);
             int exitCode = process.waitFor();
+            LOGGER.info(
+                    "Resposta do comando gcloud | tool={} | function_name={} | service_name={} | exit_code={} | stdout_lines={} | stderr={}",
+                    toolName,
+                    functionNameOpt.length > 0 ? functionNameOpt[0] : "<none>",
+                    serviceName,
+                    exitCode,
+                    lines.size(),
+                    stderr.isBlank() ? "<empty>" : stderr);
             if (exitCode != 0) {
-                return Map.of(
-                        "status", "error",
-                        "project", project,
-                        "region", region,
-                        "function_name", functionName,
-                        "service_name", serviceName,
-                        "command", String.join(" ", command),
-                        "message", stderr.isBlank() ? "Falha ao executar gcloud." : stderr);
+                LOGGER.error(
+                        "Falha no comando gcloud | tool={} | function_name={} | service_name={} | command={} | exit_code={} | stderr={}",
+                        toolName,
+                        functionNameOpt.length > 0 ? functionNameOpt[0] : "<none>",
+                        serviceName,
+                        joinedCommand,
+                        exitCode,
+                        stderr.isBlank() ? "<empty>" : stderr);
+                Map<String, Object> errorResponse = new LinkedHashMap<>();
+                errorResponse.put("status", "error");
+                errorResponse.put("project", project);
+                errorResponse.put("region", region);
+                errorResponse.put("service_name", serviceName);
+                errorResponse.put("tool", toolName);
+                errorResponse.put("command", joinedCommand);
+                errorResponse.put("message", stderr.isBlank() ? "Falha ao executar gcloud." : stderr);
+                if (functionNameOpt.length > 0) {
+                    errorResponse.put("function_name", functionNameOpt[0]);
+                }
+                return errorResponse;
             }
 
             Map<String, Object> response = new LinkedHashMap<>();
             response.put("status", "ok");
             response.put("project", project);
             response.put("region", region);
-            response.put("function_name", functionName);
+            if (functionNameOpt.length > 0) {
+                response.put("function_name", functionNameOpt[0]);
+            }
             response.put("service_name", serviceName);
             response.put("severity", severity);
             response.put("hours", hours);
@@ -215,16 +276,29 @@ public class McpController {
             response.put("row_count", lines.size());
             response.put("lines", lines);
             response.put("source", "gcloud_cli");
-            response.put("command", String.join(" ", command));
+            response.put("tool", toolName);
+            response.put("command", joinedCommand);
             return response;
         } catch (Exception exc) {
-            return Map.of(
-                    "status", "error",
-                    "project", project,
-                    "region", region,
-                    "function_name", functionName,
-                    "service_name", serviceName,
-                    "message", exc.getMessage());
+            LOGGER.error(
+                    "Exceção ao executar comando gcloud | tool={} | function_name={} | service_name={} | command={} | message={}",
+                    toolName,
+                    functionNameOpt.length > 0 ? functionNameOpt[0] : "<none>",
+                    serviceName,
+                    joinedCommand,
+                    exc.getMessage(),
+                    exc);
+            Map<String, Object> errorResponse = new LinkedHashMap<>();
+            errorResponse.put("status", "error");
+            errorResponse.put("project", project);
+            errorResponse.put("region", region);
+            errorResponse.put("service_name", serviceName);
+            errorResponse.put("tool", toolName);
+            errorResponse.put("message", exc.getMessage());
+            if (functionNameOpt.length > 0) {
+                errorResponse.put("function_name", functionNameOpt[0]);
+            }
+            return errorResponse;
         }
     }
 
