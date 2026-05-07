@@ -1,118 +1,12 @@
-name: Deploy MCP Server to VPS
+name: Deploy MCP Server C++ (Disabled)
 
 on:
-  push:
-    branches:
-      - main
-      - master
-    paths:
-      - 'mcp-server-cpp/**'
-      - '.github/workflows/deploy-mcp-vps.yml'
   workflow_dispatch:
 
-env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}/mcp-server-cpp
-  VPS_HOST: 187.45.254.75
-  VPS_PORT: '22'
-
 jobs:
-  build-and-deploy:
+  disabled:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Log in to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract Docker metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=ref,event=branch
-            type=sha
-            type=raw,value=latest,enable={{is_default_branch}}
-
-      - name: Build and push image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: mcp-server-cpp/Dockerfile
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-
-      - name: Deploy container on VPS
-        uses: appleboy/ssh-action@v1.0.3
-        env:
-          MCP_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-          GHCR_USER: ${{ secrets.GHCR_USERNAME != '' && secrets.GHCR_USERNAME || github.repository_owner }}
-          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN != '' && secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}
-        with:
-          host: ${{ env.VPS_HOST }}
-          username: ${{ secrets.VPS_SSH_USER }}
-          key: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
-          port: ${{ env.VPS_PORT }}
-          envs: MCP_IMAGE,GHCR_USER,GHCR_TOKEN
-          script: |
-            set -euo pipefail
-
-            echo "[deploy] usando imagem ${MCP_IMAGE}"
-            if [ -z "${GHCR_USER}" ] || [ -z "${GHCR_TOKEN}" ]; then
-              echo "[deploy] GHCR_USER/GHCR_TOKEN não configurados para login no GHCR" >&2
-              exit 1
-            fi
-
-            echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USER}" --password-stdin
-
-            docker pull "${MCP_IMAGE}"
-            docker rm -f sisacao8-mcp-server-cpp || true
-
-            PORT_80_CONTAINERS="$(docker ps --filter publish=80 --format '{{.ID}} {{.Names}} {{.Image}}')"
-            if [ -n "${PORT_80_CONTAINERS}" ]; then
-              echo "[deploy] containers ocupando a porta 80 detectados; removendo para liberar bind:"
-              echo "${PORT_80_CONTAINERS}"
-              docker ps --filter publish=80 -q | xargs -r docker rm -f
-            fi
-
-            docker run -d \
-              --name sisacao8-mcp-server-cpp \
-              -p 80:80 \
-              -e GCP_PROJECT="${{ secrets.GCP_PROJECT }}" \
-              -e GCP_REGION="${{ secrets.GCP_REGION }}" \
-              -e MCP_HOST="0.0.0.0" \
-              -e MCP_PORT="80" \
-              -e MCP_TRANSPORT="streamable-http" \
-              -e GOOGLE_APPLICATION_CREDENTIALS="/opt/sisacao/chaves/codex.json" \
-              -v /opt/sisacao/chaves/codex.json:/opt/sisacao/chaves/codex.json:ro \
-              "${MCP_IMAGE}"
-
-            echo "[deploy] validando execução do MCP C++..."
-            sleep 2
-
-            EXIT_CODE="$(docker inspect sisacao8-mcp-server-cpp --format '{{.State.ExitCode}}')"
-            if [ "${EXIT_CODE}" != "0" ]; then
-              echo "[deploy] ERRO: container MCP C++ encerrou com código ${EXIT_CODE}" >&2
-              docker logs --tail 200 sisacao8-mcp-server-cpp || true
-              exit 1
-            fi
-
-            LOGS="$(docker logs sisacao8-mcp-server-cpp 2>&1 || true)"
-            if ! printf '%s' "${LOGS}" | grep -q "Implementacao baseline criada."; then
-              echo "[deploy] ERRO: saída esperada do MCP C++ não encontrada" >&2
-              printf '%s\n' "${LOGS}" >&2
-              exit 1
-            fi
-
-            echo "[deploy] MCP C++ baseline executado com sucesso"
+      - name: C++ workflow disabled
+        run: |
+          echo "Workflow da versão C++ desativado. Use deploy-mcp-java-vps.yml"

@@ -28,4 +28,27 @@ class McpControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.result.serverInfo.name").value("sisacao-mcp-java"));
     }
+
+    @Test
+    void shouldListTools() throws Exception {
+        mockMvc.perform(post("/mcp")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.tools[0].name").value("ping"))
+                .andExpect(jsonPath("$.result.tools[4].name").value("cloud_run_function_logs"));
+    }
+
+    @Test
+    void shouldCallPingTool() throws Exception {
+        mockMvc.perform(post("/mcp")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"ping","arguments":{}}}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.content[0].json.status").value("ok"));
+    }
 }
