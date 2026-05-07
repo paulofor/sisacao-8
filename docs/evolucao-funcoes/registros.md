@@ -43,3 +43,14 @@
 - Implementado endpoint `POST /mcp` com suporte inicial aos métodos JSON-RPC `initialize` e `tools/list`, além de retorno de erro para métodos não mapeados.
 - Adicionado teste com `MockMvc` validando o fluxo de `initialize` e documentação de execução/testes no `mcp-server-java/README.md`.
 - Incluído `.gitignore` local para ignorar artefatos de build (`/target/`).
+
+## 2026-05-07 02:35 UTC-3 — MCP Server Java: conformidade do handshake de sessão
+
+- Ajustado `mcp-server-java/src/main/java/com/sisacao/mcpserver/McpController.java` para seguir o padrão de comunicação MCP via header `mcp-session-id`:
+  - `initialize` agora gera `UUID`, registra sessão ativa em memória e devolve `mcp-session-id` no header da resposta;
+  - `tools/list` e `tools/call` agora exigem header de sessão válido antes de processar a chamada.
+- Adicionado retorno de erro JSON-RPC para cenários de sessão ausente (`-32001`) e sessão inválida (`-32002`), facilitando troubleshooting do cliente.
+- Atualizados testes em `mcp-server-java/src/test/java/com/sisacao/mcpserver/McpControllerTest.java` para cobrir:
+  - presença do header em `initialize`;
+  - sucesso de `tools/list`/`tools/call` com sessão válida;
+  - rejeição de `tools/list` sem `mcp-session-id`.

@@ -1,6 +1,7 @@
 package com.sisacao.mcpserver;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -26,13 +27,24 @@ class McpControllerTest {
                                 {"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}
                                 """))
                 .andExpect(status().isOk())
+                .andExpect(header().exists("mcp-session-id"))
                 .andExpect(jsonPath("$.result.serverInfo.name").value("sisacao-mcp-java"));
     }
 
     @Test
     void shouldListTools() throws Exception {
+        String sessionId = mockMvc.perform(post("/mcp")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}
+                                """))
+                .andReturn()
+                .getResponse()
+                .getHeader("mcp-session-id");
+
         mockMvc.perform(post("/mcp")
                         .contentType(MediaType.APPLICATION_JSON)
+                        .header("mcp-session-id", sessionId)
                         .content("""
                                 {"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}
                                 """))
@@ -43,12 +55,33 @@ class McpControllerTest {
 
     @Test
     void shouldCallPingTool() throws Exception {
+        String sessionId = mockMvc.perform(post("/mcp")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}
+                                """))
+                .andReturn()
+                .getResponse()
+                .getHeader("mcp-session-id");
+
         mockMvc.perform(post("/mcp")
                         .contentType(MediaType.APPLICATION_JSON)
+                        .header("mcp-session-id", sessionId)
                         .content("""
                                 {"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"ping","arguments":{}}}
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.result.content[0].json.status").value("ok"));
+    }
+
+    @Test
+    void shouldRejectToolsListWithoutSessionId() throws Exception {
+        mockMvc.perform(post("/mcp")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"jsonrpc":"2.0","id":4,"method":"tools/list","params":{}}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.error.code").value(-32001));
     }
 }
