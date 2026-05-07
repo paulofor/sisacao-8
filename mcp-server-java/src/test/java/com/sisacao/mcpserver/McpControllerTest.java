@@ -50,7 +50,8 @@ class McpControllerTest {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.result.tools[0].name").value("ping"))
-                .andExpect(jsonPath("$.result.tools[4].name").value("cloud_run_function_logs"));
+                .andExpect(jsonPath("$.result.tools[4].name").value("mcp_server_logs"))
+                .andExpect(jsonPath("$.result.tools[5].name").value("cloud_run_function_logs"));
     }
 
     @Test
