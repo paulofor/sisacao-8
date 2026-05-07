@@ -1,0 +1,97 @@
+name: Deploy MCP Server Java to VPS
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'mcp-server-java/**'
+      - '.github/workflows/deploy-mcp-java-vps.yml'
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}/mcp-server-java
+  VPS_HOST: 187.45.254.75
+  VPS_PORT: '22'
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=sha
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: mcp-server-java/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Deploy container on VPS
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          MCP_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          GHCR_USER: ${{ secrets.GHCR_USERNAME != '' && secrets.GHCR_USERNAME || github.repository_owner }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN != '' && secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}
+        with:
+          host: ${{ env.VPS_HOST }}
+          username: ${{ secrets.VPS_SSH_USER }}
+          key: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          port: ${{ env.VPS_PORT }}
+          envs: MCP_IMAGE,GHCR_USER,GHCR_TOKEN
+          script: |
+            set -euo pipefail
+
+            echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USER}" --password-stdin
+
+            docker pull "${MCP_IMAGE}"
+            docker rm -f sisacao8-mcp-server-java sisacao8-mcp-server-cpp || true
+
+            PORT_80_CONTAINERS="$(docker ps --filter publish=80 --format '{{.ID}} {{.Names}} {{.Image}}')"
+            if [ -n "${PORT_80_CONTAINERS}" ]; then
+              echo "[deploy] containers ocupando a porta 80 detectados; removendo para liberar bind:"
+              echo "${PORT_80_CONTAINERS}"
+              docker ps --filter publish=80 -q | xargs -r docker rm -f
+            fi
+
+            docker run -d \
+              --name sisacao8-mcp-server-java \
+              -p 80:80 \
+              -e GCP_PROJECT="${{ secrets.GCP_PROJECT }}" \
+              -e GCP_REGION="${{ secrets.GCP_REGION }}" \
+              -e MCP_HOST="0.0.0.0" \
+              -e MCP_PORT="80" \
+              -e MCP_TRANSPORT="streamable-http" \
+              -e GOOGLE_APPLICATION_CREDENTIALS="/opt/sisacao/chaves/codex.json" \
+              -v /opt/sisacao/chaves/codex.json:/opt/sisacao/chaves/codex.json:ro \
+              "${MCP_IMAGE}"
+
+            sleep 2
+            docker ps --filter name=sisacao8-mcp-server-java
+            docker logs --tail 100 sisacao8-mcp-server-java || true
