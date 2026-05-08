@@ -45,6 +45,8 @@ docker run -d \
   -p 80:80 \
   -v /opt/sisacao/chaves/codex.json:/var/secrets/google/codex.json:ro \
   -e GOOGLE_APPLICATION_CREDENTIALS=/var/secrets/google/codex.json \
+  -e CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE=/var/secrets/google/codex.json \
+  -e GCP_PROJECT=ingestaokraken \
   ghcr.io/paulofor/sisacao-8/mcp-server-java:latest
 ```
 

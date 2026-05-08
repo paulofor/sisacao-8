@@ -15,7 +15,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     rm -rf /var/lib/apt/lists/*
 WORKDIR /opt/app
 COPY --from=build /app/target/mcp-server-java-0.0.1-SNAPSHOT.jar /opt/app/mcp-server-java.jar
+COPY mcp-server-java/docker-entrypoint.sh /opt/app/docker-entrypoint.sh
+RUN chmod +x /opt/app/docker-entrypoint.sh
 EXPOSE 80
 ENV SERVER_PORT=80
 ENV GOOGLE_APPLICATION_CREDENTIALS=/var/secrets/google/codex.json
-ENTRYPOINT ["java","-jar","/opt/app/mcp-server-java.jar"]
+ENTRYPOINT ["/opt/app/docker-entrypoint.sh"]
