@@ -9,7 +9,7 @@ import {
   Typography,
 } from '@mui/material'
 import dayjs from 'dayjs'
-import type { FC } from 'react'
+import { type FC, useMemo } from 'react'
 
 import type { OpsSignalHistoryEntry } from '../../api/ops'
 import StatusChip from '../StatusChip'
@@ -61,10 +61,33 @@ const formatDate = (value: string | null) => {
   return parsed.isValid() ? parsed.format('DD/MM/YYYY') : value
 }
 
+const toTimestamp = (value: string | null): number => {
+  if (!value) {
+    return Number.NEGATIVE_INFINITY
+  }
+
+  const parsed = dayjs(value)
+  if (!parsed.isValid()) {
+    return Number.NEGATIVE_INFINITY
+  }
+
+  return parsed.valueOf()
+}
+
 const SignalsHistoryTable: FC<SignalsHistoryTableProps> = ({ signals, isLoading, error }) => {
   if (error) {
     return <Alert severity="error">Erro ao carregar o histórico de sinais.</Alert>
   }
+
+  const sortedSignals = useMemo(
+    () =>
+      [...signals].sort((left, right) => {
+        const rightTs = toTimestamp(right.createdAt ?? right.dateRef ?? right.validFor)
+        const leftTs = toTimestamp(left.createdAt ?? left.dateRef ?? left.validFor)
+        return rightTs - leftTs
+      }),
+    [signals],
+  )
 
   return (
     <Paper elevation={0} sx={{ borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
@@ -99,7 +122,7 @@ const SignalsHistoryTable: FC<SignalsHistoryTableProps> = ({ signals, isLoading,
             </TableRow>
           ) : null}
 
-          {signals.map((signal) => {
+          {sortedSignals.map((signal) => {
             const metrics = calculateSignalTradeMetrics(signal.side, signal.entry, signal.target, signal.stop)
 
             return (
