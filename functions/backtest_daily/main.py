@@ -104,9 +104,65 @@ def _parse_request_date(request: Any) -> dt.date:
         if requested:
             return dt.datetime.strptime(requested, "%Y-%m-%d").date()
     today = _now_sp().date()
+    backlog_date = _find_pending_signals_date(today)
+    if backlog_date is not None:
+        return backlog_date
     if _is_trading_day(today):
         return today
     return _previous_trading_day(today)
+
+
+def _find_pending_signals_date(as_of_date: dt.date) -> dt.date | None:
+    """Return the oldest signal date that still needs backtest processing."""
+
+    query = (
+        "WITH daily AS ("
+        "  SELECT date_ref, COUNT(*) AS signals_count "
+        f"  FROM `{_table_ref(SIGNALS_TABLE_ID)}` "
+        "  WHERE date_ref <= @as_of_date "
+        "  GROUP BY date_ref"
+        "), trades AS ("
+        "  SELECT date_ref, COUNT(*) AS trades_count "
+        f"  FROM `{_table_ref(BACKTEST_TRADES_TABLE_ID)}` "
+        "  WHERE date_ref <= @as_of_date "
+        "  GROUP BY date_ref"
+        "), metrics AS ("
+        "  SELECT as_of_date, COUNT(*) AS metrics_count "
+        f"  FROM `{_table_ref(BACKTEST_METRICS_TABLE_ID)}` "
+        "  WHERE as_of_date <= @as_of_date "
+        "  GROUP BY as_of_date"
+        ") "
+        "SELECT daily.date_ref "
+        "FROM daily "
+        "LEFT JOIN trades USING (date_ref) "
+        "LEFT JOIN metrics ON metrics.as_of_date = daily.date_ref "
+        "WHERE IFNULL(trades.trades_count, 0) < daily.signals_count "
+        "   OR IFNULL(metrics.metrics_count, 0) = 0 "
+        "ORDER BY daily.date_ref ASC "
+        "LIMIT 1"
+    )
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ScalarQueryParameter("as_of_date", "DATE", as_of_date),
+        ]
+    )
+    try:
+        rows = list(client.query(query, job_config=job_config).result())
+    except Exception as exc:  # noqa: BLE001
+        logging.warning(
+            "Falha ao descobrir backlog de sinais pendentes: %s",
+            exc,
+            exc_info=True,
+        )
+        return None
+    if not rows:
+        return None
+    value = rows[0].date_ref
+    if isinstance(value, dt.datetime):
+        return value.date()
+    if isinstance(value, dt.date):
+        return value
+    return dt.datetime.strptime(str(value), "%Y-%m-%d").date()
 
 
 def _fetch_signals(reference_date: dt.date) -> pd.DataFrame:
