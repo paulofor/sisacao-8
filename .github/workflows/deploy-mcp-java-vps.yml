@@ -80,6 +80,8 @@ jobs:
               docker ps --filter publish=80 -q | xargs -r docker rm -f
             fi
 
+            test -r /opt/sisacao/chaves/codex.json
+
             docker run -d \
               --name sisacao8-mcp-server-java \
               -p 80:80 \
@@ -89,6 +91,7 @@ jobs:
               -e MCP_PORT="80" \
               -e MCP_TRANSPORT="streamable-http" \
               -e GOOGLE_APPLICATION_CREDENTIALS="/opt/sisacao/chaves/codex.json" \
+              -e CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE="/opt/sisacao/chaves/codex.json" \
               -v /opt/sisacao/chaves/codex.json:/opt/sisacao/chaves/codex.json:ro \
               "${MCP_IMAGE}"
 
