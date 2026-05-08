@@ -17,4 +17,5 @@ WORKDIR /opt/app
 COPY --from=build /app/target/mcp-server-java-0.0.1-SNAPSHOT.jar /opt/app/mcp-server-java.jar
 EXPOSE 80
 ENV SERVER_PORT=80
+ENV GOOGLE_APPLICATION_CREDENTIALS=/var/secrets/google/codex.json
 ENTRYPOINT ["java","-jar","/opt/app/mcp-server-java.jar"]

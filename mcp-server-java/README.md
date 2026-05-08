@@ -31,6 +31,30 @@ Tools disponíveis (paridade de nomes com a versão Python):
 docker build -f mcp-server-java/Dockerfile -t sisacao8-mcp-server-java .
 ```
 
+## Executar container com credencial GCP
+
+Para que a tool `cloud_run_function_logs` funcione, o container precisa ter:
+- `gcloud` instalado (já incluído no `Dockerfile`);
+- credencial GCP montada no filesystem do container.
+
+Se a chave no host está em `/opt/sisacao/chaves/codex.json`, suba assim:
+
+```bash
+docker run -d \
+  --name sisacao8-mcp-server-java \
+  -p 80:80 \
+  -v /opt/sisacao/chaves/codex.json:/var/secrets/google/codex.json:ro \
+  -e GOOGLE_APPLICATION_CREDENTIALS=/var/secrets/google/codex.json \
+  ghcr.io/paulofor/sisacao-8/mcp-server-java:latest
+```
+
+Valide dentro do container:
+
+```bash
+docker exec -it sisacao8-mcp-server-java sh -lc 'which gcloud && gcloud --version'
+docker exec -it sisacao8-mcp-server-java sh -lc 'test -r "$GOOGLE_APPLICATION_CREDENTIALS" && echo "credencial ok" || echo "credencial ausente"'
+```
+
 ## Testes
 
 ```bash
