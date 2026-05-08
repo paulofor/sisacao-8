@@ -19,5 +19,5 @@ COPY mcp-server-java/docker-entrypoint.sh /opt/app/docker-entrypoint.sh
 RUN chmod +x /opt/app/docker-entrypoint.sh
 EXPOSE 80
 ENV SERVER_PORT=80
-ENV GOOGLE_APPLICATION_CREDENTIALS=/var/secrets/google/codex.json
+ENV GOOGLE_APPLICATION_CREDENTIALS=/opt/sisacao/chaves/codex.json
 ENTRYPOINT ["/opt/app/docker-entrypoint.sh"]

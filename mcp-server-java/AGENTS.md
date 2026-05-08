@@ -8,10 +8,10 @@ Escopo: este arquivo se aplica a todo o diretório `mcp-server-java/`.
 
 ## Regra obrigatória de autenticação GCP
 - O container **deve** receber a chave JSON via volume read-only.
-- Caminho padrão no container: `/var/secrets/google/codex.json`.
+- Caminho padrão no container: `/opt/sisacao/chaves/codex.json`.
 - Variáveis recomendadas:
-  - `GOOGLE_APPLICATION_CREDENTIALS=/var/secrets/google/codex.json`
-  - `CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE=/var/secrets/google/codex.json`
+  - `GOOGLE_APPLICATION_CREDENTIALS=/opt/sisacao/chaves/codex.json`
+  - `CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE=/opt/sisacao/chaves/codex.json`
   - `GCP_PROJECT=ingestaokraken` (ou via ambiente do deploy)
 
 ## Boot do container

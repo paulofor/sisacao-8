@@ -90,9 +90,9 @@ jobs:
               -e MCP_HOST="0.0.0.0" \
               -e MCP_PORT="80" \
               -e MCP_TRANSPORT="streamable-http" \
-              -e GOOGLE_APPLICATION_CREDENTIALS="/var/secrets/google/codex.json" \
-              -e CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE="/var/secrets/google/codex.json" \
-              -v /opt/sisacao/chaves/codex.json:/var/secrets/google/codex.json:ro \
+              -e GOOGLE_APPLICATION_CREDENTIALS="/opt/sisacao/chaves/codex.json" \
+              -e CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE="/opt/sisacao/chaves/codex.json" \
+              -v /opt/sisacao/chaves/codex.json:/opt/sisacao/chaves/codex.json:ro \
               "${MCP_IMAGE}"
 
             sleep 2
