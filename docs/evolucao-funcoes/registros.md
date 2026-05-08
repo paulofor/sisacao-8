@@ -54,3 +54,10 @@
   - presença do header em `initialize`;
   - sucesso de `tools/list`/`tools/call` com sessão válida;
   - rejeição de `tools/list` sem `mcp-session-id`.
+
+## 2026-05-07 21:45 UTC-3 — MCP Server Java: runtime com gcloud + credencial em container
+
+- Atualizado `mcp-server-java/Dockerfile` para instalar `google-cloud-cli` no estágio de runtime, incluindo repositório oficial Google apt e limpeza de cache (`/var/lib/apt/lists`).
+- Definido `GOOGLE_APPLICATION_CREDENTIALS=/var/secrets/google/codex.json` no runtime do container para padronizar o caminho da service account usada pelas tools que consultam GCP.
+- Atualizado `mcp-server-java/README.md` com instruções operacionais de `docker run` montando a chave do host (`/opt/sisacao/chaves/codex.json`) para o caminho interno esperado no container.
+- Incluídos comandos de validação pós-subida para confirmar presença do `gcloud` e legibilidade da credencial dentro do container.
