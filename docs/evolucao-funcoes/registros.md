@@ -61,3 +61,9 @@
 - Definido `GOOGLE_APPLICATION_CREDENTIALS=/var/secrets/google/codex.json` no runtime do container para padronizar o caminho da service account usada pelas tools que consultam GCP.
 - Atualizado `mcp-server-java/README.md` com instruções operacionais de `docker run` montando a chave do host (`/opt/sisacao/chaves/codex.json`) para o caminho interno esperado no container.
 - Incluídos comandos de validação pós-subida para confirmar presença do `gcloud` e legibilidade da credencial dentro do container.
+
+## 2026-05-07 22:55 UTC-3 — MCP Server Java: projeto/região fixos no controller
+
+- Consolidado no `mcp-server-java/src/main/java/com/sisacao/mcpserver/McpController.java` o uso fixo de `project=ingestaokraken` e `region=us-east1` via constantes (`FIXED_PROJECT_ID` e `FIXED_REGION`).
+- Removida a dependência de configuração dinâmica de região (`GCP_REGION`) e eliminada a lógica de fallback, para manter comportamento determinístico em todas as tools de logs.
+- Padronizado retorno de `runtime_config` e payloads de sucesso/erro de `cloud_run_function_logs`/`mcp_server_logs` para sempre expor os mesmos valores fixos de projeto e região.

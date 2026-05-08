@@ -33,14 +33,10 @@ public class McpController {
 
     private static final String MCP_SESSION_ID_HEADER = "mcp-session-id";
     private static final Logger LOGGER = LoggerFactory.getLogger(McpController.class);
+    private static final String FIXED_PROJECT_ID = "ingestaokraken";
+    private static final String FIXED_REGION = "us-east1";
 
     private final Set<String> activeSessions = Collections.newSetFromMap(new ConcurrentHashMap<>());
-
-    @Value("${GCP_PROJECT:ingestaokraken}")
-    private String project;
-
-    @Value("${GCP_REGION:us-east1}")
-    private String region;
 
     @Value("${MCP_HOST:0.0.0.0}")
     private String host;
@@ -131,18 +127,18 @@ public class McpController {
         return switch (name) {
             case "ping" -> toolResult(id, Map.of("status", "ok"));
             case "runtime_config" -> toolResult(id, Map.of(
-                    "project", project,
-                    "region", region,
+                    "project", FIXED_PROJECT_ID,
+                    "region", FIXED_REGION,
                     "transport", transport,
                     "host", host,
                     "port", port));
             case "bigquery_access_check" -> toolResult(id, Map.of(
                     "status", "not_implemented",
-                    "project", project,
+                    "project", FIXED_PROJECT_ID,
                     "message", "Tool migrada para Java; integração BigQuery será conectada no próximo passo."));
             case "bigquery_query" -> toolResult(id, Map.of(
                     "status", "not_implemented",
-                    "project", project,
+                    "project", FIXED_PROJECT_ID,
                     "sql", String.valueOf(arguments.getOrDefault("sql", "")),
                     "message", "Tool criada com mesma assinatura lógica da versão Python."));
             case "mcp_server_logs" -> toolResult(id, mcpServerLogs(arguments));
@@ -194,8 +190,8 @@ public class McpController {
             String... functionNameOpt) {
         List<String> command = new ArrayList<>(List.of(
                 "gcloud", "run", "services", "logs", "read", serviceName,
-                "--region", region,
-                "--project", project,
+                "--region", FIXED_REGION,
+                "--project", FIXED_PROJECT_ID,
                 "--freshness", hours + "h",
                 "--limit", String.valueOf(limit),
                 "--format", "value(timestamp,textPayload)"));
@@ -250,8 +246,8 @@ public class McpController {
                         stderr.isBlank() ? "<empty>" : stderr);
                 Map<String, Object> errorResponse = new LinkedHashMap<>();
                 errorResponse.put("status", "error");
-                errorResponse.put("project", project);
-                errorResponse.put("region", region);
+                errorResponse.put("project", FIXED_PROJECT_ID);
+                errorResponse.put("region", FIXED_REGION);
                 errorResponse.put("service_name", serviceName);
                 errorResponse.put("tool", toolName);
                 errorResponse.put("command", joinedCommand);
@@ -264,8 +260,8 @@ public class McpController {
 
             Map<String, Object> response = new LinkedHashMap<>();
             response.put("status", "ok");
-            response.put("project", project);
-            response.put("region", region);
+            response.put("project", FIXED_PROJECT_ID);
+            response.put("region", FIXED_REGION);
             if (functionNameOpt.length > 0) {
                 response.put("function_name", functionNameOpt[0]);
             }
@@ -290,8 +286,8 @@ public class McpController {
                     exc);
             Map<String, Object> errorResponse = new LinkedHashMap<>();
             errorResponse.put("status", "error");
-            errorResponse.put("project", project);
-            errorResponse.put("region", region);
+            errorResponse.put("project", FIXED_PROJECT_ID);
+            errorResponse.put("region", FIXED_REGION);
             errorResponse.put("service_name", serviceName);
             errorResponse.put("tool", toolName);
             errorResponse.put("message", exc.getMessage());
