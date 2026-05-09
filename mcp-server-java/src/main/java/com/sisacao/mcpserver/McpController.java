@@ -38,6 +38,7 @@ public class McpController {
     private static final Logger LOGGER = LoggerFactory.getLogger(McpController.class);
     private static final String FIXED_PROJECT_ID = "ingestaokraken";
     private static final String FIXED_REGION = "us-east1";
+    private static final String BACKEND_ACTUATOR_LOG_URL = "http://34.194.252.70/api/actuator/logs/backend";
     private static final Pattern READ_ONLY_SQL_PATTERN = Pattern.compile("^\\s*(select|with)\\b", Pattern.CASE_INSENSITIVE);
 
     private final Set<String> activeSessions = Collections.newSetFromMap(new ConcurrentHashMap<>());
@@ -118,7 +119,8 @@ public class McpController {
                         tool("bigquery_access_check", "Valida autenticação e execução de query simples no BigQuery."),
                         tool("bigquery_query", "Executa query read-only no BigQuery com limite de linhas."),
                         tool("mcp_server_logs", "Retorna logs do próprio MCP Server Java no Cloud Run."),
-                        tool("cloud_run_function_logs", "Retorna logs básicos (placeholder de migração Java).")))));
+                        tool("cloud_run_function_logs", "Retorna logs básicos (placeholder de migração Java)."),
+                        tool("backend_actuator_logs_url", "Retorna a URL pública de logs do backend para consumo via RPC-JSON.")))));
     }
 
     private ResponseEntity<Map<String, Object>> toolsCall(Object id, Map<String, Object> params) {
@@ -148,6 +150,10 @@ public class McpController {
             case "bigquery_query" -> toolResult(id, bigqueryQuery(arguments));
             case "mcp_server_logs" -> toolResult(id, mcpServerLogs(arguments));
             case "cloud_run_function_logs" -> toolResult(id, cloudRunFunctionLogs(arguments));
+            case "backend_actuator_logs_url" -> toolResult(id, Map.of(
+                    "status", "ok",
+                    "url", BACKEND_ACTUATOR_LOG_URL,
+                    "method", "GET"));
             default -> jsonRpcError(id, -32601, "Tool not found: " + name);
         };
     }
