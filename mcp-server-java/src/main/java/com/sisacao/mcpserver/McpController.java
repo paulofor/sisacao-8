@@ -2,6 +2,8 @@ package com.sisacao.mcpserver;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.servlet.http.HttpServletRequest;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
@@ -14,6 +16,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -35,8 +38,14 @@ public class McpController {
     private static final Logger LOGGER = LoggerFactory.getLogger(McpController.class);
     private static final String FIXED_PROJECT_ID = "ingestaokraken";
     private static final String FIXED_REGION = "us-east1";
+    private static final Pattern READ_ONLY_SQL_PATTERN = Pattern.compile("^\\s*(select|with)\\b", Pattern.CASE_INSENSITIVE);
 
     private final Set<String> activeSessions = Collections.newSetFromMap(new ConcurrentHashMap<>());
+    private final ObjectMapper objectMapper;
+
+    public McpController(ObjectMapper objectMapper) {
+        this.objectMapper = objectMapper;
+    }
 
     @Value("${MCP_HOST:0.0.0.0}")
     private String host;
@@ -107,7 +116,7 @@ public class McpController {
                         tool("ping", "Ferramenta de diagnóstico para validar disponibilidade remota."),
                         tool("runtime_config", "Expõe configurações não sensíveis carregadas no runtime."),
                         tool("bigquery_access_check", "Valida autenticação e execução de query simples no BigQuery."),
-                        tool("bigquery_query", "Executa query read-only no BigQuery (placeholder de migração Java)."),
+                        tool("bigquery_query", "Executa query read-only no BigQuery com limite de linhas."),
                         tool("mcp_server_logs", "Retorna logs do próprio MCP Server Java no Cloud Run."),
                         tool("cloud_run_function_logs", "Retorna logs básicos (placeholder de migração Java).")))));
     }
@@ -136,11 +145,7 @@ public class McpController {
                     "status", "not_implemented",
                     "project", FIXED_PROJECT_ID,
                     "message", "Tool migrada para Java; integração BigQuery será conectada no próximo passo."));
-            case "bigquery_query" -> toolResult(id, Map.of(
-                    "status", "not_implemented",
-                    "project", FIXED_PROJECT_ID,
-                    "sql", String.valueOf(arguments.getOrDefault("sql", "")),
-                    "message", "Tool criada com mesma assinatura lógica da versão Python."));
+            case "bigquery_query" -> toolResult(id, bigqueryQuery(arguments));
             case "mcp_server_logs" -> toolResult(id, mcpServerLogs(arguments));
             case "cloud_run_function_logs" -> toolResult(id, cloudRunFunctionLogs(arguments));
             default -> jsonRpcError(id, -32601, "Tool not found: " + name);
@@ -304,6 +309,57 @@ public class McpController {
             return Math.max(minValue, Math.min(maxValue, parsed));
         } catch (NumberFormatException ignored) {
             return defaultValue;
+        }
+    }
+
+    private Map<String, Object> bigqueryQuery(Map<String, Object> arguments) {
+        String sql = String.valueOf(arguments.getOrDefault("sql", arguments.getOrDefault("query", ""))).trim();
+        if (sql.isBlank()) {
+            return Map.of("status", "error", "message", "sql vazio", "project", FIXED_PROJECT_ID);
+        }
+        String normalizedNoTrailingSemicolon = sql.replaceAll(";+\\s*$", "");
+        if (normalizedNoTrailingSemicolon.contains(";")) {
+            return Map.of("status", "error", "message", "múltiplas instruções SQL não são permitidas", "project", FIXED_PROJECT_ID);
+        }
+        if (!READ_ONLY_SQL_PATTERN.matcher(sql).find()) {
+            return Map.of("status", "error", "message", "apenas queries read-only iniciadas com SELECT ou WITH", "project", FIXED_PROJECT_ID);
+        }
+
+        int maxRows = clampInt(arguments.get("max_rows"), 200, 1, 2000);
+        List<String> command = List.of(
+                "bq", "query", "--project_id=" + FIXED_PROJECT_ID,
+                "--use_legacy_sql=false", "--format=json", "--max_rows=" + maxRows, sql);
+        try {
+            Process process = new ProcessBuilder(command).start();
+            String stdout = new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))
+                    .lines().reduce("", (a, b) -> a.isEmpty() ? b : a + "\n" + b);
+            String stderr = new BufferedReader(new InputStreamReader(process.getErrorStream(), StandardCharsets.UTF_8))
+                    .lines().reduce("", (a, b) -> a.isEmpty() ? b : a + "\n" + b);
+            int exitCode = process.waitFor();
+            if (exitCode != 0) {
+                return Map.of(
+                        "status", "error",
+                        "project", FIXED_PROJECT_ID,
+                        "message", stderr.isBlank() ? "Falha ao executar bq query." : stderr,
+                        "sql", sql);
+            }
+            List<Map<String, Object>> rows = stdout.isBlank()
+                    ? List.of()
+                    : objectMapper.readValue(stdout, new TypeReference<List<Map<String, Object>>>() {});
+            return Map.of(
+                    "status", "ok",
+                    "project", FIXED_PROJECT_ID,
+                    "row_count", rows.size(),
+                    "max_rows", maxRows,
+                    "rows", rows,
+                    "sql", sql,
+                    "source", "bq_cli");
+        } catch (Exception exc) {
+            return Map.of(
+                    "status", "error",
+                    "project", FIXED_PROJECT_ID,
+                    "message", exc.getMessage(),
+                    "sql", sql);
         }
     }
 
