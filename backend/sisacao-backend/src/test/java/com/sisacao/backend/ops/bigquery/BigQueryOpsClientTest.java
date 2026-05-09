@@ -157,4 +157,29 @@ class BigQueryOpsClientTest {
         assertThat(queries.get(0).getQuery()).contains("vw_ops_signals_history");
         assertThat(queries.get(1).getQuery()).contains("FROM `ingestaokraken.cotacao_intraday.sinais_eod`");
     }
+
+    @Test
+    void shouldFallbackWhenBacktestPrimaryQueryFails() throws Exception {
+        BigQuery bigQuery = mock(BigQuery.class);
+        TableResult fallbackResult = mock(TableResult.class);
+        doReturn(List.of()).when(fallbackResult).iterateAll();
+        org.mockito.Mockito.doThrow(new com.google.cloud.bigquery.BigQueryException(400, "column entry not found"))
+                .doReturn(fallbackResult)
+                .when(bigQuery)
+                .query(any(QueryJobConfiguration.class));
+
+        OpsBigQueryProperties properties = new OpsBigQueryProperties();
+        properties.setProjectId("ingestaokraken");
+        properties.setBacktestTradesTableDataset("cotacao_intraday");
+        properties.setBacktestTradesTableId("backtest_trades");
+
+        BigQueryOpsClient client = new BigQueryOpsClient(bigQuery, properties);
+        client.fetchLatestBacktestTrades(50);
+
+        ArgumentCaptor<QueryJobConfiguration> queryCaptor = ArgumentCaptor.forClass(QueryJobConfiguration.class);
+        verify(bigQuery, times(2)).query(queryCaptor.capture());
+        List<QueryJobConfiguration> queries = queryCaptor.getAllValues();
+        assertThat(queries.get(0).getQuery()).contains("entry, exit, outcome, pnl_pct");
+        assertThat(queries.get(1).getQuery()).contains("entry_price AS entry, exit_price AS exit");
+    }
 }
