@@ -41,7 +41,11 @@ public class OpsService {
 
     public List<OpsBacktestTrade> getLatestBacktestTrades(Integer limit) {
         int sanitizedLimit = sanitizeBacktestLimit(limit);
-        return bigQueryOpsClient.fetchLatestBacktestTrades(sanitizedLimit);
+        try {
+            return bigQueryOpsClient.fetchLatestBacktestTrades(sanitizedLimit);
+        } catch (OpsDataAccessException ex) {
+            return List.of();
+        }
     }
 
     public List<SignalHistoryEntry> getSignalsHistory(LocalDate from, LocalDate to, Integer limit) {
