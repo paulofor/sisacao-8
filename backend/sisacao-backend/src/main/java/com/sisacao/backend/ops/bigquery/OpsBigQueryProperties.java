@@ -17,6 +17,8 @@ public class OpsBigQueryProperties {
     private String signalsTableDataset = "cotacao_intraday";
     private String signalsTableId = "sinais_eod";
     private int historyMaxRows = 200;
+    private String backtestTradesTableDataset = "cotacao_intraday";
+    private String backtestTradesTableId = "backtest_trades";
 
     public boolean isEnabled() {
         return enabled;
@@ -124,6 +126,26 @@ public class OpsBigQueryProperties {
         }
     }
 
+
+    public String getBacktestTradesTableDataset() {
+        return backtestTradesTableDataset;
+    }
+
+    public void setBacktestTradesTableDataset(String backtestTradesTableDataset) {
+        if (backtestTradesTableDataset != null && !backtestTradesTableDataset.isBlank()) {
+            this.backtestTradesTableDataset = backtestTradesTableDataset;
+        }
+    }
+
+    public String getBacktestTradesTableId() {
+        return backtestTradesTableId;
+    }
+
+    public void setBacktestTradesTableId(String backtestTradesTableId) {
+        if (backtestTradesTableId != null && !backtestTradesTableId.isBlank()) {
+            this.backtestTradesTableId = backtestTradesTableId;
+        }
+    }
     public int getHistoryMaxRows() {
         return historyMaxRows;
     }

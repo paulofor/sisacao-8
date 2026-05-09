@@ -45,6 +45,12 @@ public class OpsController {
         return opsService.getNextSignals();
     }
 
+    @GetMapping("/backtest/trades")
+    public List<OpsBacktestTrade> getLatestBacktestTrades(
+            @RequestParam(name = "limit", required = false) Integer limit) {
+        return opsService.getLatestBacktestTrades(limit);
+    }
+
     @GetMapping("/signals/history")
     public List<SignalHistoryEntry> getSignalsHistory(
             @RequestParam("from") String from,

@@ -56,6 +56,17 @@ export interface OpsSignalsHistoryFilters {
   limit?: number
 }
 
+export interface OpsBacktestTrade {
+  dateRef: string | null
+  ticker: string
+  side: OpsSignalSide
+  entry: number | null
+  exit: number | null
+  outcome: string | null
+  pnlPct: number | null
+  createdAt: string | null
+}
+
 export interface OpsIncident {
   incidentId: string
   checkName: string
@@ -290,6 +301,25 @@ export const fetchOpsIncidentsOpen = async (): Promise<OpsIncident[]> => {
       status: asUpperString(record.status) ?? '—',
       runId: asNullableString(record.runId ?? record.run_id),
       createdAt: toIsoDateTime(record.createdAt ?? record.created_at ?? record.timestamp),
+    }
+  })
+}
+
+
+export const fetchOpsBacktestTrades = async (limit = 50): Promise<OpsBacktestTrade[]> => {
+  const response = await apiClient.get<unknown>('/ops/backtest/trades', { params: { limit } })
+  const items = Array.isArray(response.data) ? response.data : []
+  return items.map((item) => {
+    const record = item as Record<string, unknown>
+    return {
+      dateRef: toIsoDate(record.dateRef ?? record.date_ref),
+      ticker: asString(record.ticker) || '—',
+      side: (asUpperString(record.side) as OpsSignalSide) ?? '—',
+      entry: toNumber(record.entry),
+      exit: toNumber(record.exit),
+      outcome: asNullableString(record.outcome),
+      pnlPct: toNumber(record.pnlPct ?? record.pnl_pct),
+      createdAt: toIsoDateTime(record.createdAt ?? record.created_at),
     }
   })
 }

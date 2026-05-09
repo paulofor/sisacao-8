@@ -39,6 +39,11 @@ public class OpsService {
         return bigQueryOpsClient.fetchNextSignals();
     }
 
+    public List<OpsBacktestTrade> getLatestBacktestTrades(Integer limit) {
+        int sanitizedLimit = sanitizeBacktestLimit(limit);
+        return bigQueryOpsClient.fetchLatestBacktestTrades(sanitizedLimit);
+    }
+
     public List<SignalHistoryEntry> getSignalsHistory(LocalDate from, LocalDate to, Integer limit) {
         validateRange(from, to);
         int sanitizedLimit = sanitizeLimit(limit);
@@ -52,6 +57,18 @@ public class OpsService {
         if (from.isAfter(to)) {
             throw new OpsValidationException("O parâmetro 'from' não pode ser posterior ao 'to'.");
         }
+    }
+
+    private int sanitizeBacktestLimit(Integer limit) {
+        int defaultLimit = 50;
+        int maxRows = 200;
+        if (limit == null) {
+            return defaultLimit;
+        }
+        if (limit <= 0) {
+            throw new OpsValidationException("O parâmetro 'limit' deve ser maior que zero.");
+        }
+        return Math.min(limit, maxRows);
     }
 
     private int sanitizeLimit(Integer limit) {

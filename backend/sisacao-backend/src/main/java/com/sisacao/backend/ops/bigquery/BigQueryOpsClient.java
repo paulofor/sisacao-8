@@ -11,6 +11,7 @@ import com.sisacao.backend.ops.DqCheck;
 import com.sisacao.backend.ops.OpsDataAccessException;
 import com.sisacao.backend.ops.OpsIncident;
 import com.sisacao.backend.ops.OpsOverview;
+import com.sisacao.backend.ops.OpsBacktestTrade;
 import com.sisacao.backend.ops.PipelineJobStatus;
 import com.sisacao.backend.ops.Signal;
 import com.sisacao.backend.ops.SignalHistoryEntry;
@@ -94,6 +95,26 @@ public class BigQueryOpsClient {
                         Comparator.nullsLast(Integer::compareTo)))
                 .toList();
         return Collections.unmodifiableList(orderedSignals);
+    }
+
+    public List<OpsBacktestTrade> fetchLatestBacktestTrades(int limit) {
+        Map<String, QueryParameterValue> params = Map.of("limit", QueryParameterValue.int64(limit));
+        String sql = "SELECT date_ref AS dateRef, ticker, side, entry, exit, outcome, pnl_pct AS pnlPct, created_at AS createdAt "
+                + "FROM " + qualifiedBacktestTradesTable() + " ORDER BY created_at DESC LIMIT @limit";
+        TableResult result = runQuery(sql, params);
+        List<OpsBacktestTrade> trades = new ArrayList<>();
+        for (FieldValueList row : result.iterateAll()) {
+            trades.add(new OpsBacktestTrade(
+                    getDate(row, "dateRef", "date_ref"),
+                    getString(row, "ticker"),
+                    getString(row, "side"),
+                    getDouble(row, "entry"),
+                    getDouble(row, "exit"),
+                    getString(row, "outcome"),
+                    getDouble(row, "pnlPct", "pnl_pct"),
+                    getTimestamp(row, "createdAt", "created_at")));
+        }
+        return Collections.unmodifiableList(trades);
     }
 
     public List<SignalHistoryEntry> fetchSignalsHistory(LocalDate from, LocalDate to, int limit) {
@@ -242,6 +263,20 @@ public class BigQueryOpsClient {
         return String.format("`%s.%s.%s`", projectId, dataset, tableId);
     }
 
+
+    private String qualifiedBacktestTradesTable() {
+        String dataset = Optional.ofNullable(properties.getBacktestTradesTableDataset())
+                .filter(value -> !value.isBlank())
+                .orElse("cotacao_intraday");
+        String tableId = Optional.ofNullable(properties.getBacktestTradesTableId())
+                .filter(value -> !value.isBlank())
+                .orElse("backtest_trades");
+        String projectId = Optional.ofNullable(properties.getProjectId()).filter(value -> !value.isBlank()).orElse(null);
+        if (projectId == null) {
+            return String.format("`%s.%s`", dataset, tableId);
+        }
+        return String.format("`%s.%s.%s`", projectId, dataset, tableId);
+    }
     private String buildSignalsNextFallbackSql() {
         String table = qualifiedSignalsTable();
         return "SELECT "
