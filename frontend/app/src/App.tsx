@@ -16,6 +16,7 @@ import { type SyntheticEvent, useMemo, useState } from 'react'
 
 import type { DataCollectionMessage, DataCollectionMessageSeverity } from './api/dataCollections'
 import type { OpsSignalHistoryEntry, OpsSignalsHistoryFilters } from './api/ops'
+import BacktestTab from './components/tabs/BacktestTab'
 import ColetasTab from './components/tabs/ColetasTab'
 import IncidentesTab from './components/tabs/IncidentesTab'
 import OperacaoTab from './components/tabs/OperacaoTab'
@@ -26,6 +27,7 @@ import { useDailyTableCounts } from './hooks/useDailyTableCounts'
 import { useIntradayDailyCounts } from './hooks/useIntradayDailyCounts'
 import { useIntradayLatestRecords } from './hooks/useIntradayLatestRecords'
 import { useIntradaySummary } from './hooks/useIntradaySummary'
+import { useOpsBacktestTrades } from './hooks/useOpsBacktestTrades'
 import { useOpsDqLatest } from './hooks/useOpsDqLatest'
 import { useOpsIncidentsOpen } from './hooks/useOpsIncidentsOpen'
 import { useOpsOverview } from './hooks/useOpsOverview'
@@ -62,7 +64,7 @@ const getDefaultSignalsHistoryFilters = (): OpsSignalsHistoryFilters => {
   }
 }
 
-type TabValue = 'coletas' | 'operacao' | 'sinais' | 'incidentes'
+type TabValue = 'coletas' | 'operacao' | 'sinais' | 'incidentes' | 'backtest'
 
 type QueryResult = UseQueryResult<unknown, Error>
 
@@ -89,6 +91,7 @@ function App() {
   const opsSignalsNextQuery = useOpsSignalsNext()
   const opsSignalsHistoryQuery = useOpsSignalsHistory(signalsHistoryFilters)
   const opsIncidentsOpenQuery = useOpsIncidentsOpen()
+  const opsBacktestTradesQuery = useOpsBacktestTrades(50)
 
   const messages = useMemo(() => dataCollectionMessagesQuery.data ?? [], [dataCollectionMessagesQuery.data])
 
@@ -111,6 +114,7 @@ function App() {
     operacao: [opsOverviewQuery, opsPipelineQuery, opsDqLatestQuery] as QueryResult[],
     sinais: [opsSignalsNextQuery, opsSignalsHistoryQuery] as QueryResult[],
     incidentes: [opsIncidentsOpenQuery] as QueryResult[],
+    backtest: [opsBacktestTradesQuery] as QueryResult[],
   }
 
   const activeQueries = tabQueries[activeTab]
@@ -174,6 +178,7 @@ function App() {
           <Tab label="Operação" value="operacao" />
           <Tab label="Sinais" value="sinais" />
           <Tab label="Incidentes" value="incidentes" />
+          <Tab label="Backtest" value="backtest" />
         </Tabs>
         {isTabLoading || isRefreshing ? <LinearProgress color="primary" /> : null}
       </AppBar>
@@ -238,6 +243,14 @@ function App() {
             incidents={opsIncidentsOpenQuery.data ?? []}
             incidentsError={opsIncidentsOpenQuery.error}
             incidentsLoading={opsIncidentsOpenQuery.isLoading && (opsIncidentsOpenQuery.data ?? []).length === 0}
+          />
+        ) : null}
+
+        {activeTab === 'backtest' ? (
+          <BacktestTab
+            trades={opsBacktestTradesQuery.data ?? []}
+            error={opsBacktestTradesQuery.error}
+            loading={opsBacktestTradesQuery.isLoading && (opsBacktestTradesQuery.data ?? []).length === 0}
           />
         ) : null}
       </Container>
