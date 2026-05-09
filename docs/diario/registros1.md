@@ -30,3 +30,8 @@
 > Nunca crie registro com timestamp futuro em relação ao horário atual de `America/Sao_Paulo`.
 > Em caso de timestamp incorreto já registrado, não apague nem edite o registro antigo; adicione um novo registro de correção explicando o erro.
 > Neste documento segue política de **append-only** (não pode ter nenhuma linha apagada; apenas inserções).
+
+## 2026-05-09 19:07:14 UTC-3
+- MCP Server Java atualizado para expor a ferramenta RPC-JSON `backend_actuator_logs_url` no `tools/list`.
+- A chamada `tools/call` dessa ferramenta agora retorna a URL `http://34.194.252.70/api/actuator/logs/backend` com método `GET`, permitindo descoberta programática do endpoint de logs do backend.
+- Validação executada no módulo Java com `mvn -q test` (sucesso).
