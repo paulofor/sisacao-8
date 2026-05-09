@@ -99,8 +99,19 @@ public class BigQueryOpsClient {
 
     public List<OpsBacktestTrade> fetchLatestBacktestTrades(int limit) {
         Map<String, QueryParameterValue> params = Map.of("limit", QueryParameterValue.int64(limit));
-        String sql = "SELECT date_ref AS dateRef, ticker, side, entry, exit, outcome, pnl_pct AS pnlPct, created_at AS createdAt "
-                + "FROM " + qualifiedBacktestTradesTable() + " ORDER BY created_at DESC LIMIT @limit";
+        List<OpsBacktestTrade> trades;
+        try {
+            trades = queryBacktestTrades(buildBacktestTradesPrimarySql(), params);
+        } catch (OpsDataAccessException ex) {
+            trades = List.of();
+        }
+        if (trades.isEmpty()) {
+            trades = queryBacktestTrades(buildBacktestTradesFallbackSql(), params);
+        }
+        return Collections.unmodifiableList(trades);
+    }
+
+    private List<OpsBacktestTrade> queryBacktestTrades(String sql, Map<String, QueryParameterValue> params) {
         TableResult result = runQuery(sql, params);
         List<OpsBacktestTrade> trades = new ArrayList<>();
         for (FieldValueList row : result.iterateAll()) {
@@ -114,7 +125,7 @@ public class BigQueryOpsClient {
                     getDouble(row, "pnlPct", "pnl_pct"),
                     getTimestamp(row, "createdAt", "created_at")));
         }
-        return Collections.unmodifiableList(trades);
+        return trades;
     }
 
     public List<SignalHistoryEntry> fetchSignalsHistory(LocalDate from, LocalDate to, int limit) {
@@ -312,6 +323,17 @@ public class BigQueryOpsClient {
                 + qualifiedSignalsTable()
                 + " WHERE (date_ref BETWEEN @from AND @to OR COALESCE(valid_for, date_ref) BETWEEN @from AND @to)"
                 + " ORDER BY dateRef DESC NULLS LAST, rank ASC NULLS LAST, createdAt DESC LIMIT @limit";
+    }
+
+    private String buildBacktestTradesPrimarySql() {
+        return "SELECT date_ref AS dateRef, ticker, side, entry, exit, outcome, pnl_pct AS pnlPct, created_at AS createdAt "
+                + "FROM " + qualifiedBacktestTradesTable() + " ORDER BY created_at DESC LIMIT @limit";
+    }
+
+    private String buildBacktestTradesFallbackSql() {
+        return "SELECT date_ref AS dateRef, ticker, side, entry_price AS entry, exit_price AS exit, "
+                + "outcome, pnl_percent AS pnlPct, created_at AS createdAt "
+                + "FROM " + qualifiedBacktestTradesTable() + " ORDER BY created_at DESC LIMIT @limit";
     }
 
     private List<Signal> querySignals(String sql, Map<String, QueryParameterValue> params) {
