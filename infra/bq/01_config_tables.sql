@@ -42,7 +42,7 @@ USING (
     0.02 AS x_pct,
     0.07 AS target_pct,
     0.07 AS stop_pct,
-    10 AS horizon_days,
+    20 AS horizon_days,
     TRUE AS allow_sell,
     5 AS max_signals,
     'seed' AS updated_by
