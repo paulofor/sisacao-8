@@ -456,7 +456,7 @@ public class BigQueryOpsClient {
         }
         try {
             return value.getTimestampInstant().atOffset(ZoneOffset.UTC);
-        } catch (UnsupportedOperationException ex) {
+        } catch (RuntimeException ex) {
             String raw = value.getStringValue();
             if (raw == null || raw.isBlank()) {
                 return null;
