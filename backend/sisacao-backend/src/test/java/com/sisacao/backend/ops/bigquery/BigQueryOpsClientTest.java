@@ -179,7 +179,7 @@ class BigQueryOpsClientTest {
         ArgumentCaptor<QueryJobConfiguration> queryCaptor = ArgumentCaptor.forClass(QueryJobConfiguration.class);
         verify(bigQuery, times(2)).query(queryCaptor.capture());
         List<QueryJobConfiguration> queries = queryCaptor.getAllValues();
-        assertThat(queries.get(0).getQuery()).contains("entry, exit, outcome, pnl_pct");
-        assertThat(queries.get(1).getQuery()).contains("entry_price AS entry, exit_price AS exit");
+        assertThat(queries.get(0).getQuery()).contains("entry, exit_price AS exit, exit_reason AS outcome, return_pct AS pnlPct");
+        assertThat(queries.get(1).getQuery()).contains("entry, exit, outcome, pnl_pct AS pnlPct");
     }
 }

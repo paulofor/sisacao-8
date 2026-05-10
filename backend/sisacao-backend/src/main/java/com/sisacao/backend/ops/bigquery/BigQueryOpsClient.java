@@ -106,7 +106,11 @@ public class BigQueryOpsClient {
             trades = List.of();
         }
         if (trades.isEmpty()) {
-            trades = queryBacktestTrades(buildBacktestTradesFallbackSql(), params);
+            try {
+                trades = queryBacktestTrades(buildBacktestTradesFallbackSql(), params);
+            } catch (OpsDataAccessException ex) {
+                trades = queryBacktestTrades(buildBacktestTradesLegacyFallbackSql(), params);
+            }
         }
         return Collections.unmodifiableList(trades);
     }
@@ -326,11 +330,17 @@ public class BigQueryOpsClient {
     }
 
     private String buildBacktestTradesPrimarySql() {
-        return "SELECT date_ref AS dateRef, ticker, side, entry, exit, outcome, pnl_pct AS pnlPct, created_at AS createdAt "
+        return "SELECT date_ref AS dateRef, ticker, side, entry, exit_price AS exit, "
+                + "exit_reason AS outcome, return_pct AS pnlPct, created_at AS createdAt "
                 + "FROM " + qualifiedBacktestTradesTable() + " ORDER BY created_at DESC LIMIT @limit";
     }
 
     private String buildBacktestTradesFallbackSql() {
+        return "SELECT date_ref AS dateRef, ticker, side, entry, exit, outcome, pnl_pct AS pnlPct, created_at AS createdAt "
+                + "FROM " + qualifiedBacktestTradesTable() + " ORDER BY created_at DESC LIMIT @limit";
+    }
+
+    private String buildBacktestTradesLegacyFallbackSql() {
         return "SELECT date_ref AS dateRef, ticker, side, entry_price AS entry, exit_price AS exit, "
                 + "outcome, pnl_percent AS pnlPct, created_at AS createdAt "
                 + "FROM " + qualifiedBacktestTradesTable() + " ORDER BY created_at DESC LIMIT @limit";
