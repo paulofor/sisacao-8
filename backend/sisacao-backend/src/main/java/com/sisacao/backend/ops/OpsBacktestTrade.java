@@ -11,4 +11,11 @@ public record OpsBacktestTrade(
         Double exit,
         String outcome,
         Double pnlPct,
+        LocalDate entryDate,
+        Double entryPrice,
+        LocalDate exitDate,
+        Double exitPrice,
+        Long daysInTrade,
+        Double entryLimitPrice,
+        Double entrySignalScore,
         OffsetDateTime createdAt) {}
