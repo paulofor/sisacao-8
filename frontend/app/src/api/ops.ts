@@ -64,6 +64,13 @@ export interface OpsBacktestTrade {
   exit: number | null
   outcome: string | null
   pnlPct: number | null
+  entryDate: string | null
+  entryPrice: number | null
+  exitDate: string | null
+  exitPrice: number | null
+  daysInTrade: number | null
+  entryLimitPrice: number | null
+  entrySignalScore: number | null
   createdAt: string | null
 }
 
@@ -319,6 +326,13 @@ export const fetchOpsBacktestTrades = async (limit = 50): Promise<OpsBacktestTra
       exit: toNumber(record.exit),
       outcome: asNullableString(record.outcome),
       pnlPct: toNumber(record.pnlPct ?? record.pnl_pct),
+      entryDate: toIsoDate(record.entryDate ?? record.entry_date ?? record.trade_entry_date),
+      entryPrice: toNumber(record.entryPrice ?? record.entry_price ?? record.trade_entry_price ?? record.entry),
+      exitDate: toIsoDate(record.exitDate ?? record.exit_date ?? record.trade_exit_date),
+      exitPrice: toNumber(record.exitPrice ?? record.exit_price ?? record.trade_exit_price ?? record.exit),
+      daysInTrade: toNumber(record.daysInTrade ?? record.days_in_trade ?? record.holding_days ?? record.days),
+      entryLimitPrice: toNumber(record.entryLimitPrice ?? record.entry_limit_price ?? record.limit_price ?? record.trigger_price),
+      entrySignalScore: toNumber(record.entrySignalScore ?? record.entry_signal_score ?? record.signal_score ?? record.score),
       createdAt: toIsoDateTime(record.createdAt ?? record.created_at),
     }
   })

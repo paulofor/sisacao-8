@@ -127,6 +127,13 @@ public class BigQueryOpsClient {
                     getDouble(row, "exit"),
                     getString(row, "outcome"),
                     getDouble(row, "pnlPct", "pnl_pct"),
+                    getDate(row, "entryDate", "entry_date", "trade_entry_date"),
+                    getDouble(row, "entryPrice", "entry_price", "trade_entry_price", "entry"),
+                    getDate(row, "exitDate", "exit_date", "trade_exit_date"),
+                    getDouble(row, "exitPrice", "exit_price", "trade_exit_price", "exit"),
+                    getLong(row, "daysInTrade", "days_in_trade", "holding_days", "days"),
+                    getDouble(row, "entryLimitPrice", "entry_limit_price", "limit_price", "trigger_price"),
+                    getDouble(row, "entrySignalScore", "entry_signal_score", "signal_score", "score"),
                     getTimestamp(row, "createdAt", "created_at")));
         }
         return trades;
@@ -331,18 +338,28 @@ public class BigQueryOpsClient {
 
     private String buildBacktestTradesPrimarySql() {
         return "SELECT date_ref AS dateRef, ticker, side, entry, exit_price AS exit, "
-                + "exit_reason AS outcome, return_pct AS pnlPct, created_at AS createdAt "
+                + "exit_reason AS outcome, return_pct AS pnlPct, "
+                + "entry_fill_date AS entryDate, entry AS entryPrice, exit_date AS exitDate, "
+                + "exit_price AS exitPrice, DATE_DIFF(exit_date, entry_fill_date, DAY) AS daysInTrade, "
+                + "NULL AS entryLimitPrice, NULL AS entrySignalScore, "
+                + "created_at AS createdAt "
                 + "FROM " + qualifiedBacktestTradesTable() + " ORDER BY created_at DESC LIMIT @limit";
     }
 
     private String buildBacktestTradesFallbackSql() {
-        return "SELECT date_ref AS dateRef, ticker, side, entry, exit, outcome, pnl_pct AS pnlPct, created_at AS createdAt "
+        return "SELECT date_ref AS dateRef, ticker, side, entry, exit, outcome, pnl_pct AS pnlPct, "
+                + "entry_date AS entryDate, entry AS entryPrice, exit_date AS exitDate, exit AS exitPrice, "
+                + "days_in_trade AS daysInTrade, entry_limit_price AS entryLimitPrice, "
+                + "signal_score AS entrySignalScore, created_at AS createdAt "
                 + "FROM " + qualifiedBacktestTradesTable() + " ORDER BY created_at DESC LIMIT @limit";
     }
 
     private String buildBacktestTradesLegacyFallbackSql() {
         return "SELECT date_ref AS dateRef, ticker, side, entry_price AS entry, exit_price AS exit, "
-                + "outcome, pnl_percent AS pnlPct, created_at AS createdAt "
+                + "outcome, pnl_percent AS pnlPct, "
+                + "entry_date AS entryDate, entry_price AS entryPrice, exit_date AS exitDate, "
+                + "exit_price AS exitPrice, days AS daysInTrade, limit_price AS entryLimitPrice, "
+                + "score AS entrySignalScore, created_at AS createdAt "
                 + "FROM " + qualifiedBacktestTradesTable() + " ORDER BY created_at DESC LIMIT @limit";
     }
 
