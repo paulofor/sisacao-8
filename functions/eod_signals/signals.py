@@ -14,7 +14,7 @@ import pandas as pd  # type: ignore[import-untyped]
 MODEL_VERSION = "signals_v1"
 MAX_SIGNALS_PER_DAY = 5
 DEFAULT_RANKING_KEY = "score_v1"
-DEFAULT_HORIZON_DAYS = 10
+DEFAULT_HORIZON_DAYS = 15
 
 
 @dataclass(frozen=True)
