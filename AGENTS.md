@@ -1,4 +1,4 @@
-
+**Todo trabalho realizado nesse projeto deve ser registrado em : /docs/diario/registros1.md**
 
 ## Descrição dos principais arquivos e pastas
 
