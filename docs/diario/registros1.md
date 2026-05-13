@@ -47,3 +47,8 @@
 - Documentado que o schema canônico atual da tabela possui `entry_fill_date`, `entry`, `exit_date` e `exit_price`, e que `daysInTrade` pode ser derivado por `DATE_DIFF` enquanto preço limite e score exigem dados persistidos na tabela.
 - Validada conectividade MCP via JSON-RPC em `http://mcpserversisacao.shop/mcp` com `initialize` (HTTP 200); tentativa de `tools/list` permaneceu com timeout de upstream.
 - Check executado: `cd backend/sisacao-backend && ./mvnw -q -DskipTests compile` (sucesso).
+
+## 2026-05-12 21:32:33 UTC-3
+- Implementada paginação no quadro "Histórico de Sinais" do frontend com 25 registros por página fixos.
+- Adicionada navegação de páginas via `TablePagination` e renderização da tabela baseada no slice paginado dos sinais.
+- Incluído reset automático para página 1 quando a lista de sinais é atualizada, evitando página inválida após filtros/refresh.
