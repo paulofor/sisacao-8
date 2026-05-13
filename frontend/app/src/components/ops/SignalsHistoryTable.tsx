@@ -1,15 +1,17 @@
 import {
   Alert,
+  Box,
   Paper,
   Table,
   TableBody,
   TableCell,
   TableHead,
+  TablePagination,
   TableRow,
   Typography,
 } from '@mui/material'
 import dayjs from 'dayjs'
-import type { FC } from 'react'
+import { type FC, useEffect, useMemo, useState } from 'react'
 
 import type { OpsSignalHistoryEntry } from '../../api/ops'
 import StatusChip from '../StatusChip'
@@ -31,6 +33,8 @@ const percentFormatter = new Intl.NumberFormat('pt-BR', {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
 })
+
+const ROWS_PER_PAGE = 25
 
 const formatPrice = (value: number | null) => {
   if (typeof value === 'number' && Number.isFinite(value)) {
@@ -62,6 +66,17 @@ const formatDate = (value: string | null) => {
 }
 
 const SignalsHistoryTable: FC<SignalsHistoryTableProps> = ({ signals, isLoading, error }) => {
+  const [page, setPage] = useState(0)
+
+  useEffect(() => {
+    setPage(0)
+  }, [signals])
+
+  const paginatedSignals = useMemo(() => {
+    const start = page * ROWS_PER_PAGE
+    return signals.slice(start, start + ROWS_PER_PAGE)
+  }, [page, signals])
+
   if (error) {
     return <Alert severity="error">Erro ao carregar o histórico de sinais.</Alert>
   }
@@ -99,7 +114,7 @@ const SignalsHistoryTable: FC<SignalsHistoryTableProps> = ({ signals, isLoading,
             </TableRow>
           ) : null}
 
-          {signals.map((signal) => {
+          {paginatedSignals.map((signal) => {
             const metrics = calculateSignalTradeMetrics(signal.side, signal.entry, signal.target, signal.stop)
 
             return (
@@ -137,6 +152,18 @@ const SignalsHistoryTable: FC<SignalsHistoryTableProps> = ({ signals, isLoading,
           ) : null}
         </TableBody>
       </Table>
+      <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <TablePagination
+          component="div"
+          count={signals.length}
+          page={page}
+          onPageChange={(_, nextPage) => setPage(nextPage)}
+          rowsPerPage={ROWS_PER_PAGE}
+          rowsPerPageOptions={[ROWS_PER_PAGE]}
+          labelRowsPerPage="Linhas por página"
+          labelDisplayedRows={({ from, to, count }) => `${from}-${to} de ${count}`}
+        />
+      </Box>
     </Paper>
   )
 }
