@@ -52,3 +52,7 @@
 - Implementada paginação no quadro "Histórico de Sinais" do frontend com 25 registros por página fixos.
 - Adicionada navegação de páginas via `TablePagination` e renderização da tabela baseada no slice paginado dos sinais.
 - Incluído reset automático para página 1 quando a lista de sinais é atualizada, evitando página inválida após filtros/refresh.
+
+## 2026-05-14 13:49:20 UTC-3
+- Registrada orientação estatística para validação de amostra de backtests: tamanho mínimo por número de trades, janelas temporais e testes de significância (bootstrap/Deflated Sharpe, walk-forward e OOS) para reduzir risco de overfitting.
+- Sem alteração de código de backend/frontend; atualização exclusivamente documental no diário do projeto.
