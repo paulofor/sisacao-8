@@ -91,7 +91,7 @@ function App() {
   const opsSignalsNextQuery = useOpsSignalsNext()
   const opsSignalsHistoryQuery = useOpsSignalsHistory(signalsHistoryFilters)
   const opsIncidentsOpenQuery = useOpsIncidentsOpen()
-  const opsBacktestTradesQuery = useOpsBacktestTrades(50)
+  const opsBacktestTradesQuery = useOpsBacktestTrades(200)
 
   const messages = useMemo(() => dataCollectionMessagesQuery.data ?? [], [dataCollectionMessagesQuery.data])
 
