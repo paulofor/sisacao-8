@@ -95,3 +95,8 @@
 - Mantida a lógica de saída (`TARGET`/`STOP`/`EXPIRE`) apenas para sinais que efetivamente entraram em `valid_for`, usando a janela `horizon_days` para gerenciamento da posição já aberta.
 - Ajuste aplicado em `sisacao8/backtest.py` e no espelho da function `functions/backtest_daily/backtest.py`.
 - Teste executado: `PYTHONPATH=. pytest -q tests/test_backtest_engine.py` (5 passed).
+
+## 2026-05-23 12:00:00 UTC
+- Validada aderência da construção do modelo/backtest à regra canônica D->D+1 consultando o documento canônico e a implementação ativa em `functions/backtest_daily/backtest.py`.
+- Confirmado que a entrada é avaliada somente no pregão `valid_for`; sem toque em D+1 o resultado permanece `NO_FILL`, alinhado ao canônico.
+- Preparada resposta objetiva para status de conformidade com referência explícita aos artefatos do repositório.
