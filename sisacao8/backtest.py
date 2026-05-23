@@ -186,7 +186,10 @@ def _simulate_signal(
     mfe_pct: float | None = None
     mae_pct: float | None = None
 
-    valid_for_bar = next((bar for bar in ordered_days if bar.date == signal.valid_for), None)
+    valid_for_bar = next(
+        (bar for bar in ordered_days if bar.date == signal.valid_for),
+        None,
+    )
     if valid_for_bar is None:
         exit_reason = "NO_DATA"
     elif _entry_touched(signal.side, valid_for_bar, signal.entry):
