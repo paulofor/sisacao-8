@@ -185,37 +185,36 @@ def _simulate_signal(
     return_pct: float | None = 0.0
     mfe_pct: float | None = None
     mae_pct: float | None = None
-    last_bar: DailyBar | None = None
 
-    for bar in ordered_days:
-        last_bar = bar
-        if not entry_hit:
-            if _entry_touched(signal.side, bar, signal.entry):
-                entry_hit = True
-                entry_fill_date = bar.date
-        if not entry_hit:
-            continue
-        mfe_pct, mae_pct = _update_excursions(
-            signal.side,
-            signal.entry,
-            bar.high,
-            bar.low,
-            mfe_pct,
-            mae_pct,
-        )
-        reason, price = _check_exit(signal.side, bar, signal.target, signal.stop)
-        if reason:
-            exit_reason = reason
-            exit_price = price
-            exit_date = bar.date
-            break
-    if entry_hit and exit_price is None:
-        exit_reason = "EXPIRE"
-        if last_bar is not None:
-            exit_price = last_bar.close
-            exit_date = last_bar.date
-    if not ordered_days:
+    valid_for_bar = next((bar for bar in ordered_days if bar.date == signal.valid_for), None)
+    if valid_for_bar is None:
         exit_reason = "NO_DATA"
+    elif _entry_touched(signal.side, valid_for_bar, signal.entry):
+        entry_hit = True
+        entry_fill_date = valid_for_bar.date
+        for bar in ordered_days:
+            if bar.date < signal.valid_for:
+                continue
+            mfe_pct, mae_pct = _update_excursions(
+                signal.side,
+                signal.entry,
+                bar.high,
+                bar.low,
+                mfe_pct,
+                mae_pct,
+            )
+            reason, price = _check_exit(signal.side, bar, signal.target, signal.stop)
+            if reason:
+                exit_reason = reason
+                exit_price = price
+                exit_date = bar.date
+                break
+        if exit_price is None:
+            exit_reason = "EXPIRE"
+            last_bar = ordered_days[-1] if ordered_days else None
+            if last_bar is not None:
+                exit_price = last_bar.close
+                exit_date = last_bar.date
     if entry_hit and exit_price is not None:
         return_pct = _compute_return(signal.side, signal.entry, exit_price)
     elif not entry_hit:
