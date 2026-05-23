@@ -100,3 +100,8 @@
 - Validada aderência da construção do modelo/backtest à regra canônica D->D+1 consultando o documento canônico e a implementação ativa em `functions/backtest_daily/backtest.py`.
 - Confirmado que a entrada é avaliada somente no pregão `valid_for`; sem toque em D+1 o resultado permanece `NO_FILL`, alinhado ao canônico.
 - Preparada resposta objetiva para status de conformidade com referência explícita aos artefatos do repositório.
+
+## 2026-05-23 04:22:28 UTC
+- Corrigido erro de lint `E501` quebrando a linha longa na atribuição de `valid_for_bar` no motor de backtest e no espelho da Cloud Function.
+- Arquivos ajustados: `sisacao8/backtest.py` e `functions/backtest_daily/backtest.py`.
+- Revalidados checks locais de lint e testes para garantir pipeline verde.
