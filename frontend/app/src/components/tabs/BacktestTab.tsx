@@ -2,6 +2,7 @@ import { Card, CardContent, LinearProgress, Stack, Typography } from '@mui/mater
 import type { FC } from 'react'
 import type { OpsBacktestTrade } from '../../api/ops'
 import BacktestOutcomesBarChart from '../ops/BacktestOutcomesBarChart'
+import { isExecutedBacktestTrade } from '../ops/backtestTradeFilters'
 import BacktestTradesTable from '../ops/BacktestTradesTable'
 
 interface Props { trades: OpsBacktestTrade[]; loading: boolean; error?: Error | null }
@@ -9,7 +10,7 @@ interface Props { trades: OpsBacktestTrade[]; loading: boolean; error?: Error | 
 const BACKTEST_STATISTICAL_TARGET = 500
 
 const BacktestTab: FC<Props> = ({ trades, loading, error }) => {
-  const closedTrades = trades.length
+  const closedTrades = trades.filter(isExecutedBacktestTrade).length
   const targetPercentage = Math.min((closedTrades / BACKTEST_STATISTICAL_TARGET) * 100, 100)
   const targetPercentageLabel = `${targetPercentage.toFixed(1)}%`
 
@@ -24,10 +25,10 @@ const BacktestTab: FC<Props> = ({ trades, loading, error }) => {
           <Stack spacing={1.25}>
             <Typography variant="h6">Validade estatística</Typography>
             <Typography variant="body2" color="text.secondary">
-              Trades fechados: <strong>{closedTrades}</strong> de {BACKTEST_STATISTICAL_TARGET} meta.
+              Trades executados: <strong>{closedTrades}</strong> de {BACKTEST_STATISTICAL_TARGET} meta.
             </Typography>
             <LinearProgress
-              aria-label="Percentual da meta de trades fechados"
+              aria-label="Percentual da meta de trades executados"
               variant="determinate"
               value={targetPercentage}
             />
