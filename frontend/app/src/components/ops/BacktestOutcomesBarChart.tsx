@@ -2,6 +2,7 @@ import { Alert, Box, Paper, Stack, Typography } from '@mui/material'
 import type { FC } from 'react'
 
 import type { OpsBacktestTrade } from '../../api/ops'
+import { isExecutedBacktestTrade, normalizeBacktestOutcome } from './backtestTradeFilters'
 
 interface Props {
   trades: OpsBacktestTrade[]
@@ -16,19 +17,12 @@ interface OutcomeBucket {
 
 const SLICE_COLORS = ['#1976d2', '#2e7d32', '#ed6c02', '#9c27b0', '#d32f2f', '#0288d1', '#6d4c41']
 
-const normalizeOutcome = (outcome: string | null | undefined): string => {
-  const normalized = (outcome ?? '').trim().toUpperCase()
-  if (!normalized) {
-    return 'UNKNOWN'
-  }
-  return normalized
-}
-
 const toOutcomeLabel = (outcome: string): string => {
   const labels: Record<string, string> = {
     TARGET: 'Target',
     STOP: 'Stop',
     EXPIRED: 'Expired',
+    EXPIRE: 'Expire',
     UNKNOWN: 'Sem resultado',
   }
 
@@ -39,7 +33,7 @@ const buildBuckets = (trades: OpsBacktestTrade[]): OutcomeBucket[] => {
   const counts = new Map<string, number>()
 
   for (const trade of trades) {
-    const outcome = normalizeOutcome(trade.outcome)
+    const outcome = normalizeBacktestOutcome(trade.outcome)
     counts.set(outcome, (counts.get(outcome) ?? 0) + 1)
   }
 
@@ -52,8 +46,17 @@ const BacktestOutcomesBarChart: FC<Props> = ({ trades, loading, error }) => {
   if (error) return <Alert severity="error">Falha ao carregar dados do gráfico: {error.message}</Alert>
   if (!loading && trades.length === 0) return <Alert severity="info">Sem trades para montar o gráfico.</Alert>
 
-  const buckets = buildBuckets(trades)
+  const executedTrades = trades.filter(isExecutedBacktestTrade)
+  if (!loading && executedTrades.length === 0) {
+    return <Alert severity="info">Nenhum trade executado para montar o gráfico.</Alert>
+  }
+
+  const buckets = buildBuckets(executedTrades)
   const totalCount = buckets.reduce((acc, bucket) => acc + bucket.count, 0)
+
+  if (totalCount === 0) {
+    return <Alert severity="info">Carregando trades executados para montar o gráfico.</Alert>
+  }
 
   let startPercent = 0
   const gradientParts = buckets.map((bucket, index) => {
@@ -72,7 +75,7 @@ const BacktestOutcomesBarChart: FC<Props> = ({ trades, loading, error }) => {
       <Stack spacing={1.5}>
         <Typography variant="h6">Distribuição de resultados do backtest</Typography>
         <Typography variant="body2" color="text.secondary">
-          Gráfico de pizza por resultado (target, stop, expired, etc.) usando os trades carregados.
+          Gráfico de pizza por resultado (target, stop, expire, etc.) considerando apenas trades executados.
         </Typography>
 
         <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems="center">

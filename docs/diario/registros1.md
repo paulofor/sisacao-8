@@ -105,3 +105,8 @@
 - Corrigido erro de lint `E501` quebrando a linha longa na atribuição de `valid_for_bar` no motor de backtest e no espelho da Cloud Function.
 - Arquivos ajustados: `sisacao8/backtest.py` e `functions/backtest_daily/backtest.py`.
 - Revalidados checks locais de lint e testes para garantir pipeline verde.
+
+## 2026-06-04 12:41:22 UTC-3
+- Ajustado o gráfico de distribuição de resultados do backtest para considerar somente trades executados, excluindo outcomes de não execução como `NO_FILL`.
+- Criado filtro compartilhado para identificar trades efetivamente realizados a partir do outcome e dos campos de entrada/saída.
+- Atualizado o card de validade estatística para contabilizar `Trades executados` em vez de todos os registros carregados.
