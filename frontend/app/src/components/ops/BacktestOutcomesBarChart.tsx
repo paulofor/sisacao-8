@@ -13,10 +13,21 @@ interface Props {
 interface OutcomeBucket {
   label: string
   count: number
+  color: string
 }
 
-const SLICE_COLORS = ['#1976d2', '#2e7d32', '#ed6c02', '#9c27b0', '#d32f2f', '#0288d1', '#6d4c41']
-const PROFIT_LOSS_SLICE_COLORS = ['#2e7d32', '#d32f2f']
+const OUTCOME_SLICE_COLORS: Record<string, string> = {
+  EXPIRE: '#1976d2',
+  EXPIRED: '#1976d2',
+  TARGET: '#2e7d32',
+  STOP: '#d32f2f',
+  UNKNOWN: '#6d4c41',
+}
+const FALLBACK_SLICE_COLORS = ['#9c27b0', '#0288d1', '#6d4c41']
+const PROFIT_LOSS_SLICE_COLORS = {
+  profit: '#2e7d32',
+  loss: '#d32f2f',
+}
 
 const toOutcomeLabel = (outcome: string): string => {
   const labels: Record<string, string> = {
@@ -39,14 +50,18 @@ const buildBuckets = (trades: OpsBacktestTrade[]): OutcomeBucket[] => {
   }
 
   return Array.from(counts.entries())
-    .map(([outcome, count]) => ({ label: toOutcomeLabel(outcome), count }))
+    .map(([outcome, count], index) => ({
+      label: toOutcomeLabel(outcome),
+      count,
+      color: OUTCOME_SLICE_COLORS[outcome] ?? FALLBACK_SLICE_COLORS[index % FALLBACK_SLICE_COLORS.length],
+    }))
     .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, 'pt-BR'))
 }
 
 const buildProfitLossBuckets = (trades: OpsBacktestTrade[]): OutcomeBucket[] => {
   const profitLossBuckets = [
-    { label: 'Lucro', count: 0 },
-    { label: 'Prejuízo', count: 0 },
+    { label: 'Lucro', count: 0, color: PROFIT_LOSS_SLICE_COLORS.profit },
+    { label: 'Prejuízo', count: 0, color: PROFIT_LOSS_SLICE_COLORS.loss },
   ]
 
   for (const trade of trades) {
@@ -61,13 +76,12 @@ const buildProfitLossBuckets = (trades: OpsBacktestTrade[]): OutcomeBucket[] => 
   return profitLossBuckets.filter((bucket) => bucket.count > 0)
 }
 
-const buildPieBackground = (buckets: OutcomeBucket[], colors: string[], totalCount: number): string => {
+const buildPieBackground = (buckets: OutcomeBucket[], totalCount: number): string => {
   let startPercent = 0
-  const gradientParts = buckets.map((bucket, index) => {
+  const gradientParts = buckets.map((bucket) => {
     const slicePercent = (bucket.count / totalCount) * 100
     const endPercent = startPercent + slicePercent
-    const color = colors[index % colors.length]
-    const segment = `${color} ${startPercent.toFixed(2)}% ${endPercent.toFixed(2)}%`
+    const segment = `${bucket.color} ${startPercent.toFixed(2)}% ${endPercent.toFixed(2)}%`
     startPercent = endPercent
     return segment
   })
@@ -79,7 +93,6 @@ const renderPieChart = (
   title: string,
   description: string,
   buckets: OutcomeBucket[],
-  colors: string[],
   emptyState: ReactNode,
 ) => {
   const totalCount = buckets.reduce((acc, bucket) => acc + bucket.count, 0)
@@ -98,7 +111,7 @@ const renderPieChart = (
     )
   }
 
-  const pieBackground = buildPieBackground(buckets, colors, totalCount)
+  const pieBackground = buildPieBackground(buckets, totalCount)
 
   return (
     <Paper variant="outlined" sx={{ p: 2 }}>
@@ -134,14 +147,13 @@ const renderPieChart = (
           </Box>
 
           <Stack spacing={1} sx={{ width: '100%' }}>
-            {buckets.map((bucket, index) => {
-              const color = colors[index % colors.length]
+            {buckets.map((bucket) => {
               const percentage = (bucket.count / totalCount) * 100
 
               return (
                 <Stack key={bucket.label} direction="row" justifyContent="space-between" alignItems="center">
                   <Stack direction="row" spacing={1} alignItems="center">
-                    <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: color }} />
+                    <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: bucket.color }} />
                     <Typography variant="body2" sx={{ fontWeight: 500 }}>{bucket.label}</Typography>
                   </Stack>
                   <Typography variant="body2" color="text.secondary">
@@ -175,14 +187,12 @@ const BacktestOutcomesBarChart: FC<Props> = ({ trades, loading, error }) => {
         'Distribuição de resultados do backtest',
         'Gráfico de pizza por resultado (target, stop, expire, etc.) considerando apenas trades executados.',
         outcomeBuckets,
-        SLICE_COLORS,
         <Alert severity="info">Carregando trades executados para montar o gráfico.</Alert>,
       )}
       {renderPieChart(
         'Distribuição de lucro e prejuízo do backtest',
         'Gráfico de pizza por PnL: Lucro quando PnL % é maior que zero e Prejuízo quando PnL % é menor ou igual a zero, incluindo trades que saíram por tempo/expire.',
         profitLossBuckets,
-        PROFIT_LOSS_SLICE_COLORS,
         <Alert severity="info">Nenhum trade executado com PnL informado para montar o gráfico de lucro e prejuízo.</Alert>,
       )}
     </Stack>
