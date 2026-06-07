@@ -25,6 +25,7 @@ Este arquivo fornece contexto a agentes de IA (OpenAI Codex, ChatGPT, etc.) sob
 - **Typing:** `mypy`
 - **Antes de abrir PR:** executar obrigatoriamente os testes e checks locais (`flake8` e `pytest`) e só abrir PR com tudo passando.
 - **Estrutura de futuras funções:** cada função residirá em `functions/<nome_da_funcao>/` com `main.py` e `requirements.txt` minimalista.
+- **Screenshots:** não gerar nem versionar screenshots/evidências visuais para alterações de frontend, salvo quando o usuário pedir explicitamente.
 
 ## 3. Dependências externas aprovadas (para uso futuro)
 | Pacote | Uso | Observação |
