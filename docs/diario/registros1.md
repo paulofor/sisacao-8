@@ -146,3 +146,12 @@
 - Ajustado o componente da aba para exibir a tabela de próximo pregão sem filtros locais e eliminar a consulta de histórico que era usada apenas pelos blocos removidos.
 - Atualizado o texto introdutório para refletir os blocos que permanecem na tela.
 - Removida a evidência visual em screenshot porque não é necessária para esta alteração.
+
+## 2026-06-07 — Remoção do resumo superior da aba Sinais
+- Removido da aba **Sinais** o trecho superior destacado pelo usuário, incluindo o texto introdutório, os cards de métricas agregadas e o alerta informativo sobre backtrade.
+- Simplificado o componente para eliminar cálculos e imports que eram usados somente pelo bloco removido.
+- Validações executadas no frontend: `npm run lint` e `npm run build`.
+
+## 2026-06-07 — Ajuste de evidências visuais no projeto
+- Removida a evidência PNG versionada da alteração anterior porque o projeto não precisa desse tipo de screenshot salvo pedido explícito.
+- Atualizado o `AGENTS.md` para orientar agentes a não gerar nem versionar screenshots/evidências visuais em alterações de frontend, exceto quando solicitado explicitamente pelo usuário.
