@@ -231,7 +231,6 @@ function App() {
             signalsNextError={opsSignalsNextQuery.error}
             signalsNextLoading={opsSignalsNextQuery.isLoading && (opsSignalsNextQuery.data ?? []).length === 0}
             signalsHistory={signalsHistoryData}
-            signalsHistoryError={opsSignalsHistoryQuery.error}
             signalsHistoryLoading={signalsHistoryLoading}
             historyFilters={signalsHistoryFilters}
             onHistoryFiltersChange={setSignalsHistoryFilters}
