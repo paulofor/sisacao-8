@@ -15,7 +15,6 @@ import dayjs from 'dayjs'
 import { type SyntheticEvent, useMemo, useState } from 'react'
 
 import type { DataCollectionMessage, DataCollectionMessageSeverity } from './api/dataCollections'
-import type { OpsSignalHistoryEntry, OpsSignalsHistoryFilters } from './api/ops'
 import BacktestTab from './components/tabs/BacktestTab'
 import ColetasTab from './components/tabs/ColetasTab'
 import IncidentesTab from './components/tabs/IncidentesTab'
@@ -32,7 +31,6 @@ import { useOpsDqLatest } from './hooks/useOpsDqLatest'
 import { useOpsIncidentsOpen } from './hooks/useOpsIncidentsOpen'
 import { useOpsOverview } from './hooks/useOpsOverview'
 import { useOpsPipeline } from './hooks/useOpsPipeline'
-import { useOpsSignalsHistory } from './hooks/useOpsSignalsHistory'
 import { useOpsSignalsNext } from './hooks/useOpsSignalsNext'
 
 const severityOptions: Array<'all' | DataCollectionMessageSeverity> = [
@@ -56,14 +54,6 @@ const filterMessagesBySearch = (messages: DataCollectionMessage[], searchTerm: s
   })
 }
 
-const getDefaultSignalsHistoryFilters = (): OpsSignalsHistoryFilters => {
-  return {
-    from: dayjs().subtract(10, 'day').format('YYYY-MM-DD'),
-    to: dayjs().format('YYYY-MM-DD'),
-    limit: 100,
-  }
-}
-
 type TabValue = 'coletas' | 'operacao' | 'sinais' | 'incidentes' | 'backtest'
 
 type QueryResult = UseQueryResult<unknown, Error>
@@ -72,9 +62,6 @@ function App() {
   const [activeTab, setActiveTab] = useState<TabValue>('coletas')
   const [selectedSeverity, setSelectedSeverity] = useState<'all' | DataCollectionMessageSeverity>('all')
   const [searchTerm, setSearchTerm] = useState('')
-  const [signalsHistoryFilters, setSignalsHistoryFilters] = useState<OpsSignalsHistoryFilters>(
-    getDefaultSignalsHistoryFilters(),
-  )
 
   const dataCollectionMessagesQuery = useDataCollectionMessages({
     severity: selectedSeverity === 'all' ? undefined : selectedSeverity,
@@ -89,7 +76,6 @@ function App() {
   const opsPipelineQuery = useOpsPipeline()
   const opsDqLatestQuery = useOpsDqLatest()
   const opsSignalsNextQuery = useOpsSignalsNext()
-  const opsSignalsHistoryQuery = useOpsSignalsHistory(signalsHistoryFilters)
   const opsIncidentsOpenQuery = useOpsIncidentsOpen()
   const opsBacktestTradesQuery = useOpsBacktestTrades(200)
 
@@ -99,8 +85,6 @@ function App() {
     () => filterMessagesBySearch(messages, searchTerm),
     [messages, searchTerm],
   )
-
-  const signalsHistoryData = (opsSignalsHistoryQuery.data ?? []) as OpsSignalHistoryEntry[]
 
   const tabQueries: Record<TabValue, QueryResult[]> = {
     coletas: [
@@ -112,7 +96,7 @@ function App() {
       candlesTableDailyCountsQuery,
     ] as QueryResult[],
     operacao: [opsOverviewQuery, opsPipelineQuery, opsDqLatestQuery] as QueryResult[],
-    sinais: [opsSignalsNextQuery, opsSignalsHistoryQuery] as QueryResult[],
+    sinais: [opsSignalsNextQuery] as QueryResult[],
     incidentes: [opsIncidentsOpenQuery] as QueryResult[],
     backtest: [opsBacktestTradesQuery] as QueryResult[],
   }
@@ -143,7 +127,6 @@ function App() {
   const dailyTableCountsLoading = dailyTableCountsQuery.isLoading && !dailyTableCountsQuery.data
   const candlesTableDailyCountsLoading =
     candlesTableDailyCountsQuery.isLoading && !candlesTableDailyCountsQuery.data
-  const signalsHistoryLoading = opsSignalsHistoryQuery.isLoading && !opsSignalsHistoryQuery.data
 
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
@@ -230,10 +213,6 @@ function App() {
             signalsNext={opsSignalsNextQuery.data ?? []}
             signalsNextError={opsSignalsNextQuery.error}
             signalsNextLoading={opsSignalsNextQuery.isLoading && (opsSignalsNextQuery.data ?? []).length === 0}
-            signalsHistory={signalsHistoryData}
-            signalsHistoryLoading={signalsHistoryLoading}
-            historyFilters={signalsHistoryFilters}
-            onHistoryFiltersChange={setSignalsHistoryFilters}
           />
         ) : null}
 
