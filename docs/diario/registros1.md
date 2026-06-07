@@ -155,3 +155,8 @@
 ## 2026-06-07 — Ajuste de evidências visuais no projeto
 - Removida a evidência PNG versionada da alteração anterior porque o projeto não precisa desse tipo de screenshot salvo pedido explícito.
 - Atualizado o `AGENTS.md` para orientar agentes a não gerar nem versionar screenshots/evidências visuais em alterações de frontend, exceto quando solicitado explicitamente pelo usuário.
+
+## 2026-06-07 — Ajustes visuais da aba Backtest
+- Reorganizados os gráficos da aba **Backtest** para exibir três pizzas na mesma linha em telas largas.
+- Adicionado novo gráfico de pizza para comparar sinais que geraram trades contra sinais que não geraram trades.
+- Limitada a tabela de backtest para mostrar somente os 10 trades mais recentes carregados.

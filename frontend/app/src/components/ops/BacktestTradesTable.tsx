@@ -35,9 +35,13 @@ const outcomeStyles = (outcome: string | null | undefined) => {
   return undefined
 }
 
+const MAX_VISIBLE_TRADES = 10
+
 const BacktestTradesTable: FC<Props> = ({ trades, loading, error }) => {
   if (error) return <Alert severity="error">Falha ao carregar trades de backtest: {error.message}</Alert>
   if (!loading && trades.length === 0) return <Alert severity="info">Sem trades de backtest.</Alert>
+
+  const visibleTrades = trades.slice(0, MAX_VISIBLE_TRADES)
 
   return (
     <TableContainer component={Paper} variant="outlined">
@@ -57,14 +61,14 @@ const BacktestTradesTable: FC<Props> = ({ trades, loading, error }) => {
           </TableRow>
         </TableHead>
         <TableBody>
-          {trades.map((t, i) => (
+          {visibleTrades.map((t, i) => (
             <TableRow key={`${t.ticker}-${t.dateRef}-${i}`}>
               <TableCell sx={{ minWidth: 84, whiteSpace: 'nowrap' }}>{t.dateRef ?? '—'}</TableCell><TableCell>{t.ticker}</TableCell><TableCell>{t.side}</TableCell><TableCell sx={{ minWidth: 84, whiteSpace: 'nowrap' }}>{t.entryDate ?? '—'}</TableCell><TableCell align="right">{fmt(t.entryPrice)}</TableCell><TableCell sx={{ minWidth: 84, whiteSpace: 'nowrap' }}>{t.exitDate ?? '—'}</TableCell><TableCell align="right">{fmt(t.exitPrice)}</TableCell><TableCell align="right">{t.daysInTrade ?? '—'}</TableCell><TableCell align="right">{fmt(t.entryLimitPrice)}</TableCell><TableCell align="right">{fmt(t.entrySignalScore)}</TableCell><TableCell align="right">{fmt(t.entry)}</TableCell><TableCell align="right">{fmt(t.exit)}</TableCell><TableCell align="right">{fmt(t.pnlPct)}</TableCell><TableCell sx={outcomeStyles(t.outcome)}>{t.outcome ?? '—'}</TableCell><TableCell sx={{ minWidth: 132, whiteSpace: 'nowrap' }}>{t.createdAt ? dayjs(t.createdAt).format('YYYY-MM-DD HH:mm') : '—'}</TableCell>
             </TableRow>
           ))}
         </TableBody>
       </Table>
-      <Typography variant="caption" sx={{ p: 1, display: 'block' }}>Mostrando os {trades.length} trades mais recentes.</Typography>
+      <Typography variant="caption" sx={{ p: 1, display: 'block' }}>Mostrando os {visibleTrades.length} trades mais recentes.</Typography>
     </TableContainer>
   )
 }
