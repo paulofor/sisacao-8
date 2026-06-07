@@ -19,6 +19,35 @@ import org.mockito.ArgumentCaptor;
 class BigQueryOpsClientTest {
 
     @Test
+    void shouldQuerySignalsByDateJoiningDailyCandles() throws Exception {
+        BigQuery bigQuery = mock(BigQuery.class);
+        TableResult tableResult = mock(TableResult.class);
+        doReturn(List.of()).when(tableResult).iterateAll();
+        doReturn(tableResult).when(bigQuery).query(any(QueryJobConfiguration.class));
+
+        OpsBigQueryProperties properties = new OpsBigQueryProperties();
+        properties.setProjectId("ingestaokraken");
+        properties.setSignalsTableDataset("cotacao_intraday");
+        properties.setSignalsTableId("sinais_eod");
+        properties.setDailyCandlesTableDataset("cotacao_intraday");
+        properties.setDailyCandlesTableId("cotacao_ohlcv_diario");
+
+        BigQueryOpsClient client = new BigQueryOpsClient(bigQuery, properties);
+
+        client.fetchSignalsByDate(LocalDate.parse("2026-04-10"));
+
+        ArgumentCaptor<QueryJobConfiguration> queryCaptor = ArgumentCaptor.forClass(QueryJobConfiguration.class);
+        verify(bigQuery).query(queryCaptor.capture());
+        QueryJobConfiguration queryConfig = queryCaptor.getValue();
+
+        assertThat(queryConfig.getQuery())
+                .contains("FROM `ingestaokraken.cotacao_intraday.sinais_eod` s LEFT JOIN `ingestaokraken.cotacao_intraday.cotacao_ohlcv_diario` d")
+                .contains("d.data_pregao = COALESCE(s.valid_for, s.date_ref)")
+                .contains("WHERE s.date_ref = @date");
+        assertThat(queryConfig.getNamedParameters().get("date").getValue()).isEqualTo("2026-04-10");
+    }
+
+    @Test
     void shouldQuerySignalsHistoryWithLimitParameter() throws Exception {
         BigQuery bigQuery = mock(BigQuery.class);
         TableResult tableResult = mock(TableResult.class);
@@ -102,7 +131,6 @@ class BigQueryOpsClientTest {
         assertThat(queries.get(1).getNamedParameters().get("from").getValue()).isEqualTo("2026-04-10");
         assertThat(queries.get(1).getNamedParameters().get("to").getValue()).isEqualTo("2026-04-17");
     }
-
 
     @Test
     void shouldFallbackWhenSignalsNextViewQueryFails() throws Exception {

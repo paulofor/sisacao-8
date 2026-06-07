@@ -1,10 +1,12 @@
 package com.sisacao.backend.ops;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.when;
 
 import com.sisacao.backend.ops.bigquery.BigQueryOpsClient;
 import com.sisacao.backend.ops.bigquery.OpsBigQueryProperties;
+import java.time.LocalDate;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -23,6 +25,24 @@ class OpsServiceTest {
 
     @InjectMocks
     private OpsService opsService;
+
+
+    @Test
+    void shouldFetchSignalsByDate() {
+        LocalDate date = LocalDate.parse("2024-10-31");
+        when(bigQueryOpsClient.fetchSignalsByDate(date)).thenReturn(List.of());
+
+        opsService.getSignalsByDate(date);
+
+        org.mockito.Mockito.verify(bigQueryOpsClient).fetchSignalsByDate(date);
+    }
+
+    @Test
+    void shouldRejectNullSignalsByDate() {
+        assertThatThrownBy(() -> opsService.getSignalsByDate(null))
+                .isInstanceOf(OpsValidationException.class)
+                .hasMessageContaining("date");
+    }
 
     @Test
     void shouldCapBacktestLimitToTwoHundred() {
