@@ -28,6 +28,10 @@ const PROFIT_LOSS_SLICE_COLORS = {
   profit: '#2e7d32',
   loss: '#d32f2f',
 }
+const EXECUTION_SLICE_COLORS = {
+  executed: '#2e7d32',
+  notExecuted: '#f57c00',
+}
 
 const toOutcomeLabel = (outcome: string): string => {
   const labels: Record<string, string> = {
@@ -56,6 +60,16 @@ const buildBuckets = (trades: OpsBacktestTrade[]): OutcomeBucket[] => {
       color: OUTCOME_SLICE_COLORS[outcome] ?? FALLBACK_SLICE_COLORS[index % FALLBACK_SLICE_COLORS.length],
     }))
     .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, 'pt-BR'))
+}
+
+const buildExecutionBuckets = (trades: OpsBacktestTrade[]): OutcomeBucket[] => {
+  const executedCount = trades.filter(isExecutedBacktestTrade).length
+  const notExecutedCount = trades.length - executedCount
+
+  return [
+    { label: 'Geraram trade', count: executedCount, color: EXECUTION_SLICE_COLORS.executed },
+    { label: 'Não geraram trade', count: notExecutedCount, color: EXECUTION_SLICE_COLORS.notExecuted },
+  ].filter((bucket) => bucket.count > 0)
 }
 
 const buildProfitLossBuckets = (trades: OpsBacktestTrade[]): OutcomeBucket[] => {
@@ -99,7 +113,7 @@ const renderPieChart = (
 
   if (totalCount === 0) {
     return (
-      <Paper variant="outlined" sx={{ p: 2 }}>
+      <Paper variant="outlined" sx={{ p: 2, height: '100%' }}>
         <Stack spacing={1.5}>
           <Typography variant="h6">{title}</Typography>
           <Typography variant="body2" color="text.secondary">
@@ -114,18 +128,18 @@ const renderPieChart = (
   const pieBackground = buildPieBackground(buckets, totalCount)
 
   return (
-    <Paper variant="outlined" sx={{ p: 2 }}>
-      <Stack spacing={1.5}>
+    <Paper variant="outlined" sx={{ p: 2, height: '100%' }}>
+      <Stack spacing={1.5} sx={{ height: '100%' }}>
         <Typography variant="h6">{title}</Typography>
         <Typography variant="body2" color="text.secondary">
           {description}
         </Typography>
 
-        <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems="center">
+        <Stack direction="column" spacing={2} alignItems="center">
           <Box
             sx={{
-              width: 220,
-              height: 220,
+              width: { xs: 180, sm: 200 },
+              height: { xs: 180, sm: 200 },
               borderRadius: '50%',
               background: pieBackground,
               position: 'relative',
@@ -174,20 +188,31 @@ const BacktestOutcomesBarChart: FC<Props> = ({ trades, loading, error }) => {
   if (!loading && trades.length === 0) return <Alert severity="info">Sem trades para montar o gráfico.</Alert>
 
   const executedTrades = trades.filter(isExecutedBacktestTrade)
-  if (!loading && executedTrades.length === 0) {
-    return <Alert severity="info">Nenhum trade executado para montar o gráfico.</Alert>
-  }
 
+  const executionBuckets = buildExecutionBuckets(trades)
   const outcomeBuckets = buildBuckets(executedTrades)
   const profitLossBuckets = buildProfitLossBuckets(executedTrades)
 
   return (
-    <Stack spacing={2}>
+    <Box
+      sx={{
+        display: 'grid',
+        gap: 2,
+        gridTemplateColumns: { xs: '1fr', lg: 'repeat(3, minmax(0, 1fr))' },
+        alignItems: 'stretch',
+      }}
+    >
+      {renderPieChart(
+        'Sinais que geraram trades',
+        'Gráfico de pizza separando os sinais do backtest entre os que acionaram entrada e os que não geraram trade.',
+        executionBuckets,
+        <Alert severity="info">Carregando sinais para montar o gráfico de geração de trades.</Alert>,
+      )}
       {renderPieChart(
         'Distribuição de resultados do backtest',
         'Gráfico de pizza por resultado (target, stop, expire, etc.) considerando apenas trades executados.',
         outcomeBuckets,
-        <Alert severity="info">Carregando trades executados para montar o gráfico.</Alert>,
+        <Alert severity="info">Nenhum trade executado para montar o gráfico de resultados.</Alert>,
       )}
       {renderPieChart(
         'Distribuição de lucro e prejuízo do backtest',
@@ -195,7 +220,7 @@ const BacktestOutcomesBarChart: FC<Props> = ({ trades, loading, error }) => {
         profitLossBuckets,
         <Alert severity="info">Nenhum trade executado com PnL informado para montar o gráfico de lucro e prejuízo.</Alert>,
       )}
-    </Stack>
+    </Box>
   )
 }
 
