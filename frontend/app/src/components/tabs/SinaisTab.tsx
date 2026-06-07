@@ -24,7 +24,6 @@ import { type FC, type FormEvent, useEffect, useMemo, useState } from 'react'
 import type { OpsSignalByDateEntry, OpsSignalHistoryEntry, OpsSignalNext, OpsSignalsHistoryFilters } from '../../api/ops'
 import { useOpsSignalsByDate } from '../../hooks/useOpsSignalsByDate'
 import PossibleTradesInsights from '../ops/PossibleTradesInsights'
-import SignalsHistoryTable from '../ops/SignalsHistoryTable'
 import SignalsNextTable from '../ops/SignalsNextTable'
 import { calculateSignalTradeMetrics } from '../ops/signalMetrics'
 
@@ -33,7 +32,6 @@ interface SinaisTabProps {
   signalsNextError?: Error | null
   signalsNextLoading: boolean
   signalsHistory: OpsSignalHistoryEntry[]
-  signalsHistoryError?: Error | null
   signalsHistoryLoading: boolean
   historyFilters: OpsSignalsHistoryFilters
   onHistoryFiltersChange: (filters: OpsSignalsHistoryFilters) => void
@@ -148,7 +146,6 @@ const SinaisTab: FC<SinaisTabProps> = ({
   signalsNextError,
   signalsNextLoading,
   signalsHistory,
-  signalsHistoryError,
   signalsHistoryLoading,
   historyFilters,
   onHistoryFiltersChange,
@@ -455,7 +452,6 @@ const SinaisTab: FC<SinaisTabProps> = ({
         emptyMessage="Sem histórico no período selecionado para estimar possíveis trades."
       />
 
-      <SignalsHistoryTable signals={signalsHistory} isLoading={signalsHistoryLoading} error={signalsHistoryError} />
     </Stack>
   )
 }
