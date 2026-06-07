@@ -140,3 +140,9 @@
 - Adicionada a coluna `Trade` com chips `Gerou trade`/`Sem trade` e destaque visual em verde na linha do sinal que acionou entrada.
 - Ajustado o texto explicativo do card para deixar claro que a tela identifica os sinais que acionaram a entrada do trade.
 - Validações executadas no frontend: `npm run lint`, `npm run build` e captura de screenshot local com Playwright.
+
+## 2026-06-07 — Simplificação da aba Sinais
+- Removidos da aba **Sinais** os cards/blocos **Filtros — Próximo Pregão**, **Simulação de possíveis trades — Próximo pregão**, **Histórico — Período** e **Simulação de possíveis trades — Histórico filtrado**.
+- Ajustado o componente da aba para exibir a tabela de próximo pregão sem filtros locais e eliminar a consulta de histórico que era usada apenas pelos blocos removidos.
+- Atualizado o texto introdutório para refletir os blocos que permanecem na tela.
+- Removida a evidência visual em screenshot porque não é necessária para esta alteração.
