@@ -2,6 +2,7 @@ import {
   Alert,
   Button,
   Card,
+  Chip,
   CardContent,
   FormControl,
   Grid,
@@ -74,6 +75,21 @@ const formatDate = (value: string | null) => {
   return parsed.isValid() ? parsed.format('DD/MM/YYYY') : value
 }
 
+const signalGeneratedTrade = (signal: OpsSignalByDateEntry): boolean => {
+  if (signal.entry === null) {
+    return false
+  }
+
+  const side = signal.side?.toUpperCase()
+  if (side === 'BUY') {
+    return signal.nextDayLow !== null && signal.nextDayLow <= signal.entry
+  }
+  if (side === 'SELL') {
+    return signal.nextDayHigh !== null && signal.nextDayHigh >= signal.entry
+  }
+  return false
+}
+
 const SignalsByDateTable: FC<{
   signals: OpsSignalByDateEntry[]
   isLoading: boolean
@@ -97,12 +113,13 @@ const SignalsByDateTable: FC<{
           <TableCell>Mínimo</TableCell>
           <TableCell>Score</TableCell>
           <TableCell>Rank</TableCell>
+          <TableCell>Trade</TableCell>
         </TableRow>
       </TableHead>
       <TableBody>
         {isLoading && signals.length === 0 ? (
           <TableRow>
-            <TableCell colSpan={10} align="center">
+            <TableCell colSpan={11} align="center">
               <Typography variant="body2" color="text.secondary">
                 Buscando sinais da data...
               </Typography>
@@ -110,28 +127,52 @@ const SignalsByDateTable: FC<{
           </TableRow>
         ) : null}
 
-        {signals.map((signal) => (
-          <TableRow key={`${signal.dateRef}-${signal.ticker}-${signal.rank}`} hover>
-            <TableCell>
-              <Typography variant="body2" fontWeight={600} color="text.primary">
-                {signal.ticker}
-              </Typography>
-            </TableCell>
-            <TableCell>{signal.side}</TableCell>
-            <TableCell>{formatPrice(signal.entry)}</TableCell>
-            <TableCell>{formatPrice(signal.target)}</TableCell>
-            <TableCell>{formatPrice(signal.stop)}</TableCell>
-            <TableCell>{formatDate(signal.nextTradingDay ?? signal.validFor)}</TableCell>
-            <TableCell>{formatPrice(signal.nextDayHigh)}</TableCell>
-            <TableCell>{formatPrice(signal.nextDayLow)}</TableCell>
-            <TableCell>{signal.score ?? '—'}</TableCell>
-            <TableCell>{signal.rank ?? '—'}</TableCell>
-          </TableRow>
-        ))}
+        {signals.map((signal) => {
+          const generatedTrade = signalGeneratedTrade(signal)
+
+          return (
+            <TableRow
+              key={`${signal.dateRef}-${signal.ticker}-${signal.rank}`}
+              hover
+              sx={
+                generatedTrade
+                  ? {
+                      '& td': { borderBottomColor: 'success.light' },
+                      '&.MuiTableRow-hover:hover': { backgroundColor: '#dff3e2' },
+                      backgroundColor: '#edf7ed',
+                      boxShadow: 'inset 4px 0 0 #2e7d32',
+                    }
+                  : undefined
+              }
+            >
+              <TableCell>
+                <Typography variant="body2" fontWeight={600} color="text.primary">
+                  {signal.ticker}
+                </Typography>
+              </TableCell>
+              <TableCell>{signal.side}</TableCell>
+              <TableCell>{formatPrice(signal.entry)}</TableCell>
+              <TableCell>{formatPrice(signal.target)}</TableCell>
+              <TableCell>{formatPrice(signal.stop)}</TableCell>
+              <TableCell>{formatDate(signal.nextTradingDay ?? signal.validFor)}</TableCell>
+              <TableCell>{formatPrice(signal.nextDayHigh)}</TableCell>
+              <TableCell>{formatPrice(signal.nextDayLow)}</TableCell>
+              <TableCell>{signal.score ?? '—'}</TableCell>
+              <TableCell>{signal.rank ?? '—'}</TableCell>
+              <TableCell>
+                {generatedTrade ? (
+                  <Chip color="success" label="Gerou trade" size="small" variant="filled" />
+                ) : (
+                  <Chip label="Sem trade" size="small" variant="outlined" />
+                )}
+              </TableCell>
+            </TableRow>
+          )
+        })}
 
         {!isLoading && signals.length === 0 ? (
           <TableRow>
-            <TableCell colSpan={10} align="center">
+            <TableCell colSpan={11} align="center">
               <Typography variant="body2" color="text.secondary">
                 Nenhum sinal encontrado para a data selecionada.
               </Typography>
@@ -334,7 +375,8 @@ const SinaisTab: FC<SinaisTabProps> = ({
               Sinais por data e pregão seguinte
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Escolha a data de geração dos sinais para ver os tickers daquele dia e o máximo/mínimo do pregão seguinte.
+              Escolha a data de geração dos sinais para ver os tickers daquele dia, o máximo/mínimo do pregão seguinte
+              e quais sinais acionaram a entrada do trade.
             </Typography>
           </Stack>
           <Stack component="form" direction={{ xs: 'column', md: 'row' }} spacing={2} onSubmit={handleSignalsByDateSubmit}>
