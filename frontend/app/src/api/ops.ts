@@ -50,6 +50,12 @@ export interface OpsSignalHistoryEntry extends OpsSignalNext {
   dateRef: string | null
 }
 
+export interface OpsSignalByDateEntry extends OpsSignalHistoryEntry {
+  nextTradingDay: string | null
+  nextDayHigh: number | null
+  nextDayLow: number | null
+}
+
 export interface OpsSignalsHistoryFilters {
   from: string
   to: string
@@ -287,6 +293,31 @@ export const fetchOpsSignalsHistory = async (
       score: toNumber(record.score),
       rank: toNumber(record.rank),
       createdAt: toIsoDateTime(record.createdAt ?? record.created_at ?? record.timestamp),
+    }
+  })
+}
+
+export const fetchOpsSignalsByDate = async (date: string): Promise<OpsSignalByDateEntry[]> => {
+  const response = await apiClient.get<unknown>('/ops/signals/by-date', { params: { date } })
+  const items = Array.isArray(response.data) ? response.data : []
+
+  return items.map((item) => {
+    const record = item as Record<string, unknown>
+
+    return {
+      dateRef: toIsoDate(record.dateRef ?? record.date_ref),
+      validFor: toIsoDate(record.validFor ?? record.valid_for ?? record.validDate),
+      ticker: asString(record.ticker) || '—',
+      side: (asUpperString(record.side) as OpsSignalSide) ?? '—',
+      entry: toNumber(record.entry ?? record.entry_price ?? record.preco_entrada),
+      target: toNumber(record.target ?? record.target_price ?? record.preco_alvo),
+      stop: toNumber(record.stop ?? record.stop_loss ?? record.preco_stop),
+      score: toNumber(record.score),
+      rank: toNumber(record.rank),
+      createdAt: toIsoDateTime(record.createdAt ?? record.created_at ?? record.timestamp),
+      nextTradingDay: toIsoDate(record.nextTradingDay ?? record.next_trading_day),
+      nextDayHigh: toNumber(record.nextDayHigh ?? record.next_day_high ?? record.high),
+      nextDayLow: toNumber(record.nextDayLow ?? record.next_day_low ?? record.low),
     }
   })
 }

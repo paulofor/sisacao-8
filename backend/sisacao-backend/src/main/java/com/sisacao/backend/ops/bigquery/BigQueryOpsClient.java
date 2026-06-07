@@ -9,11 +9,12 @@ import com.google.cloud.bigquery.QueryParameterValue;
 import com.google.cloud.bigquery.TableResult;
 import com.sisacao.backend.ops.DqCheck;
 import com.sisacao.backend.ops.OpsDataAccessException;
+import com.sisacao.backend.ops.OpsBacktestTrade;
 import com.sisacao.backend.ops.OpsIncident;
 import com.sisacao.backend.ops.OpsOverview;
-import com.sisacao.backend.ops.OpsBacktestTrade;
 import com.sisacao.backend.ops.PipelineJobStatus;
 import com.sisacao.backend.ops.Signal;
+import com.sisacao.backend.ops.SignalByDateEntry;
 import com.sisacao.backend.ops.SignalHistoryEntry;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -139,6 +140,22 @@ public class BigQueryOpsClient {
         return trades;
     }
 
+    public List<SignalByDateEntry> fetchSignalsByDate(LocalDate date) {
+        Map<String, QueryParameterValue> params = Map.of("date", QueryParameterValue.date(date.toString()));
+        TableResult result = runQuery(buildSignalsByDateSql(), params);
+        List<SignalByDateEntry> signals = new ArrayList<>();
+        for (FieldValueList row : result.iterateAll()) {
+            signals.add(toSignalByDate(row));
+        }
+        List<SignalByDateEntry> orderedSignals = signals.stream()
+                .sorted(Comparator.comparing(
+                                SignalByDateEntry::rank,
+                                Comparator.nullsLast(Integer::compareTo))
+                        .thenComparing(SignalByDateEntry::ticker, Comparator.nullsLast(String::compareTo)))
+                .toList();
+        return Collections.unmodifiableList(orderedSignals);
+    }
+
     public List<SignalHistoryEntry> fetchSignalsHistory(LocalDate from, LocalDate to, int limit) {
         Map<String, QueryParameterValue> params = new LinkedHashMap<>();
         params.put("limit", QueryParameterValue.int64(limit));
@@ -247,6 +264,23 @@ public class BigQueryOpsClient {
                 getTimestamp(row, "createdAt", "created_at"));
     }
 
+    private SignalByDateEntry toSignalByDate(FieldValueList row) {
+        return new SignalByDateEntry(
+                getDate(row, "dateRef", "date_ref"),
+                getDate(row, "validFor", "valid_for"),
+                getString(row, "ticker"),
+                getString(row, "side"),
+                getDouble(row, "entry"),
+                getDouble(row, "target"),
+                getDouble(row, "stop"),
+                getDouble(row, "score"),
+                Optional.ofNullable(getLong(row, "rank")).map(Long::intValue).orElse(null),
+                getTimestamp(row, "createdAt", "created_at"),
+                getDate(row, "nextTradingDay", "next_trading_day"),
+                getDouble(row, "nextDayHigh", "next_day_high"),
+                getDouble(row, "nextDayLow", "next_day_low"));
+    }
+
     private SignalHistoryEntry toSignalHistory(FieldValueList row) {
         return new SignalHistoryEntry(
                 getDate(row, "dateRef", "date_ref"),
@@ -285,6 +319,19 @@ public class BigQueryOpsClient {
         return String.format("`%s.%s.%s`", projectId, dataset, tableId);
     }
 
+    private String qualifiedDailyCandlesTable() {
+        String dataset = Optional.ofNullable(properties.getDailyCandlesTableDataset())
+                .filter(value -> !value.isBlank())
+                .orElse("cotacao_intraday");
+        String tableId = Optional.ofNullable(properties.getDailyCandlesTableId())
+                .filter(value -> !value.isBlank())
+                .orElse("cotacao_ohlcv_diario");
+        String projectId = Optional.ofNullable(properties.getProjectId()).filter(value -> !value.isBlank()).orElse(null);
+        if (projectId == null) {
+            return String.format("`%s.%s`", dataset, tableId);
+        }
+        return String.format("`%s.%s.%s`", projectId, dataset, tableId);
+    }
 
     private String qualifiedBacktestTradesTable() {
         String dataset = Optional.ofNullable(properties.getBacktestTradesTableDataset())
@@ -299,6 +346,31 @@ public class BigQueryOpsClient {
         }
         return String.format("`%s.%s.%s`", projectId, dataset, tableId);
     }
+
+    private String buildSignalsByDateSql() {
+        return "SELECT "
+                + "s.date_ref AS dateRef, "
+                + "COALESCE(s.valid_for, s.date_ref) AS validFor, "
+                + "s.ticker, "
+                + "s.side, "
+                + "s.entry, "
+                + "s.target, "
+                + "s.stop, "
+                + "s.score, "
+                + "CAST(s.rank AS INT64) AS rank, "
+                + "s.created_at AS createdAt, "
+                + "d.data_pregao AS nextTradingDay, "
+                + "d.high AS nextDayHigh, "
+                + "d.low AS nextDayLow "
+                + "FROM "
+                + qualifiedSignalsTable()
+                + " s LEFT JOIN "
+                + qualifiedDailyCandlesTable()
+                + " d ON d.ticker = s.ticker AND d.data_pregao = COALESCE(s.valid_for, s.date_ref) "
+                + "WHERE s.date_ref = @date "
+                + "ORDER BY rank ASC NULLS LAST, score DESC NULLS LAST, ticker ASC";
+    }
+
     private String buildSignalsNextFallbackSql() {
         String table = qualifiedSignalsTable();
         return "SELECT "

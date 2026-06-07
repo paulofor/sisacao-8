@@ -124,6 +124,33 @@ class OpsControllerTest {
     }
 
     @Test
+    void shouldReturnSignalsByDateWithNextTradingDayRange() throws Exception {
+        List<SignalByDateEntry> signals = List.of(new SignalByDateEntry(
+                java.time.LocalDate.parse("2024-10-31"),
+                java.time.LocalDate.parse("2024-11-01"),
+                "VALE3",
+                "BUY",
+                70.0,
+                74.0,
+                68.0,
+                0.82,
+                1,
+                OffsetDateTime.now(ZoneOffset.UTC),
+                java.time.LocalDate.parse("2024-11-01"),
+                75.5,
+                69.8));
+        given(opsService.getSignalsByDate(java.time.LocalDate.parse("2024-10-31"))).willReturn(signals);
+
+        mockMvc.perform(get("/ops/signals/by-date").param("date", "2024-10-31"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].ticker", is("VALE3")))
+                .andExpect(jsonPath("$[0].nextTradingDay", is("2024-11-01")))
+                .andExpect(jsonPath("$[0].nextDayHigh", is(75.5)))
+                .andExpect(jsonPath("$[0].nextDayLow", is(69.8)));
+    }
+
+    @Test
     void shouldReturnSignalsHistory() throws Exception {
         List<SignalHistoryEntry> history = List.of(new SignalHistoryEntry(
                 java.time.LocalDate.parse("2024-10-31"),

@@ -45,6 +45,12 @@ public class OpsController {
         return opsService.getNextSignals();
     }
 
+    @GetMapping("/signals/by-date")
+    public List<SignalByDateEntry> getSignalsByDate(@RequestParam("date") String date) {
+        LocalDate selectedDate = parseDate(date, "date");
+        return opsService.getSignalsByDate(selectedDate);
+    }
+
     @GetMapping("/backtest/trades")
     public List<OpsBacktestTrade> getLatestBacktestTrades(
             @RequestParam(name = "limit", required = false) Integer limit) {

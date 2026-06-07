@@ -19,6 +19,8 @@ public class OpsBigQueryProperties {
     private int historyMaxRows = 200;
     private String backtestTradesTableDataset = "cotacao_intraday";
     private String backtestTradesTableId = "backtest_trades";
+    private String dailyCandlesTableDataset = "cotacao_intraday";
+    private String dailyCandlesTableId = "cotacao_ohlcv_diario";
 
     public boolean isEnabled() {
         return enabled;
@@ -146,6 +148,27 @@ public class OpsBigQueryProperties {
             this.backtestTradesTableId = backtestTradesTableId;
         }
     }
+
+    public String getDailyCandlesTableDataset() {
+        return dailyCandlesTableDataset;
+    }
+
+    public void setDailyCandlesTableDataset(String dailyCandlesTableDataset) {
+        if (dailyCandlesTableDataset != null && !dailyCandlesTableDataset.isBlank()) {
+            this.dailyCandlesTableDataset = dailyCandlesTableDataset;
+        }
+    }
+
+    public String getDailyCandlesTableId() {
+        return dailyCandlesTableId;
+    }
+
+    public void setDailyCandlesTableId(String dailyCandlesTableId) {
+        if (dailyCandlesTableId != null && !dailyCandlesTableId.isBlank()) {
+            this.dailyCandlesTableId = dailyCandlesTableId;
+        }
+    }
+
     public int getHistoryMaxRows() {
         return historyMaxRows;
     }

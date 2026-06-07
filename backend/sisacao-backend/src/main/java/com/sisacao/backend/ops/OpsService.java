@@ -39,6 +39,13 @@ public class OpsService {
         return bigQueryOpsClient.fetchNextSignals();
     }
 
+    public List<SignalByDateEntry> getSignalsByDate(LocalDate date) {
+        if (date == null) {
+            throw new OpsValidationException("O parâmetro 'date' é obrigatório.");
+        }
+        return bigQueryOpsClient.fetchSignalsByDate(date);
+    }
+
     public List<OpsBacktestTrade> getLatestBacktestTrades(Integer limit) {
         int sanitizedLimit = sanitizeBacktestLimit(limit);
         return bigQueryOpsClient.fetchLatestBacktestTrades(sanitizedLimit);
