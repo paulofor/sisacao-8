@@ -18,7 +18,7 @@ if __package__:
         DEFAULT_HORIZON_DAYS,
         DEFAULT_RANKING_KEY,
         MODEL_VERSION,
-        MAX_SIGNALS_PER_DAY,
+        DEFAULT_SIGNALS_PER_DAY,
         ConditionalSignal,
         compute_source_snapshot,
         generate_conditional_signals,
@@ -30,7 +30,7 @@ else:
         DEFAULT_HORIZON_DAYS,
         DEFAULT_RANKING_KEY,
         MODEL_VERSION,
-        MAX_SIGNALS_PER_DAY,
+        DEFAULT_SIGNALS_PER_DAY,
         ConditionalSignal,
         compute_source_snapshot,
         generate_conditional_signals,
@@ -57,9 +57,8 @@ ENV_TARGET_PCT = float(
 ENV_STOP_PCT = float(
     os.environ.get("SIGNAL_STOP_PCT", os.environ.get("STOP_PCT", "0.07"))
 )
-ENV_MAX_SIGNALS = min(
-    MAX_SIGNALS_PER_DAY,
-    max(1, int(os.environ.get("MAX_SIGNALS", str(MAX_SIGNALS_PER_DAY)))),
+ENV_MAX_SIGNALS = max(
+    1, int(os.environ.get("MAX_SIGNALS", str(DEFAULT_SIGNALS_PER_DAY)))
 )
 ENV_ALLOW_SELL = os.environ.get("ALLOW_SELL_SIGNALS", "true").lower() == "true"
 ENV_HORIZON_DAYS = int(os.environ.get("SIGNAL_HORIZON_DAYS", str(DEFAULT_HORIZON_DAYS)))
@@ -226,7 +225,7 @@ def _limit_signals(value: Any) -> int:
     except (TypeError, ValueError):
         parsed = ENV_MAX_SIGNALS
     parsed = max(1, parsed)
-    return min(parsed, MAX_SIGNALS_PER_DAY)
+    return parsed
 
 
 def _default_strategy_config() -> StrategyConfig:

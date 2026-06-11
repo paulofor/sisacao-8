@@ -12,7 +12,7 @@ from typing import Iterable, Mapping, MutableMapping, Sequence
 import pandas as pd  # type: ignore[import-untyped]
 
 MODEL_VERSION = "signals_v1"
-MAX_SIGNALS_PER_DAY = 5
+DEFAULT_SIGNALS_PER_DAY = 5
 DEFAULT_RANKING_KEY = "score_v1"
 DEFAULT_HORIZON_DAYS = 15
 
@@ -252,7 +252,7 @@ def _build_candidate(
 def generate_conditional_signals(
     rows: Iterable[Mapping[str, object]] | pd.DataFrame,
     *,
-    top_n: int = MAX_SIGNALS_PER_DAY,
+    top_n: int = DEFAULT_SIGNALS_PER_DAY,
     x_pct: float = 0.02,
     target_pct: float = 0.07,
     stop_pct: float = 0.07,
@@ -261,9 +261,9 @@ def generate_conditional_signals(
     ranking_key: str = DEFAULT_RANKING_KEY,
     backtest_metrics: Iterable[Mapping[str, object]] | pd.DataFrame | None = None,
 ) -> list[ConditionalSignal]:
-    """Generate conditional entries limited to ``top_n`` tickers."""
+    """Generate conditional entries limited to the configured ``top_n`` tickers."""
 
-    limit = min(max(0, int(top_n)), MAX_SIGNALS_PER_DAY)
+    limit = max(0, int(top_n))
     if limit == 0:
         return []
     if x_pct < 0:

@@ -160,3 +160,15 @@
 - Reorganizados os gráficos da aba **Backtest** para exibir três pizzas na mesma linha em telas largas.
 - Adicionado novo gráfico de pizza para comparar sinais que geraram trades contra sinais que não geraram trades.
 - Limitada a tabela de backtest para mostrar somente os 10 trades mais recentes carregados.
+
+## 2026-06-11 22:38:06 UTC — Análise do limite de 5 sinais por dia no backtest
+- Investigado por que a aba **Backtest** exibe grupos de até 5 registros por `Data Ref`.
+- Confirmado que o limite vem da geração EOD de sinais (`MAX_SIGNALS_PER_DAY = 5`) e não de um filtro específico da tela de backtest.
+- Confirmado que o backtest processa todos os sinais existentes para a data (`date_ref`) e persiste um resultado por sinal, portanto o volume diário refletido na tela acompanha a quantidade de sinais gerados no dia.
+- Verificado que a tela carrega até 200 registros no hook principal e mostra somente os 10 mais recentes na tabela visual.
+
+## 2026-06-11 22:42:19 UTC — Remoção do teto fixo de 5 sinais para backtest histórico
+- Ajustada a geração de sinais para manter 5 apenas como padrão operacional, sem teto hardcoded quando `top_n`/`max_signals` for configurado acima desse valor.
+- Atualizado o espelho da Cloud Function `eod_signals` para respeitar `MAX_SIGNALS` ou `strategy_config.max_signals` sem truncar automaticamente em 5.
+- Mantido o comportamento padrão de 5 sinais quando nenhuma configuração maior for informada, preservando a tela operacional de próximo pregão/top 5.
+- Atualizados testes para cobrir o padrão de 5 sinais e a possibilidade de gerar mais sinais para cenários de backtest/histórico.
