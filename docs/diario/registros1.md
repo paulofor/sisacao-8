@@ -167,8 +167,8 @@
 - Confirmado que o backtest processa todos os sinais existentes para a data (`date_ref`) e persiste um resultado por sinal, portanto o volume diário refletido na tela acompanha a quantidade de sinais gerados no dia.
 - Verificado que a tela carrega até 200 registros no hook principal e mostra somente os 10 mais recentes na tabela visual.
 
-## 2026-06-11 22:42:19 UTC — Remoção do teto fixo de 5 sinais para backtest histórico
-- Ajustada a geração de sinais para manter 5 apenas como padrão operacional, sem teto hardcoded quando `top_n`/`max_signals` for configurado acima desse valor.
-- Atualizado o espelho da Cloud Function `eod_signals` para respeitar `MAX_SIGNALS` ou `strategy_config.max_signals` sem truncar automaticamente em 5.
-- Mantido o comportamento padrão de 5 sinais quando nenhuma configuração maior for informada, preservando a tela operacional de próximo pregão/top 5.
-- Atualizados testes para cobrir o padrão de 5 sinais e a possibilidade de gerar mais sinais para cenários de backtest/histórico.
+## 2026-06-11 22:42:19 UTC — Backtest histórico em lote mantendo 5 sinais por dia
+- Corrigida a interpretação do requisito: o limite operacional continua sendo 5 sinais por `date_ref`; o ganho esperado é processar múltiplos dias passados na mesma invocação do backtest.
+- Restaurada a semântica de teto diário em `eod_signals`, mantendo `MAX_SIGNALS_PER_DAY = 5` e truncamento de `MAX_SIGNALS`/`max_signals` nesse limite por dia.
+- Atualizada a Cloud Function `backtest_daily` para aceitar intervalo (`date_from`/`date_to`) e para buscar/processar múltiplas datas pendentes de backlog com `BACKTEST_MAX_DATES_PER_RUN`/`limit`.
+- Adicionados testes cobrindo intervalo de dias úteis limitado e execução em lote de múltiplos `date_ref` na mesma chamada.

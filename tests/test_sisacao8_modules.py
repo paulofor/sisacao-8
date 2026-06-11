@@ -8,7 +8,6 @@ from sisacao8.intraday import build_intraday_candles
 from sisacao8.signals import (
     DEFAULT_HORIZON_DAYS,
     DEFAULT_RANKING_KEY,
-    DEFAULT_SIGNALS_PER_DAY,
     generate_conditional_signals,
 )
 
@@ -50,7 +49,7 @@ def test_build_intraday_candles_groups_quotes() -> None:
     assert second.data_quality_flags == ("NO_VOLUME_SOURCE", "SINGLE_QUOTE_BUCKET")
 
 
-def test_generate_conditional_signals_defaults_to_five_signals() -> None:
+def test_generate_conditional_signals_limits_top5() -> None:
     rows = []
     for idx in range(6):
         rows.append(
@@ -63,31 +62,12 @@ def test_generate_conditional_signals_defaults_to_five_signals() -> None:
         )
     df = pd.DataFrame(rows)
     signals = generate_conditional_signals(df)
-    assert len(signals) == DEFAULT_SIGNALS_PER_DAY
-    assert len({signal.ticker for signal in signals}) == DEFAULT_SIGNALS_PER_DAY
+    assert len(signals) == 5
+    assert len({signal.ticker for signal in signals}) == 5
     for signal in signals:
         assert 0 <= signal.score <= 1
         assert signal.horizon_days == DEFAULT_HORIZON_DAYS
         assert signal.ranking_key == DEFAULT_RANKING_KEY
-
-
-def test_generate_conditional_signals_allows_configured_limit_above_default() -> None:
-    rows = []
-    for idx in range(8):
-        rows.append(
-            {
-                "ticker": f"TICK{idx}",
-                "open": 10 + idx,
-                "close": 9 + idx,
-                "volume_financeiro": 1_000_000 - idx * 10,
-            }
-        )
-    df = pd.DataFrame(rows)
-
-    signals = generate_conditional_signals(df, top_n=8)
-
-    assert len(signals) == 8
-    assert len({signal.ticker for signal in signals}) == 8
 
 
 def test_generate_conditional_signals_chooses_sell_for_green_day() -> None:
