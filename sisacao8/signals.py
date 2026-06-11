@@ -292,9 +292,7 @@ def generate_conditional_signals(
     if "volume" in df.columns:
         df["volume"] = pd.to_numeric(df["volume"], errors="coerce")
     if "qtd_negociada" in df.columns:
-        df["qtd_negociada"] = pd.to_numeric(
-            df["qtd_negociada"], errors="coerce"
-        )
+        df["qtd_negociada"] = pd.to_numeric(df["qtd_negociada"], errors="coerce")
     df = df.dropna(subset=["close"])
 
     metrics_lookup = _prepare_metrics_lookup(backtest_metrics)
