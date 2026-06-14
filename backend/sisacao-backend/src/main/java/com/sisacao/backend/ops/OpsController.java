@@ -35,6 +35,23 @@ public class OpsController {
         return opsService.getLatestDqChecks();
     }
 
+    @GetMapping("/quant/inventory-summary")
+    public QuantDataInventorySummary getQuantDataInventorySummary() {
+        return opsService.getQuantDataInventorySummary();
+    }
+
+    @GetMapping("/quant/ticker-coverage")
+    public List<QuantTickerCoverage> getQuantTickerCoverage(
+            @RequestParam(name = "limit", required = false) Integer limit) {
+        return opsService.getQuantTickerCoverage(limit);
+    }
+
+    @GetMapping("/quant/data-quality-incidents")
+    public List<QuantDataQualityIncident> getQuantDataQualityIncidents(
+            @RequestParam(name = "limit", required = false) Integer limit) {
+        return opsService.getQuantDataQualityIncidents(limit);
+    }
+
     @GetMapping("/incidents/open")
     public List<OpsIncident> getOpenIncidents() {
         return opsService.getOpenIncidents();

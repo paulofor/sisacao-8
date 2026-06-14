@@ -13,6 +13,9 @@ import com.sisacao.backend.ops.OpsBacktestTrade;
 import com.sisacao.backend.ops.OpsIncident;
 import com.sisacao.backend.ops.OpsOverview;
 import com.sisacao.backend.ops.PipelineJobStatus;
+import com.sisacao.backend.ops.QuantDataInventorySummary;
+import com.sisacao.backend.ops.QuantDataQualityIncident;
+import com.sisacao.backend.ops.QuantTickerCoverage;
 import com.sisacao.backend.ops.Signal;
 import com.sisacao.backend.ops.SignalByDateEntry;
 import com.sisacao.backend.ops.SignalHistoryEntry;
@@ -78,6 +81,39 @@ public class BigQueryOpsClient {
             incidents.add(toIncident(row));
         }
         return Collections.unmodifiableList(incidents);
+    }
+
+    public QuantDataInventorySummary fetchQuantDataInventorySummary() {
+        String sql = "SELECT * FROM " + qualifiedQuantView(properties.getQuantInventorySummaryView()) + " LIMIT 1";
+        TableResult result = runQuery(sql, Map.of());
+        for (FieldValueList row : result.iterateAll()) {
+            return toQuantDataInventorySummary(row);
+        }
+        return new QuantDataInventorySummary(0L, 0L, 0L, 0L, null, null, 0L, 0L, null, null);
+    }
+
+    public List<QuantTickerCoverage> fetchQuantTickerCoverage(int limit) {
+        Map<String, QueryParameterValue> params = Map.of("limit", QueryParameterValue.int64(limit));
+        String sql = "SELECT * FROM " + qualifiedQuantView(properties.getQuantTickerCoverageView())
+                + " ORDER BY eligibility_status ASC, coverage_pct DESC, avg_financial_volume DESC LIMIT @limit";
+        TableResult result = runQuery(sql, params);
+        List<QuantTickerCoverage> rows = new ArrayList<>();
+        for (FieldValueList row : result.iterateAll()) {
+            rows.add(toQuantTickerCoverage(row));
+        }
+        return Collections.unmodifiableList(rows);
+    }
+
+    public List<QuantDataQualityIncident> fetchQuantDataQualityIncidents(int limit) {
+        Map<String, QueryParameterValue> params = Map.of("limit", QueryParameterValue.int64(limit));
+        String sql = "SELECT * FROM " + qualifiedQuantView(properties.getQuantDataQualityIncidentsView())
+                + " ORDER BY incident_date DESC, severity DESC, ticker ASC LIMIT @limit";
+        TableResult result = runQuery(sql, params);
+        List<QuantDataQualityIncident> rows = new ArrayList<>();
+        for (FieldValueList row : result.iterateAll()) {
+            rows.add(toQuantDataQualityIncident(row));
+        }
+        return Collections.unmodifiableList(rows);
     }
 
     public List<Signal> fetchNextSignals() {
@@ -251,6 +287,46 @@ public class BigQueryOpsClient {
                 getTimestamp(row, "createdAt", "created_at"));
     }
 
+    private QuantDataInventorySummary toQuantDataInventorySummary(FieldValueList row) {
+        return new QuantDataInventorySummary(
+                getLong(row, "active_tickers", "activeTickers"),
+                getLong(row, "total_tickers", "totalTickers"),
+                getLong(row, "daily_tickers", "dailyTickers"),
+                getLong(row, "intraday_tickers", "intradayTickers"),
+                getDate(row, "first_available_date", "firstAvailableDate"),
+                getDate(row, "last_available_date", "lastAvailableDate"),
+                getLong(row, "daily_candles", "dailyCandles"),
+                getLong(row, "intraday_candles", "intradayCandles"),
+                getDouble(row, "valid_data_pct", "validDataPct"),
+                getTimestamp(row, "last_update", "lastUpdate"));
+    }
+
+    private QuantTickerCoverage toQuantTickerCoverage(FieldValueList row) {
+        return new QuantTickerCoverage(
+                getString(row, "ticker"),
+                getString(row, "empresa", "company"),
+                getBoolean(row, "ativo", "active"),
+                getDate(row, "first_date", "firstDate"),
+                getDate(row, "last_date", "lastDate"),
+                getLong(row, "days_with_data", "daysWithData"),
+                getLong(row, "expected_days", "expectedDays"),
+                getDouble(row, "coverage_pct", "coveragePct"),
+                getDouble(row, "avg_financial_volume", "avgFinancialVolume"),
+                getLong(row, "invalid_price_days", "invalidPriceDays"),
+                getLong(row, "invalid_volume_days", "invalidVolumeDays"),
+                getLong(row, "duplicate_days", "duplicateDays"),
+                getString(row, "eligibility_status", "eligibilityStatus"));
+    }
+
+    private QuantDataQualityIncident toQuantDataQualityIncident(FieldValueList row) {
+        return new QuantDataQualityIncident(
+                getString(row, "incident_type", "incidentType"),
+                getString(row, "severity"),
+                getString(row, "ticker"),
+                getDate(row, "incident_date", "incidentDate"),
+                getString(row, "recommendation"));
+    }
+
     private Signal toSignal(FieldValueList row) {
         return new Signal(
                 getDate(row, "validFor", "valid_for"),
@@ -293,6 +369,18 @@ public class BigQueryOpsClient {
                 getDouble(row, "score"),
                 Optional.ofNullable(getLong(row, "rank")).map(Long::intValue).orElse(null),
                 getTimestamp(row, "createdAt", "created_at"));
+    }
+
+    private String qualifiedQuantView(String view) {
+        String dataset = Optional.ofNullable(properties.getQuantDataset())
+                .filter(value -> !value.isBlank())
+                .orElse("cotacao_intraday");
+        String viewName = Optional.ofNullable(view).filter(value -> !value.isBlank()).orElseThrow();
+        String projectId = Optional.ofNullable(properties.getProjectId()).filter(value -> !value.isBlank()).orElse(null);
+        if (projectId == null) {
+            return String.format("`%s.%s`", dataset, viewName);
+        }
+        return String.format("`%s.%s.%s`", projectId, dataset, viewName);
     }
 
     private String qualifiedView(String view) {
