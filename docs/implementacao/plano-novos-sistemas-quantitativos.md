@@ -29,6 +29,8 @@ O plano prioriza sistemas simples, auditáveis e estatisticamente testáveis ant
 
 ## 4. Fase 0 — Preparação e inventário dos dados
 
+**Status:** executada em 2026-06-14. Relatório técnico: [`docs/implementacao/fase0-inventario-dados-quantitativos.md`](fase0-inventario-dados-quantitativos.md). Script BigQuery: [`infra/bq/07_quant_phase0_inventory.sql`](../../infra/bq/07_quant_phase0_inventory.sql).
+
 ### Objetivo
 
 Mapear exatamente quais dados existem, qual a granularidade, quais ativos estão disponíveis, qual período histórico é confiável e quais lacunas precisam ser tratadas antes de gerar novos sistemas.
