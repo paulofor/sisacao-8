@@ -21,6 +21,10 @@ public class OpsBigQueryProperties {
     private String backtestTradesTableId = "backtest_trades";
     private String dailyCandlesTableDataset = "cotacao_intraday";
     private String dailyCandlesTableId = "cotacao_ohlcv_diario";
+    private String quantDataset = "cotacao_intraday";
+    private String quantInventorySummaryView = "vw_quant_data_inventory_summary";
+    private String quantTickerCoverageView = "vw_quant_ticker_coverage";
+    private String quantDataQualityIncidentsView = "vw_quant_data_quality_incidents";
 
     public boolean isEnabled() {
         return enabled;
@@ -166,6 +170,46 @@ public class OpsBigQueryProperties {
     public void setDailyCandlesTableId(String dailyCandlesTableId) {
         if (dailyCandlesTableId != null && !dailyCandlesTableId.isBlank()) {
             this.dailyCandlesTableId = dailyCandlesTableId;
+        }
+    }
+
+    public String getQuantDataset() {
+        return quantDataset;
+    }
+
+    public void setQuantDataset(String quantDataset) {
+        if (quantDataset != null && !quantDataset.isBlank()) {
+            this.quantDataset = quantDataset;
+        }
+    }
+
+    public String getQuantInventorySummaryView() {
+        return quantInventorySummaryView;
+    }
+
+    public void setQuantInventorySummaryView(String quantInventorySummaryView) {
+        if (quantInventorySummaryView != null && !quantInventorySummaryView.isBlank()) {
+            this.quantInventorySummaryView = quantInventorySummaryView;
+        }
+    }
+
+    public String getQuantTickerCoverageView() {
+        return quantTickerCoverageView;
+    }
+
+    public void setQuantTickerCoverageView(String quantTickerCoverageView) {
+        if (quantTickerCoverageView != null && !quantTickerCoverageView.isBlank()) {
+            this.quantTickerCoverageView = quantTickerCoverageView;
+        }
+    }
+
+    public String getQuantDataQualityIncidentsView() {
+        return quantDataQualityIncidentsView;
+    }
+
+    public void setQuantDataQualityIncidentsView(String quantDataQualityIncidentsView) {
+        if (quantDataQualityIncidentsView != null && !quantDataQualityIncidentsView.isBlank()) {
+            this.quantDataQualityIncidentsView = quantDataQualityIncidentsView;
         }
     }
 

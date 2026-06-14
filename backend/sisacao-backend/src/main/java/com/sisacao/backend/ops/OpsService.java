@@ -35,6 +35,18 @@ public class OpsService {
         return bigQueryOpsClient.fetchOpenIncidents();
     }
 
+    public QuantDataInventorySummary getQuantDataInventorySummary() {
+        return bigQueryOpsClient.fetchQuantDataInventorySummary();
+    }
+
+    public List<QuantTickerCoverage> getQuantTickerCoverage(Integer limit) {
+        return bigQueryOpsClient.fetchQuantTickerCoverage(sanitizeQuantLimit(limit));
+    }
+
+    public List<QuantDataQualityIncident> getQuantDataQualityIncidents(Integer limit) {
+        return bigQueryOpsClient.fetchQuantDataQualityIncidents(sanitizeQuantLimit(limit));
+    }
+
     public List<Signal> getNextSignals() {
         return bigQueryOpsClient.fetchNextSignals();
     }
@@ -64,6 +76,18 @@ public class OpsService {
         if (from.isAfter(to)) {
             throw new OpsValidationException("O parâmetro 'from' não pode ser posterior ao 'to'.");
         }
+    }
+
+    private int sanitizeQuantLimit(Integer limit) {
+        int defaultLimit = 100;
+        int maxRows = 500;
+        if (limit == null) {
+            return defaultLimit;
+        }
+        if (limit <= 0) {
+            throw new OpsValidationException("O parâmetro 'limit' deve ser maior que zero.");
+        }
+        return Math.min(limit, maxRows);
     }
 
     private int sanitizeBacktestLimit(Integer limit) {

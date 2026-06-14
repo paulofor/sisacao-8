@@ -368,3 +368,98 @@ export const fetchOpsBacktestTrades = async (limit = 50): Promise<OpsBacktestTra
     }
   })
 }
+
+export interface QuantDataInventorySummary {
+  activeTickers: number
+  totalTickers: number
+  dailyTickers: number
+  intradayTickers: number
+  firstAvailableDate: string | null
+  lastAvailableDate: string | null
+  dailyCandles: number
+  intradayCandles: number
+  validDataPct: number | null
+  lastUpdate: string | null
+}
+
+export interface QuantTickerCoverage {
+  ticker: string
+  company: string | null
+  active: boolean
+  firstDate: string | null
+  lastDate: string | null
+  daysWithData: number
+  expectedDays: number
+  coveragePct: number | null
+  avgFinancialVolume: number | null
+  invalidPriceDays: number
+  invalidVolumeDays: number
+  duplicateDays: number
+  eligibilityStatus: string
+}
+
+export interface QuantDataQualityIncident {
+  incidentType: string
+  severity: string
+  ticker: string
+  incidentDate: string | null
+  recommendation: string | null
+}
+
+export const fetchQuantDataInventorySummary = async (): Promise<QuantDataInventorySummary | null> => {
+  const response = await apiClient.get<unknown>('/ops/quant/inventory-summary')
+  const data = response.data as Record<string, unknown> | null
+  if (!data || typeof data !== 'object') {
+    return null
+  }
+  return {
+    activeTickers: toInteger(data.activeTickers ?? data.active_tickers),
+    totalTickers: toInteger(data.totalTickers ?? data.total_tickers),
+    dailyTickers: toInteger(data.dailyTickers ?? data.daily_tickers),
+    intradayTickers: toInteger(data.intradayTickers ?? data.intraday_tickers),
+    firstAvailableDate: toIsoDate(data.firstAvailableDate ?? data.first_available_date),
+    lastAvailableDate: toIsoDate(data.lastAvailableDate ?? data.last_available_date),
+    dailyCandles: toInteger(data.dailyCandles ?? data.daily_candles),
+    intradayCandles: toInteger(data.intradayCandles ?? data.intraday_candles),
+    validDataPct: toNumber(data.validDataPct ?? data.valid_data_pct),
+    lastUpdate: toIsoDateTime(data.lastUpdate ?? data.last_update),
+  }
+}
+
+export const fetchQuantTickerCoverage = async (limit = 100): Promise<QuantTickerCoverage[]> => {
+  const response = await apiClient.get<unknown>('/ops/quant/ticker-coverage', { params: { limit } })
+  const items = Array.isArray(response.data) ? response.data : []
+  return items.map((item) => {
+    const record = item as Record<string, unknown>
+    return {
+      ticker: asString(record.ticker, '—'),
+      company: asNullableString(record.company ?? record.empresa),
+      active: toBoolean(record.active ?? record.ativo),
+      firstDate: toIsoDate(record.firstDate ?? record.first_date),
+      lastDate: toIsoDate(record.lastDate ?? record.last_date),
+      daysWithData: toInteger(record.daysWithData ?? record.days_with_data),
+      expectedDays: toInteger(record.expectedDays ?? record.expected_days),
+      coveragePct: toNumber(record.coveragePct ?? record.coverage_pct),
+      avgFinancialVolume: toNumber(record.avgFinancialVolume ?? record.avg_financial_volume),
+      invalidPriceDays: toInteger(record.invalidPriceDays ?? record.invalid_price_days),
+      invalidVolumeDays: toInteger(record.invalidVolumeDays ?? record.invalid_volume_days),
+      duplicateDays: toInteger(record.duplicateDays ?? record.duplicate_days),
+      eligibilityStatus: asString(record.eligibilityStatus ?? record.eligibility_status, '—'),
+    }
+  })
+}
+
+export const fetchQuantDataQualityIncidents = async (limit = 100): Promise<QuantDataQualityIncident[]> => {
+  const response = await apiClient.get<unknown>('/ops/quant/data-quality-incidents', { params: { limit } })
+  const items = Array.isArray(response.data) ? response.data : []
+  return items.map((item) => {
+    const record = item as Record<string, unknown>
+    return {
+      incidentType: asString(record.incidentType ?? record.incident_type, '—'),
+      severity: asString(record.severity, '—'),
+      ticker: asString(record.ticker, '—'),
+      incidentDate: toIsoDate(record.incidentDate ?? record.incident_date),
+      recommendation: asNullableString(record.recommendation),
+    }
+  })
+}

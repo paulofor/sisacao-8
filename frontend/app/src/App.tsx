@@ -19,6 +19,7 @@ import BacktestTab from './components/tabs/BacktestTab'
 import ColetasTab from './components/tabs/ColetasTab'
 import IncidentesTab from './components/tabs/IncidentesTab'
 import OperacaoTab from './components/tabs/OperacaoTab'
+import QuantPhase0Tab from './components/tabs/QuantPhase0Tab'
 import SinaisTab from './components/tabs/SinaisTab'
 import { useCandlesTableDailyCounts } from './hooks/useCandlesTableDailyCounts'
 import { useDataCollectionMessages } from './hooks/useDataCollectionMessages'
@@ -32,6 +33,9 @@ import { useOpsIncidentsOpen } from './hooks/useOpsIncidentsOpen'
 import { useOpsOverview } from './hooks/useOpsOverview'
 import { useOpsPipeline } from './hooks/useOpsPipeline'
 import { useOpsSignalsNext } from './hooks/useOpsSignalsNext'
+import { useQuantDataInventorySummary } from './hooks/useQuantDataInventorySummary'
+import { useQuantDataQualityIncidents } from './hooks/useQuantDataQualityIncidents'
+import { useQuantTickerCoverage } from './hooks/useQuantTickerCoverage'
 
 const severityOptions: Array<'all' | DataCollectionMessageSeverity> = [
   'all',
@@ -54,7 +58,7 @@ const filterMessagesBySearch = (messages: DataCollectionMessage[], searchTerm: s
   })
 }
 
-type TabValue = 'coletas' | 'operacao' | 'sinais' | 'incidentes' | 'backtest'
+type TabValue = 'coletas' | 'operacao' | 'quant-fase0' | 'sinais' | 'incidentes' | 'backtest'
 
 type QueryResult = UseQueryResult<unknown, Error>
 
@@ -78,6 +82,9 @@ function App() {
   const opsSignalsNextQuery = useOpsSignalsNext()
   const opsIncidentsOpenQuery = useOpsIncidentsOpen()
   const opsBacktestTradesQuery = useOpsBacktestTrades(200)
+  const quantInventorySummaryQuery = useQuantDataInventorySummary()
+  const quantTickerCoverageQuery = useQuantTickerCoverage(150)
+  const quantDataQualityIncidentsQuery = useQuantDataQualityIncidents(150)
 
   const messages = useMemo(() => dataCollectionMessagesQuery.data ?? [], [dataCollectionMessagesQuery.data])
 
@@ -96,6 +103,7 @@ function App() {
       candlesTableDailyCountsQuery,
     ] as QueryResult[],
     operacao: [opsOverviewQuery, opsPipelineQuery, opsDqLatestQuery] as QueryResult[],
+    'quant-fase0': [quantInventorySummaryQuery, quantTickerCoverageQuery, quantDataQualityIncidentsQuery] as QueryResult[],
     sinais: [opsSignalsNextQuery] as QueryResult[],
     incidentes: [opsIncidentsOpenQuery] as QueryResult[],
     backtest: [opsBacktestTradesQuery] as QueryResult[],
@@ -159,6 +167,7 @@ function App() {
         >
           <Tab label="Coletas" value="coletas" />
           <Tab label="Operação" value="operacao" />
+          <Tab label="Fase 0 Quant" value="quant-fase0" />
           <Tab label="Sinais" value="sinais" />
           <Tab label="Incidentes" value="incidentes" />
           <Tab label="Backtest" value="backtest" />
@@ -205,6 +214,20 @@ function App() {
             dqChecks={opsDqLatestQuery.data ?? []}
             dqError={opsDqLatestQuery.error}
             dqLoading={opsDqLatestQuery.isLoading && (opsDqLatestQuery.data ?? []).length === 0}
+          />
+        ) : null}
+
+        {activeTab === 'quant-fase0' ? (
+          <QuantPhase0Tab
+            summary={quantInventorySummaryQuery.data}
+            summaryError={quantInventorySummaryQuery.error}
+            summaryLoading={quantInventorySummaryQuery.isLoading && !quantInventorySummaryQuery.data}
+            coverage={quantTickerCoverageQuery.data ?? []}
+            coverageError={quantTickerCoverageQuery.error}
+            coverageLoading={quantTickerCoverageQuery.isLoading && (quantTickerCoverageQuery.data ?? []).length === 0}
+            incidents={quantDataQualityIncidentsQuery.data ?? []}
+            incidentsError={quantDataQualityIncidentsQuery.error}
+            incidentsLoading={quantDataQualityIncidentsQuery.isLoading && (quantDataQualityIncidentsQuery.data ?? []).length === 0}
           />
         ) : null}
 
