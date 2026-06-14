@@ -90,6 +90,8 @@ Componentes sugeridos:
 
 ## 5. Fase 1 — Motor comum de backtest e métricas
 
+**Status:** preparada em 2026-06-14. Relatório técnico: [`docs/implementacao/fase1-motor-backtest-metricas.md`](fase1-motor-backtest-metricas.md). Script BigQuery: [`infra/bq/08_quant_phase1_backtest_engine.sql`](../../infra/bq/08_quant_phase1_backtest_engine.sql).
+
 ### Objetivo
 
 Criar um motor único de backtest para evitar que cada estratégia tenha regras próprias de execução, custos e métricas. Isso reduz viés e permite comparação justa.
