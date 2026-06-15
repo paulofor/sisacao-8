@@ -395,6 +395,8 @@ Componentes sugeridos:
 
 ## 10. Fase 6 — Simulação operacional em paper trading
 
+**Status:** preparada em 2026-06-15. Relatório técnico: [`docs/implementacao/fase6-paper-trading.md`](fase6-paper-trading.md). Script BigQuery: [`infra/bq/13_quant_phase6_paper_trading.sql`](../../infra/bq/13_quant_phase6_paper_trading.sql).
+
 ### Objetivo
 
 Acompanhar os sinais em tempo quase real sem colocar capital real, medindo se a operação simulada se comporta como o backtest.
