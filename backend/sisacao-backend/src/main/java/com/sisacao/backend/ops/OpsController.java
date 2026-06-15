@@ -74,6 +74,28 @@ public class OpsController {
         return opsService.getQuantRankingPerformance();
     }
 
+    @GetMapping("/quant/market-regime")
+    public List<QuantMarketRegime> getQuantMarketRegime(
+            @RequestParam(name = "limit", required = false) Integer limit) {
+        return opsService.getQuantMarketRegime(limit);
+    }
+
+    @GetMapping("/quant/exposure")
+    public List<QuantExposureRecommendation> getQuantExposureRecommendations(
+            @RequestParam(name = "limit", required = false) Integer limit) {
+        return opsService.getQuantExposureRecommendations(limit);
+    }
+
+    @GetMapping("/quant/strategy-regime-performance")
+    public List<QuantStrategyRegimePerformance> getQuantStrategyRegimePerformance() {
+        return opsService.getQuantStrategyRegimePerformance();
+    }
+
+    @GetMapping("/quant/filter-effectiveness")
+    public List<QuantFilterEffectiveness> getQuantFilterEffectiveness() {
+        return opsService.getQuantFilterEffectiveness();
+    }
+
     @GetMapping("/quant/strategies/{strategyId}")
     public QuantBaselineStrategy getQuantBaselineStrategy(@PathVariable String strategyId) {
         return opsService.getQuantBaselineStrategy(strategyId);
