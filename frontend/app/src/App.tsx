@@ -50,6 +50,8 @@ import { useQuantDataInventorySummary } from './hooks/useQuantDataInventorySumma
 import { useQuantBaselineStrategies } from './hooks/useQuantBaselineStrategies'
 import { useQuantDataQualityIncidents } from './hooks/useQuantDataQualityIncidents'
 import { useQuantStrategyDetailAlerts } from './hooks/useQuantStrategyDetailAlerts'
+import { useQuantRankingDaily } from './hooks/useQuantRankingDaily'
+import { useQuantRankingPerformance } from './hooks/useQuantRankingPerformance'
 import { useQuantTickerCoverage } from './hooks/useQuantTickerCoverage'
 
 const severityOptions: Array<'all' | DataCollectionMessageSeverity> = [
@@ -142,6 +144,8 @@ function App() {
   const quantDataQualityIncidentsQuery = useQuantDataQualityIncidents(150)
   const quantBaselineStrategiesQuery = useQuantBaselineStrategies()
   const quantStrategyDetailAlertsQuery = useQuantStrategyDetailAlerts()
+  const quantRankingDailyQuery = useQuantRankingDaily(150)
+  const quantRankingPerformanceQuery = useQuantRankingPerformance()
 
   const messages = useMemo(() => dataCollectionMessagesQuery.data ?? [], [dataCollectionMessagesQuery.data])
 
@@ -166,7 +170,9 @@ function App() {
     backtest: [opsBacktestTradesQuery] as QueryResult[],
     'quant-roadmap': selectedRoadmapKey === 'baseline'
       ? [quantBaselineStrategiesQuery, quantStrategyDetailAlertsQuery] as QueryResult[]
-      : [] as QueryResult[],
+      : selectedRoadmapKey === 'ranking'
+        ? [quantRankingDailyQuery, quantRankingPerformanceQuery] as QueryResult[]
+        : [] as QueryResult[],
   }
 
   const activeQueries = tabQueries[activeTab]
@@ -341,6 +347,12 @@ function App() {
             baselineAlerts={quantStrategyDetailAlertsQuery.data ?? []}
             baselineAlertsError={quantStrategyDetailAlertsQuery.error}
             baselineAlertsLoading={quantStrategyDetailAlertsQuery.isLoading && (quantStrategyDetailAlertsQuery.data ?? []).length === 0}
+            rankingDaily={quantRankingDailyQuery.data ?? []}
+            rankingDailyError={quantRankingDailyQuery.error}
+            rankingDailyLoading={quantRankingDailyQuery.isLoading && (quantRankingDailyQuery.data ?? []).length === 0}
+            rankingPerformance={quantRankingPerformanceQuery.data ?? []}
+            rankingPerformanceError={quantRankingPerformanceQuery.error}
+            rankingPerformanceLoading={quantRankingPerformanceQuery.isLoading && (quantRankingPerformanceQuery.data ?? []).length === 0}
           />
         ) : null}
           </Box>

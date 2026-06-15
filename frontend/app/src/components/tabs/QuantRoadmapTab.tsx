@@ -17,7 +17,7 @@ import {
 import dayjs from 'dayjs'
 import type { FC } from 'react'
 
-import type { QuantBaselineStrategy, QuantStrategyDetailAlert } from '../../api/ops'
+import type { QuantBaselineStrategy, QuantRankingDailyEntry, QuantRankingPerformance, QuantStrategyDetailAlert } from '../../api/ops'
 
 export type QuantRoadmapKey =
   | 'baseline'
@@ -46,6 +46,12 @@ interface QuantRoadmapTabProps {
   baselineAlerts: QuantStrategyDetailAlert[]
   baselineAlertsLoading: boolean
   baselineAlertsError?: Error | null
+  rankingDaily: QuantRankingDailyEntry[]
+  rankingDailyLoading: boolean
+  rankingDailyError?: Error | null
+  rankingPerformance: QuantRankingPerformance[]
+  rankingPerformanceLoading: boolean
+  rankingPerformanceError?: Error | null
 }
 
 const quantRoadmapItems: RoadmapItem[] = [
@@ -71,7 +77,7 @@ const quantRoadmapItems: RoadmapItem[] = [
     key: 'ranking',
     title: 'Ranking Diário de Oportunidades e Performance do Ranking',
     phase: 'Fase 3',
-    status: 'Backend pendente',
+    status: 'Com dados',
     goal: 'Visualizar ativos ranqueados, fatores do score e comprovar se scores maiores performam melhor historicamente.',
     dataNeeds: ['strategy_signals', 'asset_rankings', 'ranking_performance_by_decile'],
     screenPlan: [
@@ -331,6 +337,118 @@ const BaselineStrategiesScreen: FC<{
   )
 }
 
+
+const RankingScreen: FC<{
+  daily: QuantRankingDailyEntry[]
+  dailyLoading: boolean
+  dailyError?: Error | null
+  performance: QuantRankingPerformance[]
+  performanceLoading: boolean
+  performanceError?: Error | null
+}> = ({ daily, dailyLoading, dailyError, performance, performanceLoading, performanceError }) => {
+  const referenceDate = daily.find((item) => item.referenceDate)?.referenceDate
+  const modelCount = new Set(daily.map((item) => item.rankingModelId)).size
+  const operateCount = daily.filter((item) => item.actionSuggestion === 'operar').length
+  const avgScore = daily.length > 0 ? daily.reduce((total, item) => total + (item.finalScore ?? 0), 0) / daily.length : null
+
+  return (
+    <Stack spacing={3}>
+      <Stack spacing={1}>
+        <Typography variant="h4" color="text.primary" fontWeight={800}>Ranking Diário de Oportunidades</Typography>
+        <Typography variant="body1" color="text.secondary">
+          Tela operacional da Fase 3 com ativos ranqueados, decomposição de fatores e performance histórica por Top N.
+        </Typography>
+      </Stack>
+
+      {dailyError ? <Alert severity="error">Erro ao carregar ranking diário pelo endpoint /ops/quant/ranking/daily.</Alert> : null}
+      {performanceError ? <Alert severity="error">Erro ao carregar performance pelo endpoint /ops/quant/ranking/performance.</Alert> : null}
+      {dailyLoading ? <Skeleton variant="rounded" height={160} /> : null}
+
+      {!dailyLoading && !dailyError ? (
+        <Stack direction="row" flexWrap="wrap" gap={2}>
+          <MetricCard title="Data do ranking" value={formatDate(referenceDate)} helper="Última data materializada" />
+          <MetricCard title="Modelos ativos" value={formatNumber(modelCount)} helper="Configurações em teste" />
+          <MetricCard title="Ativos ranqueados" value={formatNumber(daily.length)} helper="Universo elegível" />
+          <MetricCard title="Sugestão operar" value={formatNumber(operateCount)} helper="Score e risco favoráveis" />
+          <MetricCard title="Score médio" value={formatDecimal(avgScore)} helper="Média dos registros carregados" />
+        </Stack>
+      ) : null}
+
+      {!dailyLoading && !dailyError && daily.length === 0 ? (
+        <Alert severity="warning">Nenhum ativo retornado pelo endpoint /ops/quant/ranking/daily. Aplique a view da Fase 3 e confirme dados diários elegíveis.</Alert>
+      ) : null}
+
+      {!dailyLoading && !dailyError && daily.length > 0 ? (
+        <Paper elevation={0} sx={{ p: 3, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+          <Stack spacing={2}>
+            <Typography variant="h5" fontWeight={800}>Oportunidades ranqueadas</Typography>
+            <TableContainer sx={{ maxHeight: 560 }}>
+              <Table stickyHeader size="small" aria-label="Ranking diário de oportunidades">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Rank</TableCell>
+                    <TableCell>Ativo</TableCell>
+                    <TableCell>Modelo</TableCell>
+                    <TableCell align="right">Score</TableCell>
+                    <TableCell align="right">Preço</TableCell>
+                    <TableCell align="right">Liquidez</TableCell>
+                    <TableCell align="right">Risco</TableCell>
+                    <TableCell align="right">Ret. 5d</TableCell>
+                    <TableCell>Fatores</TableCell>
+                    <TableCell>Sugestão</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {daily.map((item) => (
+                    <TableRow key={`${item.rankingModelId}-${item.referenceDate}-${item.rankingPosition}-${item.ticker}`} hover>
+                      <TableCell><Chip size="small" color={item.rankingPosition <= 5 ? 'primary' : 'default'} label={`#${item.rankingPosition}`} /></TableCell>
+                      <TableCell><Typography fontWeight={800}>{item.ticker}</Typography><Typography variant="caption" color="text.secondary">Decil {item.rankingDecile}</Typography></TableCell>
+                      <TableCell><Typography variant="caption">{item.rankingModelId}</Typography></TableCell>
+                      <TableCell align="right">{formatDecimal(item.finalScore)}</TableCell>
+                      <TableCell align="right">{formatDecimal(item.currentPrice)}</TableCell>
+                      <TableCell align="right">{formatNumber(item.liquidityValue)}</TableCell>
+                      <TableCell align="right">{formatPct(item.estimatedRisk)}</TableCell>
+                      <TableCell align="right">{formatPct(item.forwardReturn5d)}</TableCell>
+                      <TableCell>
+                        <Stack direction="row" gap={0.5} flexWrap="wrap">
+                          <Chip size="small" variant="outlined" label={`FR ${formatDecimal(item.relativeStrengthFactor)}`} />
+                          <Chip size="small" variant="outlined" label={`Mom ${formatDecimal(item.shortMomentumFactor)}`} />
+                          <Chip size="small" variant="outlined" label={`Vol ${formatDecimal(item.relativeVolumeFactor)}`} />
+                        </Stack>
+                      </TableCell>
+                      <TableCell><Chip size="small" color={statusColor(item.actionSuggestion ?? '')} label={normalizeLabel(item.actionSuggestion)} /></TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Stack>
+        </Paper>
+      ) : null}
+
+      <Paper elevation={0} sx={{ p: 3, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+        <Stack spacing={2}>
+          <Typography variant="h5" fontWeight={800}>Performance histórica do ranking</Typography>
+          {performanceLoading ? <LinearProgress /> : null}
+          {!performanceLoading && performance.length === 0 ? <Alert severity="info">Sem métricas históricas por Top N/decil.</Alert> : null}
+          {performance.length > 0 ? (
+            <TableContainer>
+              <Table size="small" aria-label="Performance histórica do ranking">
+                <TableHead><TableRow><TableCell>Modelo</TableCell><TableCell align="right">Top N</TableCell><TableCell align="right">Dias</TableCell><TableCell align="right">Retorno 5d</TableCell><TableCell align="right">Excesso vs aleatório</TableCell><TableCell align="right">Taxa positiva</TableCell><TableCell align="right">Top - bottom</TableCell><TableCell>Status</TableCell></TableRow></TableHead>
+                <TableBody>{performance.map((item) => (
+                  <TableRow key={`${item.rankingModelId}-${item.topN}`} hover>
+                    <TableCell>{item.rankingModelId}</TableCell><TableCell align="right">{item.topN}</TableCell><TableCell align="right">{formatNumber(item.portfolioDays)}</TableCell><TableCell align="right">{formatPct(item.avgTopNReturn5d)}</TableCell><TableCell align="right">{formatPct(item.avgExcessVsRandom5d)}</TableCell><TableCell align="right">{formatPct(item.positiveDayRate)}</TableCell><TableCell align="right">{formatPct(item.topMinusBottomDecileReturn5d)}</TableCell><TableCell><Chip size="small" color={statusColor(item.rankingStatus ?? '')} label={normalizeLabel(item.rankingStatus)} /></TableCell>
+                  </TableRow>
+                ))}</TableBody>
+              </Table>
+            </TableContainer>
+          ) : null}
+        </Stack>
+      </Paper>
+    </Stack>
+  )
+}
+
 const QuantRoadmapTab: FC<QuantRoadmapTabProps> = ({
   selectedKey,
   baselineStrategies,
@@ -339,8 +457,27 @@ const QuantRoadmapTab: FC<QuantRoadmapTabProps> = ({
   baselineAlerts,
   baselineAlertsLoading,
   baselineAlertsError,
+  rankingDaily,
+  rankingDailyLoading,
+  rankingDailyError,
+  rankingPerformance,
+  rankingPerformanceLoading,
+  rankingPerformanceError,
 }) => {
   const item = quantRoadmapItems.find((candidate) => candidate.key === selectedKey) ?? quantRoadmapItems[0]
+
+  if (item.key === 'ranking') {
+    return (
+      <RankingScreen
+        daily={rankingDaily}
+        dailyLoading={rankingDailyLoading}
+        dailyError={rankingDailyError}
+        performance={rankingPerformance}
+        performanceLoading={rankingPerformanceLoading}
+        performanceError={rankingPerformanceError}
+      />
+    )
+  }
 
   if (item.key === 'baseline') {
     return (

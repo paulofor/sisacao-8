@@ -17,6 +17,8 @@ import com.sisacao.backend.ops.QuantDataInventorySummary;
 import com.sisacao.backend.ops.QuantDataQualityIncident;
 import com.sisacao.backend.ops.QuantBaselineStrategy;
 import com.sisacao.backend.ops.QuantStrategyDetailAlert;
+import com.sisacao.backend.ops.QuantRankingDailyEntry;
+import com.sisacao.backend.ops.QuantRankingPerformance;
 import com.sisacao.backend.ops.QuantTickerCoverage;
 import com.sisacao.backend.ops.Signal;
 import com.sisacao.backend.ops.SignalByDateEntry;
@@ -149,6 +151,31 @@ public class BigQueryOpsClient {
         List<QuantStrategyDetailAlert> rows = new ArrayList<>();
         for (FieldValueList row : result.iterateAll()) {
             rows.add(toQuantStrategyDetailAlert(row));
+        }
+        return Collections.unmodifiableList(rows);
+    }
+
+    public List<QuantRankingDailyEntry> fetchQuantRankingDaily(int limit) {
+        Map<String, QueryParameterValue> params = Map.of("limit", QueryParameterValue.int64(limit));
+        String sql = "SELECT * FROM " + qualifiedQuantView(properties.getQuantRankingDailyView())
+                + " WHERE reference_date = (SELECT MAX(reference_date) FROM "
+                + qualifiedQuantView(properties.getQuantRankingDailyView())
+                + ") ORDER BY ranking_model_id ASC, ranking_position ASC LIMIT @limit";
+        TableResult result = runQuery(sql, params);
+        List<QuantRankingDailyEntry> rows = new ArrayList<>();
+        for (FieldValueList row : result.iterateAll()) {
+            rows.add(toQuantRankingDailyEntry(row));
+        }
+        return Collections.unmodifiableList(rows);
+    }
+
+    public List<QuantRankingPerformance> fetchQuantRankingPerformance() {
+        String sql = "SELECT * FROM " + qualifiedQuantView(properties.getQuantRankingPerformanceView())
+                + " ORDER BY ranking_model_id ASC, top_n ASC";
+        TableResult result = runQuery(sql, Map.of());
+        List<QuantRankingPerformance> rows = new ArrayList<>();
+        for (FieldValueList row : result.iterateAll()) {
+            rows.add(toQuantRankingPerformance(row));
         }
         return Collections.unmodifiableList(rows);
     }
@@ -396,6 +423,49 @@ public class BigQueryOpsClient {
                 getDouble(row, "profit_factor", "profitFactor"),
                 getDouble(row, "max_drawdown_pct", "maxDrawdownPct"),
                 alerts);
+    }
+
+    private QuantRankingDailyEntry toQuantRankingDailyEntry(FieldValueList row) {
+        return new QuantRankingDailyEntry(
+                getString(row, "ranking_model_id", "rankingModelId"),
+                getString(row, "ranking_model_version", "rankingModelVersion"),
+                getDate(row, "reference_date", "referenceDate"),
+                getLong(row, "ranking_position", "rankingPosition"),
+                getLong(row, "ranking_decile", "rankingDecile"),
+                getString(row, "ticker"),
+                getDouble(row, "final_score", "finalScore"),
+                getDouble(row, "relative_strength_factor", "relativeStrengthFactor"),
+                getDouble(row, "short_momentum_factor", "shortMomentumFactor"),
+                getDouble(row, "relative_volume_factor", "relativeVolumeFactor"),
+                getDouble(row, "volatility_factor", "volatilityFactor"),
+                getDouble(row, "mean_distance_factor", "meanDistanceFactor"),
+                getDouble(row, "candle_quality_factor", "candleQualityFactor"),
+                getDouble(row, "index_regime_factor", "indexRegimeFactor"),
+                getDouble(row, "current_price", "currentPrice"),
+                getDouble(row, "liquidity_value", "liquidityValue"),
+                getDouble(row, "estimated_risk", "estimatedRisk"),
+                getString(row, "market_regime_label", "marketRegimeLabel"),
+                getDouble(row, "forward_return_5d", "forwardReturn5d"),
+                getString(row, "factor_breakdown_json", "factorBreakdownJson"),
+                getString(row, "action_suggestion", "actionSuggestion"),
+                getString(row, "confidence_label", "confidenceLabel"));
+    }
+
+    private QuantRankingPerformance toQuantRankingPerformance(FieldValueList row) {
+        return new QuantRankingPerformance(
+                getString(row, "ranking_model_id", "rankingModelId"),
+                getString(row, "ranking_model_version", "rankingModelVersion"),
+                getLong(row, "top_n", "topN"),
+                getLong(row, "portfolio_days", "portfolioDays"),
+                getDouble(row, "avg_top_n_return_5d", "avgTopNReturn5d"),
+                getDouble(row, "volatility_top_n_return_5d", "volatilityTopNReturn5d"),
+                getDouble(row, "positive_day_rate", "positiveDayRate"),
+                getDouble(row, "avg_excess_vs_random_5d", "avgExcessVsRandom5d"),
+                getDouble(row, "decile_return_correlation", "decileReturnCorrelation"),
+                getDouble(row, "top_decile_return_5d", "topDecileReturn5d"),
+                getDouble(row, "bottom_decile_return_5d", "bottomDecileReturn5d"),
+                getDouble(row, "top_minus_bottom_decile_return_5d", "topMinusBottomDecileReturn5d"),
+                getString(row, "ranking_status", "rankingStatus"));
     }
 
     private Signal toSignal(FieldValueList row) {

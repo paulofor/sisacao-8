@@ -27,6 +27,8 @@ public class OpsBigQueryProperties {
     private String quantDataQualityIncidentsView = "vw_quant_data_quality_incidents";
     private String quantBaselineStatusView = "vw_quant_phase2_baseline_status";
     private String quantStrategyDetailAlertsView = "vw_quant_phase2_strategy_detail_alerts";
+    private String quantRankingDailyView = "vw_quant_phase3_daily_asset_ranking";
+    private String quantRankingPerformanceView = "vw_quant_phase3_ranking_performance";
 
     public boolean isEnabled() {
         return enabled;
@@ -232,6 +234,26 @@ public class OpsBigQueryProperties {
     public void setQuantStrategyDetailAlertsView(String quantStrategyDetailAlertsView) {
         if (quantStrategyDetailAlertsView != null && !quantStrategyDetailAlertsView.isBlank()) {
             this.quantStrategyDetailAlertsView = quantStrategyDetailAlertsView;
+        }
+    }
+
+    public String getQuantRankingDailyView() {
+        return quantRankingDailyView;
+    }
+
+    public void setQuantRankingDailyView(String quantRankingDailyView) {
+        if (quantRankingDailyView != null && !quantRankingDailyView.isBlank()) {
+            this.quantRankingDailyView = quantRankingDailyView;
+        }
+    }
+
+    public String getQuantRankingPerformanceView() {
+        return quantRankingPerformanceView;
+    }
+
+    public void setQuantRankingPerformanceView(String quantRankingPerformanceView) {
+        if (quantRankingPerformanceView != null && !quantRankingPerformanceView.isBlank()) {
+            this.quantRankingPerformanceView = quantRankingPerformanceView;
         }
     }
 

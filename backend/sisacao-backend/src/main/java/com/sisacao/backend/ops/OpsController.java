@@ -63,6 +63,17 @@ public class OpsController {
         return opsService.getQuantStrategyDetailAlerts();
     }
 
+    @GetMapping("/quant/ranking/daily")
+    public List<QuantRankingDailyEntry> getQuantRankingDaily(
+            @RequestParam(name = "limit", required = false) Integer limit) {
+        return opsService.getQuantRankingDaily(limit);
+    }
+
+    @GetMapping("/quant/ranking/performance")
+    public List<QuantRankingPerformance> getQuantRankingPerformance() {
+        return opsService.getQuantRankingPerformance();
+    }
+
     @GetMapping("/quant/strategies/{strategyId}")
     public QuantBaselineStrategy getQuantBaselineStrategy(@PathVariable String strategyId) {
         return opsService.getQuantBaselineStrategy(strategyId);
