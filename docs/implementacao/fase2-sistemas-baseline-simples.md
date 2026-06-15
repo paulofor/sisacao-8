@@ -80,7 +80,7 @@ View para alertas automáticos na tela **Detalhe da Estratégia**:
 ## Decisões de implementação
 
 - As baselines usam um universo de pesquisa derivado da Fase 0: tickers `elegivel` entram diretamente, e tickers em `observacao` só entram quando mantêm cobertura mínima de 90%, volume financeiro suficiente, preços/volumes válidos e no máximo 3 duplicidades técnicas por ticker/data.
-- A camada de features deduplica `cotacao_ohlcv_diario` por `ticker`/`data_pregao`, mantendo o registro mais recente por `atualizado_em`/`ingestion_run_id`; isso evita travar a pesquisa por poucas duplicidades de carga sem liberar dados realmente ruins.
+- A camada de features deduplica `cotacao_ohlcv_diario` por `ticker`/`data_pregao`, mantendo o registro mais recente por `atualizado_em`; isso evita travar a pesquisa por poucas duplicidades de carga sem liberar dados realmente ruins.
 - A geração de sinais é feita em views, sem persistir trades automaticamente; a persistência deve acontecer quando o motor comum da Fase 1 processar os candidatos.
 - Os parâmetros ficam em JSON para permitir ajustes rápidos sem migração de schema a cada variação.
 - O ranking diário limita a seleção ao top 5 por data, em linha com a disciplina operacional já usada em sinais EOD.

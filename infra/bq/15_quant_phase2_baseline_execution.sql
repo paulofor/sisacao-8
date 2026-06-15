@@ -80,7 +80,7 @@ WITH signals AS (
         d.*,
         ROW_NUMBER() OVER (
           PARTITION BY d.ticker, d.data_pregao
-          ORDER BY d.atualizado_em DESC, d.ingestion_run_id DESC
+          ORDER BY d.atualizado_em DESC
         ) AS row_num
       FROM `ingestaokraken.cotacao_intraday.cotacao_ohlcv_diario` AS d
     )
