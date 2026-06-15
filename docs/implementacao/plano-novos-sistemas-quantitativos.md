@@ -168,6 +168,8 @@ Componentes sugeridos:
 
 ## 6. Fase 2 — Sistemas baseline simples
 
+**Status:** preparada em 2026-06-14. Relatório técnico: [`docs/implementacao/fase2-sistemas-baseline-simples.md`](fase2-sistemas-baseline-simples.md). Script BigQuery: [`infra/bq/09_quant_phase2_baseline_systems.sql`](../../infra/bq/09_quant_phase2_baseline_systems.sql).
+
 ### Objetivo
 
 Criar estratégias simples para medir se há estrutura explorável nos dados. Elas servem como referência para qualquer abordagem mais avançada.
