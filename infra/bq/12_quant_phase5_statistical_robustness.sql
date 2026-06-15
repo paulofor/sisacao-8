@@ -450,7 +450,7 @@ SELECT
     ]) AS alert
     WHERE alert IS NOT NULL
   ), ',') AS overfitting_alerts
-FROM oos
+FROM oos AS o
 LEFT JOIN wf
   ON wf.strategy_id = o.strategy_id AND wf.strategy_version = o.strategy_version
 LEFT JOIN costs
