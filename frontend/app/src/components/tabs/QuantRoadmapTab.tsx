@@ -17,7 +17,7 @@ import {
 import dayjs from 'dayjs'
 import type { FC } from 'react'
 
-import type { QuantBaselineStrategy, QuantRankingDailyEntry, QuantRankingPerformance, QuantStrategyDetailAlert } from '../../api/ops'
+import type { QuantBaselineStrategy, QuantRankingDailyEntry, QuantExposureRecommendation, QuantFilterEffectiveness, QuantMarketRegime, QuantRankingPerformance, QuantStrategyDetailAlert, QuantStrategyRegimePerformance } from '../../api/ops'
 
 export type QuantRoadmapKey =
   | 'baseline'
@@ -52,6 +52,18 @@ interface QuantRoadmapTabProps {
   rankingPerformance: QuantRankingPerformance[]
   rankingPerformanceLoading: boolean
   rankingPerformanceError?: Error | null
+  marketRegime: QuantMarketRegime[]
+  marketRegimeLoading: boolean
+  marketRegimeError?: Error | null
+  exposureRecommendations: QuantExposureRecommendation[]
+  exposureRecommendationsLoading: boolean
+  exposureRecommendationsError?: Error | null
+  strategyRegimePerformance: QuantStrategyRegimePerformance[]
+  strategyRegimePerformanceLoading: boolean
+  strategyRegimePerformanceError?: Error | null
+  filterEffectiveness: QuantFilterEffectiveness[]
+  filterEffectivenessLoading: boolean
+  filterEffectivenessError?: Error | null
 }
 
 const quantRoadmapItems: RoadmapItem[] = [
@@ -449,6 +461,125 @@ const RankingScreen: FC<{
   )
 }
 
+const RegimeScreen: FC<{
+  regimes: QuantMarketRegime[]
+  regimesLoading: boolean
+  regimesError?: Error | null
+  exposures: QuantExposureRecommendation[]
+  exposuresLoading: boolean
+  exposuresError?: Error | null
+  performance: QuantStrategyRegimePerformance[]
+  performanceLoading: boolean
+  performanceError?: Error | null
+  effectiveness: QuantFilterEffectiveness[]
+  effectivenessLoading: boolean
+  effectivenessError?: Error | null
+}> = ({ regimes, regimesLoading, regimesError, exposures, exposuresLoading, exposuresError, performance, performanceLoading, performanceError, effectiveness, effectivenessLoading, effectivenessError }) => {
+  const currentExposure = exposures[0]
+  const currentRegime = regimes[0]
+  const normalDays = exposures.filter((item) => item.exposureAction === 'operar_normal').length
+  const reducedDays = exposures.filter((item) => item.exposureAction === 'reduzir_posicao').length
+  const blockedDays = exposures.filter((item) => ['ficar_em_caixa', 'bloquear_compras'].includes(item.exposureAction ?? '')).length
+
+  return (
+    <Stack spacing={3}>
+      <Stack spacing={1}>
+        <Typography variant="h4" color="text.primary" fontWeight={800}>Regime de Mercado e Exposição Recomendada</Typography>
+        <Typography variant="body1" color="text.secondary">
+          Tela operacional da Fase 4 com classificação diária de regime, recomendação de exposição, limites e leitura
+          da efetividade dos filtros antes da execução dos sinais.
+        </Typography>
+      </Stack>
+
+      {regimesError ? <Alert severity="error">Erro ao carregar /ops/quant/market-regime.</Alert> : null}
+      {exposuresError ? <Alert severity="error">Erro ao carregar /ops/quant/exposure.</Alert> : null}
+      {performanceError ? <Alert severity="error">Erro ao carregar performance por regime.</Alert> : null}
+      {effectivenessError ? <Alert severity="error">Erro ao carregar efetividade dos filtros.</Alert> : null}
+      {regimesLoading || exposuresLoading ? <Skeleton variant="rounded" height={160} /> : null}
+
+      {!regimesLoading && !exposuresLoading ? (
+        <Stack direction="row" flexWrap="wrap" gap={2}>
+          <MetricCard title="Data do regime" value={formatDate(currentExposure?.referenceDate ?? currentRegime?.referenceDate)} helper="Última classificação diária" />
+          <MetricCard title="Regime atual" value={normalizeLabel(currentExposure?.marketRegime ?? currentRegime?.marketRegime)} helper={currentExposure?.policyVersion ? `Política ${currentExposure.policyVersion}` : 'Política ativa'} />
+          <MetricCard title="Ação recomendada" value={normalizeLabel(currentExposure?.exposureAction)} helper={currentExposure?.recommendationReason ?? 'Sem recomendação materializada'} />
+          <MetricCard title="Exposição máxima" value={formatPct(currentExposure?.maxExposurePct)} helper={`${formatNumber(currentExposure?.maxTrades)} operações máximas`} />
+          <MetricCard title="Risco por trade" value={formatPct(currentExposure?.riskPerTradePct)} helper={`Stop diário ${formatPct(currentExposure?.dailyLossLimitPct)}`} />
+        </Stack>
+      ) : null}
+
+      {!exposuresLoading && !exposuresError && exposures.length === 0 ? (
+        <Alert severity="warning">Nenhuma recomendação retornada. Aplique as views da Fase 4 e confirme a política ativa em quant_regime_policy_config.</Alert>
+      ) : null}
+
+      {currentExposure ? (
+        <Paper elevation={0} sx={{ p: 3, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+          <Stack spacing={2}>
+            <Typography variant="h5" fontWeight={800}>Painel de decisão operacional</Typography>
+            <Alert severity={currentExposure.exposureAction === 'operar_normal' ? 'success' : currentExposure.exposureAction === 'ficar_em_caixa' ? 'error' : 'warning'}>
+              {currentExposure.recommendationReason}
+            </Alert>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(4, minmax(0, 1fr))' }, gap: 2 }}>
+              <MetricCard title="Retorno 5d mercado" value={formatPct(currentExposure.marketReturn5d)} />
+              <MetricCard title="Retorno 20d mercado" value={formatPct(currentExposure.marketReturn20d)} />
+              <MetricCard title="Amplitude SMA20" value={formatPct(currentExposure.pctAboveSma20)} />
+              <MetricCard title="Volatilidade percentil" value={formatPct(currentExposure.volatilityPercentile)} />
+            </Box>
+          </Stack>
+        </Paper>
+      ) : null}
+
+      <Paper elevation={0} sx={{ p: 3, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+        <Stack spacing={2}>
+          <Typography variant="h5" fontWeight={800}>Histórico de regimes e exposição</Typography>
+          <Stack direction="row" flexWrap="wrap" gap={1}>
+            <Chip color="success" label={`Operar normal: ${normalDays}`} />
+            <Chip color="warning" label={`Reduzir posição: ${reducedDays}`} />
+            <Chip color="error" label={`Bloqueios/caixa: ${blockedDays}`} />
+          </Stack>
+          <TableContainer sx={{ maxHeight: 420 }}>
+            <Table stickyHeader size="small" aria-label="Histórico de regime de mercado">
+              <TableHead><TableRow><TableCell>Data</TableCell><TableCell>Regime</TableCell><TableCell>Ação</TableCell><TableCell align="right">Exposição</TableCell><TableCell align="right">Trades</TableCell><TableCell align="right">Risco/trade</TableCell><TableCell align="right">Amplitude</TableCell><TableCell align="right">Vol.</TableCell></TableRow></TableHead>
+              <TableBody>{exposures.map((item) => (
+                <TableRow key={`${item.referenceDate}-${item.policyId}`} hover>
+                  <TableCell>{formatDate(item.referenceDate)}</TableCell><TableCell><Chip size="small" label={normalizeLabel(item.marketRegime)} /></TableCell><TableCell><Chip size="small" color={statusColor(item.exposureAction ?? '')} label={normalizeLabel(item.exposureAction)} /></TableCell><TableCell align="right">{formatPct(item.maxExposurePct)}</TableCell><TableCell align="right">{formatNumber(item.maxTrades)}</TableCell><TableCell align="right">{formatPct(item.riskPerTradePct)}</TableCell><TableCell align="right">{formatPct(item.pctAboveSma20)}</TableCell><TableCell align="right">{formatPct(item.realizedVolatility20d)}</TableCell>
+                </TableRow>
+              ))}</TableBody>
+            </Table>
+          </TableContainer>
+        </Stack>
+      </Paper>
+
+      <Paper elevation={0} sx={{ p: 3, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+        <Stack spacing={2}>
+          <Typography variant="h5" fontWeight={800}>Performance por regime</Typography>
+          {performanceLoading ? <LinearProgress /> : null}
+          {!performanceLoading && performance.length === 0 ? <Alert severity="info">Sem trades suficientes classificados por regime.</Alert> : null}
+          {performance.length > 0 ? (
+            <TableContainer sx={{ maxHeight: 360 }}>
+              <Table stickyHeader size="small"><TableHead><TableRow><TableCell>Estratégia</TableCell><TableCell>Regime</TableCell><TableCell align="right">Trades</TableCell><TableCell align="right">Expectancy</TableCell><TableCell align="right">Win rate</TableCell><TableCell align="right">Profit factor</TableCell><TableCell>Status</TableCell></TableRow></TableHead>
+                <TableBody>{performance.map((item) => (<TableRow key={`${item.strategyId}-${item.marketRegime}`} hover><TableCell>{item.strategyId}</TableCell><TableCell>{normalizeLabel(item.marketRegime)}</TableCell><TableCell align="right">{formatNumber(item.trades)}</TableCell><TableCell align="right">{formatPct(item.expectancyNetPct)}</TableCell><TableCell align="right">{formatPct(item.winRate)}</TableCell><TableCell align="right">{formatDecimal(item.profitFactor)}</TableCell><TableCell><Chip size="small" color={statusColor(item.regimeEffectStatus ?? '')} label={normalizeLabel(item.regimeEffectStatus)} /></TableCell></TableRow>))}</TableBody></Table>
+            </TableContainer>
+          ) : null}
+        </Stack>
+      </Paper>
+
+      <Paper elevation={0} sx={{ p: 3, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+        <Stack spacing={2}>
+          <Typography variant="h5" fontWeight={800}>Efetividade do filtro de regime</Typography>
+          {effectivenessLoading ? <LinearProgress /> : null}
+          {!effectivenessLoading && effectiveness.length === 0 ? <Alert severity="info">Sem comparação entre trades originais e filtrados.</Alert> : null}
+          {effectiveness.length > 0 ? (
+            <TableContainer sx={{ maxHeight: 360 }}>
+              <Table stickyHeader size="small"><TableHead><TableRow><TableCell>Estratégia</TableCell><TableCell align="right">Trades originais</TableCell><TableCell align="right">Após filtro</TableCell><TableCell align="right">Bloqueados</TableCell><TableCell align="right">Expect. original</TableCell><TableCell align="right">Expect. filtrada</TableCell><TableCell>Status</TableCell></TableRow></TableHead>
+                <TableBody>{effectiveness.map((item) => (<TableRow key={`${item.strategyId}-${item.strategyVersion}`} hover><TableCell>{item.strategyId}</TableCell><TableCell align="right">{formatNumber(item.originalTrades)}</TableCell><TableCell align="right">{formatNumber(item.tradesAfterFilter)}</TableCell><TableCell align="right">{formatPct(item.blockedTradePct)}</TableCell><TableCell align="right">{formatPct(item.originalExpectancyNetPct)}</TableCell><TableCell align="right">{formatPct(item.filteredExpectancyNetPct)}</TableCell><TableCell><Chip size="small" color={statusColor(item.filterEffectivenessStatus ?? '')} label={normalizeLabel(item.filterEffectivenessStatus)} /></TableCell></TableRow>))}</TableBody></Table>
+            </TableContainer>
+          ) : null}
+        </Stack>
+      </Paper>
+    </Stack>
+  )
+}
+
 const QuantRoadmapTab: FC<QuantRoadmapTabProps> = ({
   selectedKey,
   baselineStrategies,
@@ -463,6 +594,18 @@ const QuantRoadmapTab: FC<QuantRoadmapTabProps> = ({
   rankingPerformance,
   rankingPerformanceLoading,
   rankingPerformanceError,
+  marketRegime,
+  marketRegimeLoading,
+  marketRegimeError,
+  exposureRecommendations,
+  exposureRecommendationsLoading,
+  exposureRecommendationsError,
+  strategyRegimePerformance,
+  strategyRegimePerformanceLoading,
+  strategyRegimePerformanceError,
+  filterEffectiveness,
+  filterEffectivenessLoading,
+  filterEffectivenessError,
 }) => {
   const item = quantRoadmapItems.find((candidate) => candidate.key === selectedKey) ?? quantRoadmapItems[0]
 
@@ -475,6 +618,25 @@ const QuantRoadmapTab: FC<QuantRoadmapTabProps> = ({
         performance={rankingPerformance}
         performanceLoading={rankingPerformanceLoading}
         performanceError={rankingPerformanceError}
+      />
+    )
+  }
+
+  if (item.key === 'regime') {
+    return (
+      <RegimeScreen
+        regimes={marketRegime}
+        regimesLoading={marketRegimeLoading}
+        regimesError={marketRegimeError}
+        exposures={exposureRecommendations}
+        exposuresLoading={exposureRecommendationsLoading}
+        exposuresError={exposureRecommendationsError}
+        performance={strategyRegimePerformance}
+        performanceLoading={strategyRegimePerformanceLoading}
+        performanceError={strategyRegimePerformanceError}
+        effectiveness={filterEffectiveness}
+        effectivenessLoading={filterEffectivenessLoading}
+        effectivenessError={filterEffectivenessError}
       />
     )
   }

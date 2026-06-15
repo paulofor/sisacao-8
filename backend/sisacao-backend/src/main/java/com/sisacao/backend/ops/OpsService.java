@@ -63,6 +63,22 @@ public class OpsService {
         return bigQueryOpsClient.fetchQuantRankingPerformance();
     }
 
+    public List<QuantMarketRegime> getQuantMarketRegime(Integer limit) {
+        return bigQueryOpsClient.fetchQuantMarketRegime(sanitizeQuantLimit(limit));
+    }
+
+    public List<QuantExposureRecommendation> getQuantExposureRecommendations(Integer limit) {
+        return bigQueryOpsClient.fetchQuantExposureRecommendations(sanitizeQuantLimit(limit));
+    }
+
+    public List<QuantStrategyRegimePerformance> getQuantStrategyRegimePerformance() {
+        return bigQueryOpsClient.fetchQuantStrategyRegimePerformance();
+    }
+
+    public List<QuantFilterEffectiveness> getQuantFilterEffectiveness() {
+        return bigQueryOpsClient.fetchQuantFilterEffectiveness();
+    }
+
     public QuantBaselineStrategy getQuantBaselineStrategy(String strategyId) {
         if (strategyId == null || strategyId.isBlank()) {
             throw new OpsValidationException("O parâmetro 'strategyId' é obrigatório.");

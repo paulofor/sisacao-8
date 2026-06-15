@@ -29,6 +29,10 @@ public class OpsBigQueryProperties {
     private String quantStrategyDetailAlertsView = "vw_quant_phase2_strategy_detail_alerts";
     private String quantRankingDailyView = "vw_quant_phase3_daily_asset_ranking";
     private String quantRankingPerformanceView = "vw_quant_phase3_ranking_performance";
+    private String quantMarketRegimeView = "vw_quant_phase4_market_regime_indicators";
+    private String quantExposureRecommendationView = "vw_quant_phase4_exposure_recommendation";
+    private String quantStrategyRegimePerformanceView = "vw_quant_phase4_strategy_regime_performance";
+    private String quantFilterEffectivenessView = "vw_quant_phase4_filter_effectiveness";
 
     public boolean isEnabled() {
         return enabled;
@@ -254,6 +258,47 @@ public class OpsBigQueryProperties {
     public void setQuantRankingPerformanceView(String quantRankingPerformanceView) {
         if (quantRankingPerformanceView != null && !quantRankingPerformanceView.isBlank()) {
             this.quantRankingPerformanceView = quantRankingPerformanceView;
+        }
+    }
+
+
+    public String getQuantMarketRegimeView() {
+        return quantMarketRegimeView;
+    }
+
+    public void setQuantMarketRegimeView(String quantMarketRegimeView) {
+        if (quantMarketRegimeView != null && !quantMarketRegimeView.isBlank()) {
+            this.quantMarketRegimeView = quantMarketRegimeView;
+        }
+    }
+
+    public String getQuantExposureRecommendationView() {
+        return quantExposureRecommendationView;
+    }
+
+    public void setQuantExposureRecommendationView(String quantExposureRecommendationView) {
+        if (quantExposureRecommendationView != null && !quantExposureRecommendationView.isBlank()) {
+            this.quantExposureRecommendationView = quantExposureRecommendationView;
+        }
+    }
+
+    public String getQuantStrategyRegimePerformanceView() {
+        return quantStrategyRegimePerformanceView;
+    }
+
+    public void setQuantStrategyRegimePerformanceView(String quantStrategyRegimePerformanceView) {
+        if (quantStrategyRegimePerformanceView != null && !quantStrategyRegimePerformanceView.isBlank()) {
+            this.quantStrategyRegimePerformanceView = quantStrategyRegimePerformanceView;
+        }
+    }
+
+    public String getQuantFilterEffectivenessView() {
+        return quantFilterEffectivenessView;
+    }
+
+    public void setQuantFilterEffectivenessView(String quantFilterEffectivenessView) {
+        if (quantFilterEffectivenessView != null && !quantFilterEffectivenessView.isBlank()) {
+            this.quantFilterEffectivenessView = quantFilterEffectivenessView;
         }
     }
 

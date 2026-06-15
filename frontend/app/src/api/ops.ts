@@ -636,3 +636,157 @@ export const fetchQuantRankingPerformance = async (): Promise<QuantRankingPerfor
     }
   })
 }
+
+export interface QuantMarketRegime {
+  referenceDate: string | null
+  eligibleTickers: number
+  marketReturn5d: number | null
+  marketReturn20d: number | null
+  realizedVolatility20d: number | null
+  avgMarketVolatility60d: number | null
+  volatilityPercentile: number | null
+  pctAboveSma20: number | null
+  pctAboveSma50: number | null
+  pctPositive5d: number | null
+  aggregateFinancialVolume: number | null
+  aggregateRelativeVolume: number | null
+  marketRegime: string | null
+  regimeIndicatorsJson: string | null
+}
+
+export interface QuantExposureRecommendation {
+  policyId: string
+  policyVersion: string
+  referenceDate: string | null
+  marketRegime: string | null
+  marketReturn5d: number | null
+  marketReturn20d: number | null
+  realizedVolatility20d: number | null
+  volatilityPercentile: number | null
+  pctAboveSma20: number | null
+  pctAboveSma50: number | null
+  aggregateRelativeVolume: number | null
+  exposureAction: string | null
+  maxExposurePct: number | null
+  maxTrades: number
+  riskPerTradePct: number | null
+  dailyLossLimitPct: number | null
+  recommendationReason: string | null
+}
+
+export interface QuantStrategyRegimePerformance {
+  strategyId: string
+  strategyVersion: string
+  marketRegime: string | null
+  trades: number
+  expectancyNetPct: number | null
+  winRate: number | null
+  profitFactor: number | null
+  totalNetPnlPct: number | null
+  regimeEffectStatus: string | null
+}
+
+export interface QuantFilterEffectiveness {
+  strategyId: string
+  strategyVersion: string
+  originalTrades: number
+  tradesAfterFilter: number
+  originalExpectancyNetPct: number | null
+  filteredExpectancyNetPct: number | null
+  blockedExpectancyNetPct: number | null
+  blockedTradePct: number | null
+  originalTotalNetPnlPct: number | null
+  exposureAdjustedTotalNetPnlPct: number | null
+  filterEffectivenessStatus: string | null
+}
+
+export const fetchQuantMarketRegime = async (limit = 90): Promise<QuantMarketRegime[]> => {
+  const response = await apiClient.get<unknown>('/ops/quant/market-regime', { params: { limit } })
+  const items = Array.isArray(response.data) ? response.data : []
+  return items.map((item) => {
+    const record = item as Record<string, unknown>
+    return {
+      referenceDate: toIsoDate(record.referenceDate ?? record.reference_date),
+      eligibleTickers: toInteger(record.eligibleTickers ?? record.eligible_tickers),
+      marketReturn5d: toNumber(record.marketReturn5d ?? record.market_return_5d),
+      marketReturn20d: toNumber(record.marketReturn20d ?? record.market_return_20d),
+      realizedVolatility20d: toNumber(record.realizedVolatility20d ?? record.realized_volatility_20d),
+      avgMarketVolatility60d: toNumber(record.avgMarketVolatility60d ?? record.avg_market_volatility_60d),
+      volatilityPercentile: toNumber(record.volatilityPercentile ?? record.volatility_percentile),
+      pctAboveSma20: toNumber(record.pctAboveSma20 ?? record.pct_above_sma_20),
+      pctAboveSma50: toNumber(record.pctAboveSma50 ?? record.pct_above_sma_50),
+      pctPositive5d: toNumber(record.pctPositive5d ?? record.pct_positive_5d),
+      aggregateFinancialVolume: toNumber(record.aggregateFinancialVolume ?? record.aggregate_financial_volume),
+      aggregateRelativeVolume: toNumber(record.aggregateRelativeVolume ?? record.aggregate_relative_volume),
+      marketRegime: asNullableString(record.marketRegime ?? record.market_regime),
+      regimeIndicatorsJson: asNullableString(record.regimeIndicatorsJson ?? record.regime_indicators_json),
+    }
+  })
+}
+
+export const fetchQuantExposureRecommendations = async (limit = 90): Promise<QuantExposureRecommendation[]> => {
+  const response = await apiClient.get<unknown>('/ops/quant/exposure', { params: { limit } })
+  const items = Array.isArray(response.data) ? response.data : []
+  return items.map((item) => {
+    const record = item as Record<string, unknown>
+    return {
+      policyId: asString(record.policyId ?? record.policy_id, '—'),
+      policyVersion: asString(record.policyVersion ?? record.policy_version, '—'),
+      referenceDate: toIsoDate(record.referenceDate ?? record.reference_date),
+      marketRegime: asNullableString(record.marketRegime ?? record.market_regime),
+      marketReturn5d: toNumber(record.marketReturn5d ?? record.market_return_5d),
+      marketReturn20d: toNumber(record.marketReturn20d ?? record.market_return_20d),
+      realizedVolatility20d: toNumber(record.realizedVolatility20d ?? record.realized_volatility_20d),
+      volatilityPercentile: toNumber(record.volatilityPercentile ?? record.volatility_percentile),
+      pctAboveSma20: toNumber(record.pctAboveSma20 ?? record.pct_above_sma_20),
+      pctAboveSma50: toNumber(record.pctAboveSma50 ?? record.pct_above_sma_50),
+      aggregateRelativeVolume: toNumber(record.aggregateRelativeVolume ?? record.aggregate_relative_volume),
+      exposureAction: asNullableString(record.exposureAction ?? record.exposure_action),
+      maxExposurePct: toNumber(record.maxExposurePct ?? record.max_exposure_pct),
+      maxTrades: toInteger(record.maxTrades ?? record.max_trades),
+      riskPerTradePct: toNumber(record.riskPerTradePct ?? record.risk_per_trade_pct),
+      dailyLossLimitPct: toNumber(record.dailyLossLimitPct ?? record.daily_loss_limit_pct),
+      recommendationReason: asNullableString(record.recommendationReason ?? record.recommendation_reason),
+    }
+  })
+}
+
+export const fetchQuantStrategyRegimePerformance = async (): Promise<QuantStrategyRegimePerformance[]> => {
+  const response = await apiClient.get<unknown>('/ops/quant/strategy-regime-performance')
+  const items = Array.isArray(response.data) ? response.data : []
+  return items.map((item) => {
+    const record = item as Record<string, unknown>
+    return {
+      strategyId: asString(record.strategyId ?? record.strategy_id, '—'),
+      strategyVersion: asString(record.strategyVersion ?? record.strategy_version, '—'),
+      marketRegime: asNullableString(record.marketRegime ?? record.market_regime),
+      trades: toInteger(record.trades),
+      expectancyNetPct: toNumber(record.expectancyNetPct ?? record.expectancy_net_pct),
+      winRate: toNumber(record.winRate ?? record.win_rate),
+      profitFactor: toNumber(record.profitFactor ?? record.profit_factor),
+      totalNetPnlPct: toNumber(record.totalNetPnlPct ?? record.total_net_pnl_pct),
+      regimeEffectStatus: asNullableString(record.regimeEffectStatus ?? record.regime_effect_status),
+    }
+  })
+}
+
+export const fetchQuantFilterEffectiveness = async (): Promise<QuantFilterEffectiveness[]> => {
+  const response = await apiClient.get<unknown>('/ops/quant/filter-effectiveness')
+  const items = Array.isArray(response.data) ? response.data : []
+  return items.map((item) => {
+    const record = item as Record<string, unknown>
+    return {
+      strategyId: asString(record.strategyId ?? record.strategy_id, '—'),
+      strategyVersion: asString(record.strategyVersion ?? record.strategy_version, '—'),
+      originalTrades: toInteger(record.originalTrades ?? record.original_trades),
+      tradesAfterFilter: toInteger(record.tradesAfterFilter ?? record.trades_after_filter),
+      originalExpectancyNetPct: toNumber(record.originalExpectancyNetPct ?? record.original_expectancy_net_pct),
+      filteredExpectancyNetPct: toNumber(record.filteredExpectancyNetPct ?? record.filtered_expectancy_net_pct),
+      blockedExpectancyNetPct: toNumber(record.blockedExpectancyNetPct ?? record.blocked_expectancy_net_pct),
+      blockedTradePct: toNumber(record.blockedTradePct ?? record.blocked_trade_pct),
+      originalTotalNetPnlPct: toNumber(record.originalTotalNetPnlPct ?? record.original_total_net_pnl_pct),
+      exposureAdjustedTotalNetPnlPct: toNumber(record.exposureAdjustedTotalNetPnlPct ?? record.exposure_adjusted_total_net_pnl_pct),
+      filterEffectivenessStatus: asNullableString(record.filterEffectivenessStatus ?? record.filter_effectiveness_status),
+    }
+  })
+}

@@ -19,6 +19,10 @@ import com.sisacao.backend.ops.QuantBaselineStrategy;
 import com.sisacao.backend.ops.QuantStrategyDetailAlert;
 import com.sisacao.backend.ops.QuantRankingDailyEntry;
 import com.sisacao.backend.ops.QuantRankingPerformance;
+import com.sisacao.backend.ops.QuantMarketRegime;
+import com.sisacao.backend.ops.QuantExposureRecommendation;
+import com.sisacao.backend.ops.QuantStrategyRegimePerformance;
+import com.sisacao.backend.ops.QuantFilterEffectiveness;
 import com.sisacao.backend.ops.QuantTickerCoverage;
 import com.sisacao.backend.ops.Signal;
 import com.sisacao.backend.ops.SignalByDateEntry;
@@ -176,6 +180,53 @@ public class BigQueryOpsClient {
         List<QuantRankingPerformance> rows = new ArrayList<>();
         for (FieldValueList row : result.iterateAll()) {
             rows.add(toQuantRankingPerformance(row));
+        }
+        return Collections.unmodifiableList(rows);
+    }
+
+
+    public List<QuantMarketRegime> fetchQuantMarketRegime(int limit) {
+        Map<String, QueryParameterValue> params = Map.of("limit", QueryParameterValue.int64(limit));
+        String sql = "SELECT * FROM " + qualifiedQuantView(properties.getQuantMarketRegimeView())
+                + " ORDER BY reference_date DESC LIMIT @limit";
+        TableResult result = runQuery(sql, params);
+        List<QuantMarketRegime> rows = new ArrayList<>();
+        for (FieldValueList row : result.iterateAll()) {
+            rows.add(toQuantMarketRegime(row));
+        }
+        return Collections.unmodifiableList(rows);
+    }
+
+    public List<QuantExposureRecommendation> fetchQuantExposureRecommendations(int limit) {
+        Map<String, QueryParameterValue> params = Map.of("limit", QueryParameterValue.int64(limit));
+        String sql = "SELECT * FROM " + qualifiedQuantView(properties.getQuantExposureRecommendationView())
+                + " ORDER BY reference_date DESC LIMIT @limit";
+        TableResult result = runQuery(sql, params);
+        List<QuantExposureRecommendation> rows = new ArrayList<>();
+        for (FieldValueList row : result.iterateAll()) {
+            rows.add(toQuantExposureRecommendation(row));
+        }
+        return Collections.unmodifiableList(rows);
+    }
+
+    public List<QuantStrategyRegimePerformance> fetchQuantStrategyRegimePerformance() {
+        String sql = "SELECT * FROM " + qualifiedQuantView(properties.getQuantStrategyRegimePerformanceView())
+                + " ORDER BY strategy_id ASC, market_regime ASC";
+        TableResult result = runQuery(sql, Map.of());
+        List<QuantStrategyRegimePerformance> rows = new ArrayList<>();
+        for (FieldValueList row : result.iterateAll()) {
+            rows.add(toQuantStrategyRegimePerformance(row));
+        }
+        return Collections.unmodifiableList(rows);
+    }
+
+    public List<QuantFilterEffectiveness> fetchQuantFilterEffectiveness() {
+        String sql = "SELECT * FROM " + qualifiedQuantView(properties.getQuantFilterEffectivenessView())
+                + " ORDER BY filter_effectiveness_status ASC, strategy_id ASC";
+        TableResult result = runQuery(sql, Map.of());
+        List<QuantFilterEffectiveness> rows = new ArrayList<>();
+        for (FieldValueList row : result.iterateAll()) {
+            rows.add(toQuantFilterEffectiveness(row));
         }
         return Collections.unmodifiableList(rows);
     }
@@ -466,6 +517,74 @@ public class BigQueryOpsClient {
                 getDouble(row, "bottom_decile_return_5d", "bottomDecileReturn5d"),
                 getDouble(row, "top_minus_bottom_decile_return_5d", "topMinusBottomDecileReturn5d"),
                 getString(row, "ranking_status", "rankingStatus"));
+    }
+
+
+    private QuantMarketRegime toQuantMarketRegime(FieldValueList row) {
+        return new QuantMarketRegime(
+                getDate(row, "reference_date", "referenceDate"),
+                getLong(row, "eligible_tickers", "eligibleTickers"),
+                getDouble(row, "market_return_5d", "marketReturn5d"),
+                getDouble(row, "market_return_20d", "marketReturn20d"),
+                getDouble(row, "realized_volatility_20d", "realizedVolatility20d"),
+                getDouble(row, "avg_market_volatility_60d", "avgMarketVolatility60d"),
+                getDouble(row, "volatility_percentile", "volatilityPercentile"),
+                getDouble(row, "pct_above_sma_20", "pctAboveSma20"),
+                getDouble(row, "pct_above_sma_50", "pctAboveSma50"),
+                getDouble(row, "pct_positive_5d", "pctPositive5d"),
+                getDouble(row, "aggregate_financial_volume", "aggregateFinancialVolume"),
+                getDouble(row, "aggregate_relative_volume", "aggregateRelativeVolume"),
+                getString(row, "market_regime", "marketRegime"),
+                getString(row, "regime_indicators_json", "regimeIndicatorsJson"));
+    }
+
+    private QuantExposureRecommendation toQuantExposureRecommendation(FieldValueList row) {
+        return new QuantExposureRecommendation(
+                getString(row, "policy_id", "policyId"),
+                getString(row, "policy_version", "policyVersion"),
+                getDate(row, "reference_date", "referenceDate"),
+                getString(row, "market_regime", "marketRegime"),
+                getDouble(row, "market_return_5d", "marketReturn5d"),
+                getDouble(row, "market_return_20d", "marketReturn20d"),
+                getDouble(row, "realized_volatility_20d", "realizedVolatility20d"),
+                getDouble(row, "volatility_percentile", "volatilityPercentile"),
+                getDouble(row, "pct_above_sma_20", "pctAboveSma20"),
+                getDouble(row, "pct_above_sma_50", "pctAboveSma50"),
+                getDouble(row, "aggregate_relative_volume", "aggregateRelativeVolume"),
+                getString(row, "exposure_action", "exposureAction"),
+                getDouble(row, "max_exposure_pct", "maxExposurePct"),
+                getLong(row, "max_trades", "maxTrades"),
+                getDouble(row, "risk_per_trade_pct", "riskPerTradePct"),
+                getDouble(row, "daily_loss_limit_pct", "dailyLossLimitPct"),
+                getString(row, "recommendation_reason", "recommendationReason"));
+    }
+
+    private QuantStrategyRegimePerformance toQuantStrategyRegimePerformance(FieldValueList row) {
+        return new QuantStrategyRegimePerformance(
+                getString(row, "strategy_id", "strategyId"),
+                getString(row, "strategy_version", "strategyVersion"),
+                getString(row, "market_regime", "marketRegime"),
+                getLong(row, "trades"),
+                getDouble(row, "expectancy_net_pct", "expectancyNetPct"),
+                getDouble(row, "win_rate", "winRate"),
+                getDouble(row, "profit_factor", "profitFactor"),
+                getDouble(row, "total_net_pnl_pct", "totalNetPnlPct"),
+                getString(row, "regime_effect_status", "regimeEffectStatus"));
+    }
+
+    private QuantFilterEffectiveness toQuantFilterEffectiveness(FieldValueList row) {
+        return new QuantFilterEffectiveness(
+                getString(row, "strategy_id", "strategyId"),
+                getString(row, "strategy_version", "strategyVersion"),
+                getLong(row, "original_trades", "originalTrades"),
+                getLong(row, "trades_after_filter", "tradesAfterFilter"),
+                getDouble(row, "original_expectancy_net_pct", "originalExpectancyNetPct"),
+                getDouble(row, "filtered_expectancy_net_pct", "filteredExpectancyNetPct"),
+                getDouble(row, "blocked_expectancy_net_pct", "blockedExpectancyNetPct"),
+                getDouble(row, "blocked_trade_pct", "blockedTradePct"),
+                getDouble(row, "original_total_net_pnl_pct", "originalTotalNetPnlPct"),
+                getDouble(row, "exposure_adjusted_total_net_pnl_pct", "exposureAdjustedTotalNetPnlPct"),
+                getString(row, "filter_effectiveness_status", "filterEffectivenessStatus"));
     }
 
     private Signal toSignal(FieldValueList row) {

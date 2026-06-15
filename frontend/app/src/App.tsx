@@ -52,6 +52,10 @@ import { useQuantDataQualityIncidents } from './hooks/useQuantDataQualityInciden
 import { useQuantStrategyDetailAlerts } from './hooks/useQuantStrategyDetailAlerts'
 import { useQuantRankingDaily } from './hooks/useQuantRankingDaily'
 import { useQuantRankingPerformance } from './hooks/useQuantRankingPerformance'
+import { useQuantMarketRegime } from './hooks/useQuantMarketRegime'
+import { useQuantExposureRecommendations } from './hooks/useQuantExposureRecommendations'
+import { useQuantStrategyRegimePerformance } from './hooks/useQuantStrategyRegimePerformance'
+import { useQuantFilterEffectiveness } from './hooks/useQuantFilterEffectiveness'
 import { useQuantTickerCoverage } from './hooks/useQuantTickerCoverage'
 
 const severityOptions: Array<'all' | DataCollectionMessageSeverity> = [
@@ -146,6 +150,10 @@ function App() {
   const quantStrategyDetailAlertsQuery = useQuantStrategyDetailAlerts()
   const quantRankingDailyQuery = useQuantRankingDaily(150)
   const quantRankingPerformanceQuery = useQuantRankingPerformance()
+  const quantMarketRegimeQuery = useQuantMarketRegime(90)
+  const quantExposureRecommendationsQuery = useQuantExposureRecommendations(90)
+  const quantStrategyRegimePerformanceQuery = useQuantStrategyRegimePerformance()
+  const quantFilterEffectivenessQuery = useQuantFilterEffectiveness()
 
   const messages = useMemo(() => dataCollectionMessagesQuery.data ?? [], [dataCollectionMessagesQuery.data])
 
@@ -172,7 +180,14 @@ function App() {
       ? [quantBaselineStrategiesQuery, quantStrategyDetailAlertsQuery] as QueryResult[]
       : selectedRoadmapKey === 'ranking'
         ? [quantRankingDailyQuery, quantRankingPerformanceQuery] as QueryResult[]
-        : [] as QueryResult[],
+        : selectedRoadmapKey === 'regime'
+          ? [
+              quantMarketRegimeQuery,
+              quantExposureRecommendationsQuery,
+              quantStrategyRegimePerformanceQuery,
+              quantFilterEffectivenessQuery,
+            ] as QueryResult[]
+          : [] as QueryResult[],
   }
 
   const activeQueries = tabQueries[activeTab]
@@ -353,6 +368,18 @@ function App() {
             rankingPerformance={quantRankingPerformanceQuery.data ?? []}
             rankingPerformanceError={quantRankingPerformanceQuery.error}
             rankingPerformanceLoading={quantRankingPerformanceQuery.isLoading && (quantRankingPerformanceQuery.data ?? []).length === 0}
+            marketRegime={quantMarketRegimeQuery.data ?? []}
+            marketRegimeError={quantMarketRegimeQuery.error}
+            marketRegimeLoading={quantMarketRegimeQuery.isLoading && (quantMarketRegimeQuery.data ?? []).length === 0}
+            exposureRecommendations={quantExposureRecommendationsQuery.data ?? []}
+            exposureRecommendationsError={quantExposureRecommendationsQuery.error}
+            exposureRecommendationsLoading={quantExposureRecommendationsQuery.isLoading && (quantExposureRecommendationsQuery.data ?? []).length === 0}
+            strategyRegimePerformance={quantStrategyRegimePerformanceQuery.data ?? []}
+            strategyRegimePerformanceError={quantStrategyRegimePerformanceQuery.error}
+            strategyRegimePerformanceLoading={quantStrategyRegimePerformanceQuery.isLoading && (quantStrategyRegimePerformanceQuery.data ?? []).length === 0}
+            filterEffectiveness={quantFilterEffectivenessQuery.data ?? []}
+            filterEffectivenessError={quantFilterEffectivenessQuery.error}
+            filterEffectivenessLoading={quantFilterEffectivenessQuery.isLoading && (quantFilterEffectivenessQuery.data ?? []).length === 0}
           />
         ) : null}
           </Box>
