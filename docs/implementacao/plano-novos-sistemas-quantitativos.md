@@ -229,6 +229,8 @@ Componentes sugeridos:
 
 ## 7. Fase 3 — Ranking e seleção de ativos
 
+**Status:** preparada em 2026-06-15. Relatório técnico: [`docs/implementacao/fase3-ranking-selecao-ativos.md`](fase3-ranking-selecao-ativos.md). Script BigQuery: [`infra/bq/10_quant_phase3_asset_ranking.sql`](../../infra/bq/10_quant_phase3_asset_ranking.sql).
+
 ### Objetivo
 
 Evoluir de sinais isolados para um modelo de ranking, escolhendo os melhores ativos relativos do universo disponível.
