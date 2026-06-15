@@ -47,7 +47,9 @@ import { useOpsOverview } from './hooks/useOpsOverview'
 import { useOpsPipeline } from './hooks/useOpsPipeline'
 import { useOpsSignalsNext } from './hooks/useOpsSignalsNext'
 import { useQuantDataInventorySummary } from './hooks/useQuantDataInventorySummary'
+import { useQuantBaselineStrategies } from './hooks/useQuantBaselineStrategies'
 import { useQuantDataQualityIncidents } from './hooks/useQuantDataQualityIncidents'
+import { useQuantStrategyDetailAlerts } from './hooks/useQuantStrategyDetailAlerts'
 import { useQuantTickerCoverage } from './hooks/useQuantTickerCoverage'
 
 const severityOptions: Array<'all' | DataCollectionMessageSeverity> = [
@@ -138,6 +140,8 @@ function App() {
   const quantInventorySummaryQuery = useQuantDataInventorySummary()
   const quantTickerCoverageQuery = useQuantTickerCoverage(150)
   const quantDataQualityIncidentsQuery = useQuantDataQualityIncidents(150)
+  const quantBaselineStrategiesQuery = useQuantBaselineStrategies()
+  const quantStrategyDetailAlertsQuery = useQuantStrategyDetailAlerts()
 
   const messages = useMemo(() => dataCollectionMessagesQuery.data ?? [], [dataCollectionMessagesQuery.data])
 
@@ -160,7 +164,9 @@ function App() {
     sinais: [opsSignalsNextQuery] as QueryResult[],
     incidentes: [opsIncidentsOpenQuery] as QueryResult[],
     backtest: [opsBacktestTradesQuery] as QueryResult[],
-    'quant-roadmap': [] as QueryResult[],
+    'quant-roadmap': selectedRoadmapKey === 'baseline'
+      ? [quantBaselineStrategiesQuery, quantStrategyDetailAlertsQuery] as QueryResult[]
+      : [] as QueryResult[],
   }
 
   const activeQueries = tabQueries[activeTab]
@@ -326,7 +332,17 @@ function App() {
           />
         ) : null}
 
-        {activeTab === 'quant-roadmap' ? <QuantRoadmapTab selectedKey={selectedRoadmapKey} /> : null}
+        {activeTab === 'quant-roadmap' ? (
+          <QuantRoadmapTab
+            selectedKey={selectedRoadmapKey}
+            baselineStrategies={quantBaselineStrategiesQuery.data ?? []}
+            baselineStrategiesError={quantBaselineStrategiesQuery.error}
+            baselineStrategiesLoading={quantBaselineStrategiesQuery.isLoading && (quantBaselineStrategiesQuery.data ?? []).length === 0}
+            baselineAlerts={quantStrategyDetailAlertsQuery.data ?? []}
+            baselineAlertsError={quantStrategyDetailAlertsQuery.error}
+            baselineAlertsLoading={quantStrategyDetailAlertsQuery.isLoading && (quantStrategyDetailAlertsQuery.data ?? []).length === 0}
+          />
+        ) : null}
           </Box>
         </Box>
       </Container>
