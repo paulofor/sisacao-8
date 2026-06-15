@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS `ingestaokraken.cotacao_intraday.quant_ranking_model_
   description STRING NOT NULL,
   rebalance_frequency STRING NOT NULL,
   holding_period_days INT64 NOT NULL,
-  top_n_values ARRAY<INT64> NOT NULL,
+  top_n_values ARRAY<INT64>,
   relative_strength_weight FLOAT64 NOT NULL,
   short_momentum_weight FLOAT64 NOT NULL,
   relative_volume_weight FLOAT64 NOT NULL,
