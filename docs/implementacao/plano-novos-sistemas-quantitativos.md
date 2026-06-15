@@ -448,6 +448,8 @@ Componentes sugeridos:
 
 ## 11. Fase 7 — Preparação para operação controlada
 
+**Status:** preparada em 2026-06-15. Relatório técnico: [`docs/implementacao/fase7-operacao-controlada.md`](fase7-operacao-controlada.md). Script BigQuery: [`infra/bq/14_quant_phase7_controlled_operation.sql`](../../infra/bq/14_quant_phase7_controlled_operation.sql).
+
 ### Objetivo
 
 Caso uma ou mais estratégias sobrevivam às fases anteriores, preparar operação real em escala reduzida e com controles rígidos de risco.
