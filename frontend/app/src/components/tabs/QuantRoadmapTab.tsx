@@ -1,4 +1,4 @@
-import { Alert, Chip, Paper, Stack, Typography } from '@mui/material'
+import { Alert, Box, Chip, Paper, Stack, Typography } from '@mui/material'
 import type { FC } from 'react'
 
 export type QuantRoadmapKey =
@@ -137,13 +137,15 @@ interface QuantRoadmapTabProps {
 
 const statusColor = (status: RoadmapItem['status']) => (status === 'Planejada' ? 'info' : 'warning')
 
+const listSx = { margin: 0, paddingLeft: 3 }
+
 const QuantRoadmapTab: FC<QuantRoadmapTabProps> = ({ selectedKey }) => {
   const item = quantRoadmapItems.find((candidate) => candidate.key === selectedKey) ?? quantRoadmapItems[0]
 
   return (
     <Stack spacing={3}>
       <Stack spacing={1}>
-        <Typography variant="h4" color="text.primary">Plano de telas quantitativas</Typography>
+        <Typography variant="h4" color="text.primary" fontWeight={800}>Plano de telas quantitativas</Typography>
         <Typography variant="body1" color="text.secondary">
           Use o menu lateral para navegar pelos submenus que ainda precisam ganhar telas completas no Sisacao-8.
         </Typography>
@@ -153,6 +155,35 @@ const QuantRoadmapTab: FC<QuantRoadmapTabProps> = ({ selectedKey }) => {
         Esta tela organiza o backlog visual: ela não substitui os endpoints definitivos, mas deixa claro o que precisa ser exposto
         no backend e implementado no frontend para cada fase do plano quantitativo.
       </Alert>
+
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: 'repeat(3, minmax(0, 1fr))' }, gap: 2 }}>
+        {quantRoadmapItems.map((roadmapItem) => {
+          const isSelected = roadmapItem.key === item.key
+          return (
+            <Paper
+              key={roadmapItem.key}
+              elevation={0}
+              sx={{
+                p: 2,
+                border: '1px solid',
+                borderColor: isSelected ? 'primary.main' : 'divider',
+                borderRadius: 2,
+                bgcolor: isSelected ? 'action.selected' : 'background.paper',
+                boxShadow: isSelected ? 'inset 4px 0 0 #0f4c81' : 'none',
+              }}
+            >
+              <Stack spacing={1}>
+                <Stack direction="row" gap={1} alignItems="center" flexWrap="wrap">
+                  <Chip label={roadmapItem.phase} color={isSelected ? 'primary' : 'default'} size="small" />
+                  <Chip label={roadmapItem.status} color={statusColor(roadmapItem.status)} size="small" variant={isSelected ? 'filled' : 'outlined'} />
+                </Stack>
+                <Typography variant="subtitle1" fontWeight={800}>{roadmapItem.title}</Typography>
+                <Typography variant="body2" color="text.secondary">{roadmapItem.goal}</Typography>
+              </Stack>
+            </Paper>
+          )
+        })}
+      </Box>
 
       <Paper elevation={0} sx={{ p: 3, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
         <Stack spacing={2}>
@@ -165,23 +196,23 @@ const QuantRoadmapTab: FC<QuantRoadmapTabProps> = ({ selectedKey }) => {
 
           <Stack spacing={1}>
             <Typography variant="h6">Dados necessários</Typography>
-            <ul>
+            <Box component="ul" sx={listSx}>
               {item.dataNeeds.map((need) => <li key={need}>{need}</li>)}
-            </ul>
+            </Box>
           </Stack>
 
           <Stack spacing={1}>
             <Typography variant="h6">Plano da tela</Typography>
-            <ul>
+            <Box component="ul" sx={listSx}>
               {item.screenPlan.map((step) => <li key={step}>{step}</li>)}
-            </ul>
+            </Box>
           </Stack>
 
           <Stack spacing={1}>
             <Typography variant="h6">Sequência de implementação</Typography>
-            <ol>
+            <Box component="ol" sx={listSx}>
               {item.implementationSteps.map((step) => <li key={step}>{step}</li>)}
-            </ol>
+            </Box>
           </Stack>
         </Stack>
       </Paper>
