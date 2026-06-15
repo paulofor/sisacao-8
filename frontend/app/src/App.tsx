@@ -1,18 +1,30 @@
 import RefreshIcon from '@mui/icons-material/Refresh'
+import AssessmentIcon from '@mui/icons-material/Assessment'
+import BarChartIcon from '@mui/icons-material/BarChart'
+import ChecklistIcon from '@mui/icons-material/Checklist'
+import DashboardIcon from '@mui/icons-material/Dashboard'
+import InsightsIcon from '@mui/icons-material/Insights'
+import InventoryIcon from '@mui/icons-material/Inventory'
+import ScienceIcon from '@mui/icons-material/Science'
+import TimelineIcon from '@mui/icons-material/Timeline'
 import {
   AppBar,
   Box,
   Button,
   Container,
+  Divider,
   LinearProgress,
-  Tab,
-  Tabs,
+  List,
+  ListItemButton,
+  ListItemIcon,
+  ListItemText,
+  Paper,
   Toolbar,
   Typography,
 } from '@mui/material'
 import type { UseQueryResult } from '@tanstack/react-query'
 import dayjs from 'dayjs'
-import { type SyntheticEvent, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 
 import type { DataCollectionMessage, DataCollectionMessageSeverity } from './api/dataCollections'
 import BacktestTab from './components/tabs/BacktestTab'
@@ -20,6 +32,7 @@ import ColetasTab from './components/tabs/ColetasTab'
 import IncidentesTab from './components/tabs/IncidentesTab'
 import OperacaoTab from './components/tabs/OperacaoTab'
 import QuantPhase0Tab from './components/tabs/QuantPhase0Tab'
+import QuantRoadmapTab, { type QuantRoadmapKey } from './components/tabs/QuantRoadmapTab'
 import SinaisTab from './components/tabs/SinaisTab'
 import { useCandlesTableDailyCounts } from './hooks/useCandlesTableDailyCounts'
 import { useDataCollectionMessages } from './hooks/useDataCollectionMessages'
@@ -58,12 +71,52 @@ const filterMessagesBySearch = (messages: DataCollectionMessage[], searchTerm: s
   })
 }
 
-type TabValue = 'coletas' | 'operacao' | 'quant-fase0' | 'sinais' | 'incidentes' | 'backtest'
+type TabValue =
+  | 'coletas'
+  | 'operacao'
+  | 'quant-fase0'
+  | 'sinais'
+  | 'incidentes'
+  | 'backtest'
+  | 'quant-roadmap'
+
+type MenuItem = {
+  label: string
+  value: TabValue
+  icon: typeof DashboardIcon
+  roadmapKey?: QuantRoadmapKey
+}
+
+const menuGroups: Array<{ title: string; items: MenuItem[] }> = [
+  {
+    title: 'Operação',
+    items: [
+      { label: 'Coletas', value: 'coletas', icon: InventoryIcon },
+      { label: 'Pipeline', value: 'operacao', icon: DashboardIcon },
+      { label: 'Sinais EOD', value: 'sinais', icon: InsightsIcon },
+      { label: 'Incidentes', value: 'incidentes', icon: ChecklistIcon },
+    ],
+  },
+  {
+    title: 'Sistemas quantitativos',
+    items: [
+      { label: 'Fase 0 · Inventário', value: 'quant-fase0', icon: AssessmentIcon },
+      { label: 'Fase 1 · Backtest', value: 'backtest', icon: BarChartIcon },
+      { label: 'Fase 2 · Baselines', value: 'quant-roadmap', icon: ScienceIcon, roadmapKey: 'baseline' },
+      { label: 'Fase 3 · Ranking', value: 'quant-roadmap', icon: TimelineIcon, roadmapKey: 'ranking' },
+      { label: 'Fase 4 · Regime/Exposição', value: 'quant-roadmap', icon: DashboardIcon, roadmapKey: 'regime' },
+      { label: 'Fase 5 · Robustez', value: 'quant-roadmap', icon: AssessmentIcon, roadmapKey: 'robustez' },
+      { label: 'Fase 6 · Paper Trading', value: 'quant-roadmap', icon: InsightsIcon, roadmapKey: 'paper' },
+      { label: 'Fase 7 · Comitê/Risco', value: 'quant-roadmap', icon: ChecklistIcon, roadmapKey: 'comite' },
+    ],
+  },
+]
 
 type QueryResult = UseQueryResult<unknown, Error>
 
 function App() {
   const [activeTab, setActiveTab] = useState<TabValue>('coletas')
+  const [selectedRoadmapKey, setSelectedRoadmapKey] = useState<QuantRoadmapKey>('baseline')
   const [selectedSeverity, setSelectedSeverity] = useState<'all' | DataCollectionMessageSeverity>('all')
   const [searchTerm, setSearchTerm] = useState('')
 
@@ -107,6 +160,7 @@ function App() {
     sinais: [opsSignalsNextQuery] as QueryResult[],
     incidentes: [opsIncidentsOpenQuery] as QueryResult[],
     backtest: [opsBacktestTradesQuery] as QueryResult[],
+    'quant-roadmap': [] as QueryResult[],
   }
 
   const activeQueries = tabQueries[activeTab]
@@ -125,8 +179,11 @@ function App() {
     void Promise.all(activeQueries.map((query) => query.refetch()))
   }
 
-  const handleTabChange = (_event: SyntheticEvent, newValue: string | number) => {
-    setActiveTab(newValue as TabValue)
+  const handleMenuClick = (item: MenuItem) => {
+    if (item.roadmapKey) {
+      setSelectedRoadmapKey(item.roadmapKey)
+    }
+    setActiveTab(item.value)
   }
 
   const intradaySummaryLoading = intradaySummaryQuery.isLoading && !intradaySummaryQuery.data
@@ -156,26 +213,40 @@ function App() {
             Atualizar
           </Button>
         </Toolbar>
-        <Tabs
-          value={activeTab}
-          onChange={handleTabChange}
-          variant="scrollable"
-          allowScrollButtonsMobile
-          textColor="primary"
-          indicatorColor="primary"
-          sx={{ px: 2 }}
-        >
-          <Tab label="Coletas" value="coletas" />
-          <Tab label="Operação" value="operacao" />
-          <Tab label="Fase 0 Quant" value="quant-fase0" />
-          <Tab label="Sinais" value="sinais" />
-          <Tab label="Incidentes" value="incidentes" />
-          <Tab label="Backtest" value="backtest" />
-        </Tabs>
         {isTabLoading || isRefreshing ? <LinearProgress color="primary" /> : null}
       </AppBar>
 
-      <Container maxWidth="lg" sx={{ py: 4 }}>
+      <Container maxWidth="xl" sx={{ py: 4 }}>
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '280px minmax(0, 1fr)' }, gap: 3 }}>
+          <Paper elevation={0} sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 2, alignSelf: 'start' }}>
+            <Typography variant="overline" color="text.secondary">Menu</Typography>
+            {menuGroups.map((group) => (
+              <Box key={group.title} sx={{ mt: 2 }}>
+                <Typography variant="subtitle2" color="text.secondary" sx={{ px: 1, mb: 0.5 }}>
+                  {group.title}
+                </Typography>
+                <List dense disablePadding>
+                  {group.items.map((item) => {
+                    const Icon = item.icon
+                    const selected = activeTab === item.value && (!item.roadmapKey || selectedRoadmapKey === item.roadmapKey)
+                    return (
+                      <ListItemButton
+                        key={`${group.title}-${item.label}`}
+                        selected={selected}
+                        onClick={() => handleMenuClick(item)}
+                        sx={{ borderRadius: 1 }}
+                      >
+                        <ListItemIcon sx={{ minWidth: 36 }}><Icon fontSize="small" /></ListItemIcon>
+                        <ListItemText primary={item.label} />
+                      </ListItemButton>
+                    )
+                  })}
+                </List>
+                <Divider sx={{ mt: 1 }} />
+              </Box>
+            ))}
+          </Paper>
+          <Box>
         {activeTab === 'coletas' ? (
           <ColetasTab
             severityOptions={severityOptions}
@@ -254,6 +325,10 @@ function App() {
             loading={opsBacktestTradesQuery.isLoading && (opsBacktestTradesQuery.data ?? []).length === 0}
           />
         ) : null}
+
+        {activeTab === 'quant-roadmap' ? <QuantRoadmapTab selectedKey={selectedRoadmapKey} /> : null}
+          </Box>
+        </Box>
       </Container>
     </Box>
   )
