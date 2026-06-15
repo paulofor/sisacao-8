@@ -256,3 +256,11 @@
 
 - Corrigido o script `infra/bq/12_quant_phase5_statistical_robustness.sql` na view `vw_quant_phase5_robustness_dashboard`, adicionando o alias `AS o` ao CTE `oos` usado nas colunas selecionadas e nos `JOINs`.
 - Motivo: a execução no BigQuery falhava com `Unrecognized name: o` porque a consulta referenciava `o.*` sem declarar o alias no `FROM`.
+
+## 2026-06-15 — Menu e roadmap de telas quantitativas
+
+- Criada estrutura de menu lateral com grupos de navegação para Operação e Sistemas quantitativos.
+- Adicionados submenus para as fases 0 a 7 do plano de novos sistemas quantitativos.
+- Fases já visíveis continuam apontando para Inventário Quantitativo e Backtest.
+- Fases ainda sem endpoints definitivos passam a abrir uma tela de roadmap com dados necessários, plano visual e sequência de implementação.
+- Documentado o plano de telas em `docs/implementacao/plano-telas-sistemas-quantitativos.md`.
