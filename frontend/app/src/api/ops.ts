@@ -398,6 +398,35 @@ export interface QuantTickerCoverage {
   eligibilityStatus: string
 }
 
+
+export interface QuantBaselineStrategy {
+  strategyId: string
+  strategyFamily: string
+  strategyVersion: string
+  hypothesis: string | null
+  configuredStatus: string | null
+  generatedSignals: number
+  signalDays: number
+  lastSignalDate: string | null
+  trades: number | null
+  expectancyNetPct: number | null
+  profitFactor: number | null
+  maxDrawdownPct: number | null
+  robustnessScore: number | null
+  computedStatus: string | null
+}
+
+export interface QuantStrategyDetailAlert {
+  strategyId: string
+  strategyVersion: string
+  generatedSignals: number
+  trades: number | null
+  expectancyNetPct: number | null
+  profitFactor: number | null
+  maxDrawdownPct: number | null
+  alerts: string[]
+}
+
 export interface QuantDataQualityIncident {
   incidentType: string
   severity: string
@@ -460,6 +489,54 @@ export const fetchQuantDataQualityIncidents = async (limit = 100): Promise<Quant
       ticker: asString(record.ticker, '—'),
       incidentDate: toIsoDate(record.incidentDate ?? record.incident_date),
       recommendation: asNullableString(record.recommendation),
+    }
+  })
+}
+
+
+export const fetchQuantBaselineStrategies = async (): Promise<QuantBaselineStrategy[]> => {
+  const response = await apiClient.get<unknown>('/ops/quant/strategies')
+  const items = Array.isArray(response.data) ? response.data : []
+  return items.map((item) => {
+    const record = item as Record<string, unknown>
+    return {
+      strategyId: asString(record.strategyId ?? record.strategy_id, '—'),
+      strategyFamily: asString(record.strategyFamily ?? record.strategy_family, '—'),
+      strategyVersion: asString(record.strategyVersion ?? record.strategy_version, '—'),
+      hypothesis: asNullableString(record.hypothesis),
+      configuredStatus: asNullableString(record.configuredStatus ?? record.configured_status),
+      generatedSignals: toInteger(record.generatedSignals ?? record.generated_signals),
+      signalDays: toInteger(record.signalDays ?? record.signal_days),
+      lastSignalDate: toIsoDate(record.lastSignalDate ?? record.last_signal_date),
+      trades: toNumber(record.trades),
+      expectancyNetPct: toNumber(record.expectancyNetPct ?? record.expectancy_net_pct),
+      profitFactor: toNumber(record.profitFactor ?? record.profit_factor),
+      maxDrawdownPct: toNumber(record.maxDrawdownPct ?? record.max_drawdown_pct),
+      robustnessScore: toNumber(record.robustnessScore ?? record.robustness_score),
+      computedStatus: asNullableString(record.computedStatus ?? record.computed_status),
+    }
+  })
+}
+
+export const fetchQuantStrategyDetailAlerts = async (): Promise<QuantStrategyDetailAlert[]> => {
+  const response = await apiClient.get<unknown>('/ops/quant/strategies/alerts')
+  const items = Array.isArray(response.data) ? response.data : []
+  return items.map((item) => {
+    const record = item as Record<string, unknown>
+    const rawAlerts = record.alerts
+    const alerts = Array.isArray(rawAlerts)
+      ? rawAlerts.map((alert) => asString(alert)).filter(Boolean)
+      : asString(rawAlerts).split('|').map((alert) => alert.trim()).filter(Boolean)
+
+    return {
+      strategyId: asString(record.strategyId ?? record.strategy_id, '—'),
+      strategyVersion: asString(record.strategyVersion ?? record.strategy_version, '—'),
+      generatedSignals: toInteger(record.generatedSignals ?? record.generated_signals),
+      trades: toNumber(record.trades),
+      expectancyNetPct: toNumber(record.expectancyNetPct ?? record.expectancy_net_pct),
+      profitFactor: toNumber(record.profitFactor ?? record.profit_factor),
+      maxDrawdownPct: toNumber(record.maxDrawdownPct ?? record.max_drawdown_pct),
+      alerts,
     }
   })
 }
