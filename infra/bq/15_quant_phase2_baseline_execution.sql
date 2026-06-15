@@ -73,7 +73,19 @@ WITH signals AS (
     d.close,
     ROW_NUMBER() OVER (PARTITION BY s.signal_id ORDER BY d.data_pregao) AS bar_number
   FROM signals AS s
-  JOIN `ingestaokraken.cotacao_intraday.cotacao_ohlcv_diario` AS d
+  JOIN (
+    SELECT * EXCEPT(row_num)
+    FROM (
+      SELECT
+        d.*,
+        ROW_NUMBER() OVER (
+          PARTITION BY d.ticker, d.data_pregao
+          ORDER BY d.atualizado_em DESC, d.ingestion_run_id DESC
+        ) AS row_num
+      FROM `ingestaokraken.cotacao_intraday.cotacao_ohlcv_diario` AS d
+    )
+    WHERE row_num = 1
+  ) AS d
     ON d.ticker = s.ticker
    AND d.data_pregao > s.reference_date
    AND d.data_pregao <= DATE_ADD(s.reference_date, INTERVAL s.max_horizon_days + 10 DAY)
