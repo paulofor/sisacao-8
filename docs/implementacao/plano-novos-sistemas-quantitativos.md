@@ -291,6 +291,8 @@ Componentes sugeridos:
 
 ## 8. Fase 4 — Filtros de regime e controle de exposição
 
+**Status:** preparada em 2026-06-15. Relatório técnico: [`docs/implementacao/fase4-filtros-regime-exposicao.md`](fase4-filtros-regime-exposicao.md). Script BigQuery: [`infra/bq/11_quant_phase4_market_regime_exposure.sql`](../../infra/bq/11_quant_phase4_market_regime_exposure.sql).
+
 ### Objetivo
 
 Evitar operar em ambientes ruins. Esta fase decide quando o sistema deve operar, reduzir mão, operar vendido ou ficar fora.
