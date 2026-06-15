@@ -264,3 +264,8 @@
 - Fases já visíveis continuam apontando para Inventário Quantitativo e Backtest.
 - Fases ainda sem endpoints definitivos passam a abrir uma tela de roadmap com dados necessários, plano visual e sequência de implementação.
 - Documentado o plano de telas em `docs/implementacao/plano-telas-sistemas-quantitativos.md`.
+
+## 2026-06-15 — ArchUnit para isolamento de sistemas qualitativos
+- Adicionada dependência de teste `archunit-junit5` ao backend Maven.
+- Criado pacote reservado `com.sisacao.backend.qualitative` para o novo módulo de sistemas qualitativos.
+- Criado teste arquitetural ArchUnit para impedir dependências acidentais dos módulos existentes para o pacote qualitativo.
