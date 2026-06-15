@@ -47,6 +47,22 @@ public class OpsService {
         return bigQueryOpsClient.fetchQuantDataQualityIncidents(sanitizeQuantLimit(limit));
     }
 
+    public List<QuantBaselineStrategy> getQuantBaselineStrategies() {
+        return bigQueryOpsClient.fetchQuantBaselineStrategies();
+    }
+
+    public List<QuantStrategyDetailAlert> getQuantStrategyDetailAlerts() {
+        return bigQueryOpsClient.fetchQuantStrategyDetailAlerts();
+    }
+
+    public QuantBaselineStrategy getQuantBaselineStrategy(String strategyId) {
+        if (strategyId == null || strategyId.isBlank()) {
+            throw new OpsValidationException("O parâmetro 'strategyId' é obrigatório.");
+        }
+        return bigQueryOpsClient.fetchQuantBaselineStrategy(strategyId.trim())
+                .orElseThrow(() -> new OpsValidationException("Estratégia baseline não encontrada: " + strategyId));
+    }
+
     public List<Signal> getNextSignals() {
         return bigQueryOpsClient.fetchNextSignals();
     }
