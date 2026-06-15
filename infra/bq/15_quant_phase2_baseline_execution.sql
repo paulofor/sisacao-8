@@ -146,7 +146,7 @@ SELECT
   DATE_DIFF(se.bar_date, s.reference_date, DAY) AS days_in_trade,
   e.mfe_pct,
   e.mae_pct,
-  NULL AS regime_label,
+  CAST(NULL AS STRING) AS regime_label,
   run_id,
   CURRENT_DATETIME() AS created_at
 FROM signals AS s
