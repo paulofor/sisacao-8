@@ -540,3 +540,99 @@ export const fetchQuantStrategyDetailAlerts = async (): Promise<QuantStrategyDet
     }
   })
 }
+
+export interface QuantRankingDailyEntry {
+  rankingModelId: string
+  rankingModelVersion: string
+  referenceDate: string | null
+  rankingPosition: number
+  rankingDecile: number
+  ticker: string
+  finalScore: number | null
+  relativeStrengthFactor: number | null
+  shortMomentumFactor: number | null
+  relativeVolumeFactor: number | null
+  volatilityFactor: number | null
+  meanDistanceFactor: number | null
+  candleQualityFactor: number | null
+  indexRegimeFactor: number | null
+  currentPrice: number | null
+  liquidityValue: number | null
+  estimatedRisk: number | null
+  marketRegimeLabel: string | null
+  forwardReturn5d: number | null
+  factorBreakdownJson: string | null
+  actionSuggestion: string | null
+  confidenceLabel: string | null
+}
+
+export interface QuantRankingPerformance {
+  rankingModelId: string
+  rankingModelVersion: string
+  topN: number
+  portfolioDays: number
+  avgTopNReturn5d: number | null
+  volatilityTopNReturn5d: number | null
+  positiveDayRate: number | null
+  avgExcessVsRandom5d: number | null
+  decileReturnCorrelation: number | null
+  topDecileReturn5d: number | null
+  bottomDecileReturn5d: number | null
+  topMinusBottomDecileReturn5d: number | null
+  rankingStatus: string | null
+}
+
+export const fetchQuantRankingDaily = async (limit = 100): Promise<QuantRankingDailyEntry[]> => {
+  const response = await apiClient.get<unknown>('/ops/quant/ranking/daily', { params: { limit } })
+  const items = Array.isArray(response.data) ? response.data : []
+  return items.map((item) => {
+    const record = item as Record<string, unknown>
+    return {
+      rankingModelId: asString(record.rankingModelId ?? record.ranking_model_id, '—'),
+      rankingModelVersion: asString(record.rankingModelVersion ?? record.ranking_model_version, '—'),
+      referenceDate: toIsoDate(record.referenceDate ?? record.reference_date),
+      rankingPosition: toInteger(record.rankingPosition ?? record.ranking_position),
+      rankingDecile: toInteger(record.rankingDecile ?? record.ranking_decile),
+      ticker: asString(record.ticker, '—'),
+      finalScore: toNumber(record.finalScore ?? record.final_score),
+      relativeStrengthFactor: toNumber(record.relativeStrengthFactor ?? record.relative_strength_factor),
+      shortMomentumFactor: toNumber(record.shortMomentumFactor ?? record.short_momentum_factor),
+      relativeVolumeFactor: toNumber(record.relativeVolumeFactor ?? record.relative_volume_factor),
+      volatilityFactor: toNumber(record.volatilityFactor ?? record.volatility_factor),
+      meanDistanceFactor: toNumber(record.meanDistanceFactor ?? record.mean_distance_factor),
+      candleQualityFactor: toNumber(record.candleQualityFactor ?? record.candle_quality_factor),
+      indexRegimeFactor: toNumber(record.indexRegimeFactor ?? record.index_regime_factor),
+      currentPrice: toNumber(record.currentPrice ?? record.current_price),
+      liquidityValue: toNumber(record.liquidityValue ?? record.liquidity_value),
+      estimatedRisk: toNumber(record.estimatedRisk ?? record.estimated_risk),
+      marketRegimeLabel: asNullableString(record.marketRegimeLabel ?? record.market_regime_label),
+      forwardReturn5d: toNumber(record.forwardReturn5d ?? record.forward_return_5d),
+      factorBreakdownJson: asNullableString(record.factorBreakdownJson ?? record.factor_breakdown_json),
+      actionSuggestion: asNullableString(record.actionSuggestion ?? record.action_suggestion),
+      confidenceLabel: asNullableString(record.confidenceLabel ?? record.confidence_label),
+    }
+  })
+}
+
+export const fetchQuantRankingPerformance = async (): Promise<QuantRankingPerformance[]> => {
+  const response = await apiClient.get<unknown>('/ops/quant/ranking/performance')
+  const items = Array.isArray(response.data) ? response.data : []
+  return items.map((item) => {
+    const record = item as Record<string, unknown>
+    return {
+      rankingModelId: asString(record.rankingModelId ?? record.ranking_model_id, '—'),
+      rankingModelVersion: asString(record.rankingModelVersion ?? record.ranking_model_version, '—'),
+      topN: toInteger(record.topN ?? record.top_n),
+      portfolioDays: toInteger(record.portfolioDays ?? record.portfolio_days),
+      avgTopNReturn5d: toNumber(record.avgTopNReturn5d ?? record.avg_top_n_return_5d),
+      volatilityTopNReturn5d: toNumber(record.volatilityTopNReturn5d ?? record.volatility_top_n_return_5d),
+      positiveDayRate: toNumber(record.positiveDayRate ?? record.positive_day_rate),
+      avgExcessVsRandom5d: toNumber(record.avgExcessVsRandom5d ?? record.avg_excess_vs_random_5d),
+      decileReturnCorrelation: toNumber(record.decileReturnCorrelation ?? record.decile_return_correlation),
+      topDecileReturn5d: toNumber(record.topDecileReturn5d ?? record.top_decile_return_5d),
+      bottomDecileReturn5d: toNumber(record.bottomDecileReturn5d ?? record.bottom_decile_return_5d),
+      topMinusBottomDecileReturn5d: toNumber(record.topMinusBottomDecileReturn5d ?? record.top_minus_bottom_decile_return_5d),
+      rankingStatus: asNullableString(record.rankingStatus ?? record.ranking_status),
+    }
+  })
+}

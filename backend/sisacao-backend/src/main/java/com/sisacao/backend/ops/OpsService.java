@@ -55,6 +55,14 @@ public class OpsService {
         return bigQueryOpsClient.fetchQuantStrategyDetailAlerts();
     }
 
+    public List<QuantRankingDailyEntry> getQuantRankingDaily(Integer limit) {
+        return bigQueryOpsClient.fetchQuantRankingDaily(sanitizeQuantLimit(limit));
+    }
+
+    public List<QuantRankingPerformance> getQuantRankingPerformance() {
+        return bigQueryOpsClient.fetchQuantRankingPerformance();
+    }
+
     public QuantBaselineStrategy getQuantBaselineStrategy(String strategyId) {
         if (strategyId == null || strategyId.isBlank()) {
             throw new OpsValidationException("O parâmetro 'strategyId' é obrigatório.");
