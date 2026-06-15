@@ -700,6 +700,120 @@ export interface QuantFilterEffectiveness {
   filterEffectivenessStatus: string | null
 }
 
+export interface QuantRobustnessStrategy {
+  strategyId: string
+  strategyVersion: string
+  validationWindow: string | null
+  trainTrades: number
+  validationTrades: number
+  testTrades: number
+  trainExpectancyNetPct: number | null
+  validationExpectancyNetPct: number | null
+  testExpectancyNetPct: number | null
+  outOfSampleDegradationPct: number | null
+  walkForwardEfficiency: number | null
+  parameterStabilityScore: number | null
+  costStressSurvivalScore: number | null
+  robustnessScore: number | null
+  overfittingAlerts: string[]
+  validationStatus: string | null
+}
+
+export interface QuantWalkForwardResult {
+  strategyId: string
+  strategyVersion: string
+  windowStart: string | null
+  windowEnd: string | null
+  trainExpectancyNetPct: number | null
+  testExpectancyNetPct: number | null
+  testTrades: number
+  efficiencyRatio: number | null
+  windowStatus: string | null
+}
+
+export interface QuantParameterSensitivity {
+  strategyId: string
+  strategyVersion: string
+  parameterName: string
+  parameterValue: string
+  expectancyNetPct: number | null
+  maxDrawdownPct: number | null
+  trades: number
+  stabilityBucket: string | null
+}
+
+export interface QuantCostStressTest {
+  strategyId: string
+  strategyVersion: string
+  scenarioName: string
+  transactionCostPct: number | null
+  slippagePct: number | null
+  expectancyNetPct: number | null
+  profitFactor: number | null
+  maxDrawdownPct: number | null
+  survivalStatus: string | null
+}
+
+export interface QuantRobustnessPayload {
+  strategies: QuantRobustnessStrategy[]
+  walkForward: QuantWalkForwardResult[]
+  parameterSensitivity: QuantParameterSensitivity[]
+  costStressTests: QuantCostStressTest[]
+}
+
+const parseAlerts = (value: unknown): string[] => {
+  if (Array.isArray(value)) {
+    return value.map((item) => asString(item).trim()).filter(Boolean)
+  }
+  return asString(value).split('|').map((item) => item.trim()).filter(Boolean)
+}
+
+export const fetchQuantRobustness = async (): Promise<QuantRobustnessPayload> => {
+  const response = await apiClient.get<unknown>('/ops/quant/robustness')
+  const data = response.data as Record<string, unknown> | unknown[] | null
+  const root = data && !Array.isArray(data) && typeof data === 'object' ? data as Record<string, unknown> : {}
+  const strategyItems = Array.isArray(data) ? data : Array.isArray(root.strategies) ? root.strategies : []
+  const walkForwardItems = Array.isArray(root.walkForward) ? root.walkForward : Array.isArray(root.walk_forward) ? root.walk_forward : []
+  const sensitivityItems = Array.isArray(root.parameterSensitivity) ? root.parameterSensitivity : Array.isArray(root.parameter_sensitivity) ? root.parameter_sensitivity : []
+  const costItems = Array.isArray(root.costStressTests) ? root.costStressTests : Array.isArray(root.cost_stress_tests) ? root.cost_stress_tests : []
+
+  return {
+    strategies: strategyItems.map((item) => {
+      const record = item as Record<string, unknown>
+      return {
+        strategyId: asString(record.strategyId ?? record.strategy_id, '—'),
+        strategyVersion: asString(record.strategyVersion ?? record.strategy_version, '—'),
+        validationWindow: asNullableString(record.validationWindow ?? record.validation_window),
+        trainTrades: toInteger(record.trainTrades ?? record.train_trades),
+        validationTrades: toInteger(record.validationTrades ?? record.validation_trades),
+        testTrades: toInteger(record.testTrades ?? record.test_trades),
+        trainExpectancyNetPct: toNumber(record.trainExpectancyNetPct ?? record.train_expectancy_net_pct),
+        validationExpectancyNetPct: toNumber(record.validationExpectancyNetPct ?? record.validation_expectancy_net_pct),
+        testExpectancyNetPct: toNumber(record.testExpectancyNetPct ?? record.test_expectancy_net_pct),
+        outOfSampleDegradationPct: toNumber(record.outOfSampleDegradationPct ?? record.out_of_sample_degradation_pct),
+        walkForwardEfficiency: toNumber(record.walkForwardEfficiency ?? record.walk_forward_efficiency),
+        parameterStabilityScore: toNumber(record.parameterStabilityScore ?? record.parameter_stability_score),
+        costStressSurvivalScore: toNumber(record.costStressSurvivalScore ?? record.cost_stress_survival_score),
+        robustnessScore: toNumber(record.robustnessScore ?? record.robustness_score),
+        overfittingAlerts: parseAlerts(record.overfittingAlerts ?? record.overfitting_alerts),
+        validationStatus: asNullableString(record.validationStatus ?? record.validation_status),
+      }
+    }),
+    walkForward: walkForwardItems.map((item) => {
+      const record = item as Record<string, unknown>
+      return { strategyId: asString(record.strategyId ?? record.strategy_id, '—'), strategyVersion: asString(record.strategyVersion ?? record.strategy_version, '—'), windowStart: toIsoDate(record.windowStart ?? record.window_start), windowEnd: toIsoDate(record.windowEnd ?? record.window_end), trainExpectancyNetPct: toNumber(record.trainExpectancyNetPct ?? record.train_expectancy_net_pct), testExpectancyNetPct: toNumber(record.testExpectancyNetPct ?? record.test_expectancy_net_pct), testTrades: toInteger(record.testTrades ?? record.test_trades), efficiencyRatio: toNumber(record.efficiencyRatio ?? record.efficiency_ratio), windowStatus: asNullableString(record.windowStatus ?? record.window_status) }
+    }),
+    parameterSensitivity: sensitivityItems.map((item) => {
+      const record = item as Record<string, unknown>
+      return { strategyId: asString(record.strategyId ?? record.strategy_id, '—'), strategyVersion: asString(record.strategyVersion ?? record.strategy_version, '—'), parameterName: asString(record.parameterName ?? record.parameter_name, '—'), parameterValue: asString(record.parameterValue ?? record.parameter_value, '—'), expectancyNetPct: toNumber(record.expectancyNetPct ?? record.expectancy_net_pct), maxDrawdownPct: toNumber(record.maxDrawdownPct ?? record.max_drawdown_pct), trades: toInteger(record.trades), stabilityBucket: asNullableString(record.stabilityBucket ?? record.stability_bucket) }
+    }),
+    costStressTests: costItems.map((item) => {
+      const record = item as Record<string, unknown>
+      return { strategyId: asString(record.strategyId ?? record.strategy_id, '—'), strategyVersion: asString(record.strategyVersion ?? record.strategy_version, '—'), scenarioName: asString(record.scenarioName ?? record.scenario_name, '—'), transactionCostPct: toNumber(record.transactionCostPct ?? record.transaction_cost_pct), slippagePct: toNumber(record.slippagePct ?? record.slippage_pct), expectancyNetPct: toNumber(record.expectancyNetPct ?? record.expectancy_net_pct), profitFactor: toNumber(record.profitFactor ?? record.profit_factor), maxDrawdownPct: toNumber(record.maxDrawdownPct ?? record.max_drawdown_pct), survivalStatus: asNullableString(record.survivalStatus ?? record.survival_status) }
+    }),
+  }
+}
+
 export const fetchQuantMarketRegime = async (limit = 90): Promise<QuantMarketRegime[]> => {
   const response = await apiClient.get<unknown>('/ops/quant/market-regime', { params: { limit } })
   const items = Array.isArray(response.data) ? response.data : []
