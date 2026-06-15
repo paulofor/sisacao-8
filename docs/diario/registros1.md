@@ -206,3 +206,13 @@
 - Criado o script `infra/bq/09_quant_phase2_baseline_systems.sql` com catálogo de estratégias, features diárias, sinais candidatos, status e alertas para as telas de baseline.
 - Documentado o relatório técnico em `docs/implementacao/fase2-sistemas-baseline-simples.md`, incluindo hipóteses, regras iniciais, decisões de implementação e próximos passos.
 - Atualizado o plano principal para registrar a Fase 2 como preparada e apontar para os artefatos gerados.
+
+## 2026-06-14 21:15:16 UTC-3
+- Executada a preparação da Fase 3 do plano de novos sistemas quantitativos, focada em ranking e seleção de ativos.
+- Criado o script  com configuração versionada de ranking, fatores diários, ranking de oportunidades, carteiras top N e métricas de monotonicidade/performance.
+- Documentado o relatório técnico em , incluindo decisões de implementação, critérios de saída e próximos passos.
+- Atualizado o plano principal para registrar a Fase 3 como preparada e apontar para os artefatos gerados.
+
+## 2026-06-14 21:15:50 UTC-3
+- Correção do registro anterior da Fase 3: os artefatos criados foram `infra/bq/10_quant_phase3_asset_ranking.sql` e `docs/implementacao/fase3-ranking-selecao-ativos.md`.
+- A entrada anterior perdeu os caminhos por substituição indevida de crases no shell, mas os arquivos foram criados corretamente.
