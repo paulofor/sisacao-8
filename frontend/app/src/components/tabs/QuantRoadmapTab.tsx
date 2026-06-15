@@ -17,7 +17,7 @@ import {
 import dayjs from 'dayjs'
 import type { FC } from 'react'
 
-import type { QuantBaselineStrategy, QuantRankingDailyEntry, QuantExposureRecommendation, QuantFilterEffectiveness, QuantMarketRegime, QuantRankingPerformance, QuantStrategyDetailAlert, QuantStrategyRegimePerformance } from '../../api/ops'
+import type { QuantBaselineStrategy, QuantRankingDailyEntry, QuantExposureRecommendation, QuantFilterEffectiveness, QuantMarketRegime, QuantRankingPerformance, QuantStrategyDetailAlert, QuantStrategyRegimePerformance, QuantRobustnessPayload } from '../../api/ops'
 
 export type QuantRoadmapKey =
   | 'baseline'
@@ -64,6 +64,9 @@ interface QuantRoadmapTabProps {
   filterEffectiveness: QuantFilterEffectiveness[]
   filterEffectivenessLoading: boolean
   filterEffectivenessError?: Error | null
+  robustness: QuantRobustnessPayload
+  robustnessLoading: boolean
+  robustnessError?: Error | null
 }
 
 const quantRoadmapItems: RoadmapItem[] = [
@@ -580,6 +583,100 @@ const RegimeScreen: FC<{
   )
 }
 
+const RobustnessScreen: FC<{
+  robustness: QuantRobustnessPayload
+  loading: boolean
+  error?: Error | null
+}> = ({ robustness, loading, error }) => {
+  const bestStrategy = [...robustness.strategies].sort((a, b) => (b.robustnessScore ?? -1) - (a.robustnessScore ?? -1))[0]
+  const approvedCount = robustness.strategies.filter((item) => ['robusta', 'aprovada', 'pass'].includes((item.validationStatus ?? '').toLowerCase())).length
+  const alertCount = robustness.strategies.reduce((total, item) => total + item.overfittingAlerts.length, 0)
+  const avgRobustness = robustness.strategies.length
+    ? robustness.strategies.reduce((total, item) => total + (item.robustnessScore ?? 0), 0) / robustness.strategies.length
+    : null
+
+  return (
+    <Stack spacing={3}>
+      <Stack spacing={1}>
+        <Typography variant="h4" color="text.primary" fontWeight={800}>Validação Estatística e Robustez</Typography>
+        <Typography variant="body1" color="text.secondary">
+          Tela operacional da Fase 5 para separar estratégias ajustadas ao passado daquelas que preservam estabilidade
+          fora da amostra, em janelas walk-forward e sob cenários de custo e slippage estressados.
+        </Typography>
+      </Stack>
+
+      {error ? <Alert severity="error">Erro ao carregar /ops/quant/robustness.</Alert> : null}
+      {loading ? <Skeleton variant="rounded" height={160} /> : null}
+
+      {!loading && !error ? (
+        <Stack direction="row" flexWrap="wrap" gap={2}>
+          <MetricCard title="Estratégias avaliadas" value={formatNumber(robustness.strategies.length)} helper="Runs de validação materializados" />
+          <MetricCard title="Aprovadas em robustez" value={formatNumber(approvedCount)} helper="Status robusta/aprovada/pass" />
+          <MetricCard title="Score médio" value={formatDecimal(avgRobustness)} helper="Média do robustness_score" />
+          <MetricCard title="Melhor candidata" value={bestStrategy?.strategyId ?? '—'} helper={bestStrategy ? `Score ${formatDecimal(bestStrategy.robustnessScore)}` : 'Sem validação'} />
+          <MetricCard title="Alertas overfitting" value={formatNumber(alertCount)} helper="Alertas consolidados" />
+        </Stack>
+      ) : null}
+
+      {!loading && !error && robustness.strategies.length === 0 ? (
+        <Alert severity="warning">Nenhum resultado retornado. Publique as views/tabelas da Fase 5 e o endpoint /ops/quant/robustness.</Alert>
+      ) : null}
+
+      <Paper elevation={0} sx={{ p: 3, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+        <Stack spacing={2}>
+          <Typography variant="h5" fontWeight={800}>Resumo por estratégia</Typography>
+          <TableContainer sx={{ maxHeight: 420 }}>
+            <Table stickyHeader size="small" aria-label="Resumo de robustez por estratégia">
+              <TableHead><TableRow><TableCell>Estratégia</TableCell><TableCell>Janela</TableCell><TableCell align="right">Treino</TableCell><TableCell align="right">Validação</TableCell><TableCell align="right">Teste</TableCell><TableCell align="right">Degradação OOS</TableCell><TableCell align="right">Walk-forward</TableCell><TableCell align="right">Score</TableCell><TableCell>Status</TableCell></TableRow></TableHead>
+              <TableBody>{robustness.strategies.map((item) => (
+                <TableRow key={`${item.strategyId}-${item.strategyVersion}-${item.validationWindow}`} hover>
+                  <TableCell>{item.strategyId}<Typography variant="caption" display="block" color="text.secondary">{item.strategyVersion}</Typography></TableCell>
+                  <TableCell>{item.validationWindow ?? '—'}</TableCell>
+                  <TableCell align="right">{formatPct(item.trainExpectancyNetPct)}<Typography variant="caption" display="block" color="text.secondary">{formatNumber(item.trainTrades)} trades</Typography></TableCell>
+                  <TableCell align="right">{formatPct(item.validationExpectancyNetPct)}<Typography variant="caption" display="block" color="text.secondary">{formatNumber(item.validationTrades)} trades</Typography></TableCell>
+                  <TableCell align="right">{formatPct(item.testExpectancyNetPct)}<Typography variant="caption" display="block" color="text.secondary">{formatNumber(item.testTrades)} trades</Typography></TableCell>
+                  <TableCell align="right">{formatPct(item.outOfSampleDegradationPct)}</TableCell>
+                  <TableCell align="right">{formatPct(item.walkForwardEfficiency)}</TableCell>
+                  <TableCell align="right">{formatDecimal(item.robustnessScore)}</TableCell>
+                  <TableCell><Chip size="small" color={statusColor(item.validationStatus ?? '')} label={normalizeLabel(item.validationStatus)} /></TableCell>
+                </TableRow>
+              ))}</TableBody>
+            </Table>
+          </TableContainer>
+        </Stack>
+      </Paper>
+
+      {bestStrategy?.overfittingAlerts.length ? <Alert severity="warning">Alertas da melhor candidata: {bestStrategy.overfittingAlerts.join(' · ')}</Alert> : null}
+
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', xl: 'repeat(2, minmax(0, 1fr))' }, gap: 3 }}>
+        <Paper elevation={0} sx={{ p: 3, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+          <Stack spacing={2}>
+            <Typography variant="h5" fontWeight={800}>Walk-forward</Typography>
+            {robustness.walkForward.length === 0 ? <Alert severity="info">Sem janelas walk-forward materializadas.</Alert> : null}
+            <TableContainer sx={{ maxHeight: 340 }}><Table stickyHeader size="small"><TableHead><TableRow><TableCell>Estratégia</TableCell><TableCell>Janela</TableCell><TableCell align="right">Treino</TableCell><TableCell align="right">Teste</TableCell><TableCell align="right">Eficiência</TableCell><TableCell>Status</TableCell></TableRow></TableHead><TableBody>{robustness.walkForward.map((item) => (<TableRow key={`${item.strategyId}-${item.windowStart}-${item.windowEnd}`} hover><TableCell>{item.strategyId}</TableCell><TableCell>{formatDate(item.windowStart)}–{formatDate(item.windowEnd)}</TableCell><TableCell align="right">{formatPct(item.trainExpectancyNetPct)}</TableCell><TableCell align="right">{formatPct(item.testExpectancyNetPct)}<Typography variant="caption" display="block" color="text.secondary">{formatNumber(item.testTrades)} trades</Typography></TableCell><TableCell align="right">{formatPct(item.efficiencyRatio)}</TableCell><TableCell><Chip size="small" color={statusColor(item.windowStatus ?? '')} label={normalizeLabel(item.windowStatus)} /></TableCell></TableRow>))}</TableBody></Table></TableContainer>
+          </Stack>
+        </Paper>
+
+        <Paper elevation={0} sx={{ p: 3, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+          <Stack spacing={2}>
+            <Typography variant="h5" fontWeight={800}>Custos e slippage estressados</Typography>
+            {robustness.costStressTests.length === 0 ? <Alert severity="info">Sem cenários de custo estressado.</Alert> : null}
+            <TableContainer sx={{ maxHeight: 340 }}><Table stickyHeader size="small"><TableHead><TableRow><TableCell>Estratégia</TableCell><TableCell>Cenário</TableCell><TableCell align="right">Custo</TableCell><TableCell align="right">Slippage</TableCell><TableCell align="right">Expectancy</TableCell><TableCell align="right">PF</TableCell><TableCell>Status</TableCell></TableRow></TableHead><TableBody>{robustness.costStressTests.map((item) => (<TableRow key={`${item.strategyId}-${item.scenarioName}`} hover><TableCell>{item.strategyId}</TableCell><TableCell>{item.scenarioName}</TableCell><TableCell align="right">{formatPct(item.transactionCostPct)}</TableCell><TableCell align="right">{formatPct(item.slippagePct)}</TableCell><TableCell align="right">{formatPct(item.expectancyNetPct)}</TableCell><TableCell align="right">{formatDecimal(item.profitFactor)}</TableCell><TableCell><Chip size="small" color={statusColor(item.survivalStatus ?? '')} label={normalizeLabel(item.survivalStatus)} /></TableCell></TableRow>))}</TableBody></Table></TableContainer>
+          </Stack>
+        </Paper>
+      </Box>
+
+      <Paper elevation={0} sx={{ p: 3, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+        <Stack spacing={2}>
+          <Typography variant="h5" fontWeight={800}>Sensibilidade de parâmetros</Typography>
+          {robustness.parameterSensitivity.length === 0 ? <Alert severity="info">Sem grade de sensibilidade de parâmetros.</Alert> : null}
+          <TableContainer sx={{ maxHeight: 360 }}><Table stickyHeader size="small"><TableHead><TableRow><TableCell>Estratégia</TableCell><TableCell>Parâmetro</TableCell><TableCell>Valor</TableCell><TableCell align="right">Expectancy</TableCell><TableCell align="right">Drawdown</TableCell><TableCell align="right">Trades</TableCell><TableCell>Bucket</TableCell></TableRow></TableHead><TableBody>{robustness.parameterSensitivity.map((item) => (<TableRow key={`${item.strategyId}-${item.parameterName}-${item.parameterValue}`} hover><TableCell>{item.strategyId}</TableCell><TableCell>{item.parameterName}</TableCell><TableCell>{item.parameterValue}</TableCell><TableCell align="right">{formatPct(item.expectancyNetPct)}</TableCell><TableCell align="right">{formatPct(item.maxDrawdownPct)}</TableCell><TableCell align="right">{formatNumber(item.trades)}</TableCell><TableCell><Chip size="small" color={statusColor(item.stabilityBucket ?? '')} label={normalizeLabel(item.stabilityBucket)} /></TableCell></TableRow>))}</TableBody></Table></TableContainer>
+        </Stack>
+      </Paper>
+    </Stack>
+  )
+}
+
 const QuantRoadmapTab: FC<QuantRoadmapTabProps> = ({
   selectedKey,
   baselineStrategies,
@@ -606,6 +703,9 @@ const QuantRoadmapTab: FC<QuantRoadmapTabProps> = ({
   filterEffectiveness,
   filterEffectivenessLoading,
   filterEffectivenessError,
+  robustness,
+  robustnessLoading,
+  robustnessError,
 }) => {
   const item = quantRoadmapItems.find((candidate) => candidate.key === selectedKey) ?? quantRoadmapItems[0]
 
@@ -639,6 +739,10 @@ const QuantRoadmapTab: FC<QuantRoadmapTabProps> = ({
         effectivenessError={filterEffectivenessError}
       />
     )
+  }
+
+  if (item.key === 'robustez') {
+    return <RobustnessScreen robustness={robustness} loading={robustnessLoading} error={robustnessError} />
   }
 
   if (item.key === 'baseline') {

@@ -56,6 +56,7 @@ import { useQuantMarketRegime } from './hooks/useQuantMarketRegime'
 import { useQuantExposureRecommendations } from './hooks/useQuantExposureRecommendations'
 import { useQuantStrategyRegimePerformance } from './hooks/useQuantStrategyRegimePerformance'
 import { useQuantFilterEffectiveness } from './hooks/useQuantFilterEffectiveness'
+import { useQuantRobustness } from './hooks/useQuantRobustness'
 import { useQuantTickerCoverage } from './hooks/useQuantTickerCoverage'
 
 const severityOptions: Array<'all' | DataCollectionMessageSeverity> = [
@@ -154,6 +155,7 @@ function App() {
   const quantExposureRecommendationsQuery = useQuantExposureRecommendations(90)
   const quantStrategyRegimePerformanceQuery = useQuantStrategyRegimePerformance()
   const quantFilterEffectivenessQuery = useQuantFilterEffectiveness()
+  const quantRobustnessQuery = useQuantRobustness()
 
   const messages = useMemo(() => dataCollectionMessagesQuery.data ?? [], [dataCollectionMessagesQuery.data])
 
@@ -187,7 +189,9 @@ function App() {
               quantStrategyRegimePerformanceQuery,
               quantFilterEffectivenessQuery,
             ] as QueryResult[]
-          : [] as QueryResult[],
+          : selectedRoadmapKey === 'robustez'
+            ? [quantRobustnessQuery] as QueryResult[]
+            : [] as QueryResult[],
   }
 
   const activeQueries = tabQueries[activeTab]
@@ -380,6 +384,9 @@ function App() {
             filterEffectiveness={quantFilterEffectivenessQuery.data ?? []}
             filterEffectivenessError={quantFilterEffectivenessQuery.error}
             filterEffectivenessLoading={quantFilterEffectivenessQuery.isLoading && (quantFilterEffectivenessQuery.data ?? []).length === 0}
+            robustness={quantRobustnessQuery.data ?? { strategies: [], walkForward: [], parameterSensitivity: [], costStressTests: [] }}
+            robustnessError={quantRobustnessQuery.error}
+            robustnessLoading={quantRobustnessQuery.isLoading && !quantRobustnessQuery.data}
           />
         ) : null}
           </Box>
