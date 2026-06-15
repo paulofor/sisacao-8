@@ -129,10 +129,31 @@ WHEN NOT MATCHED THEN INSERT (
 );
 
 CREATE OR REPLACE VIEW `ingestaokraken.cotacao_intraday.vw_quant_phase2_daily_features` AS
-WITH eligible AS (
+WITH research_universe AS (
   SELECT ticker
   FROM `ingestaokraken.cotacao_intraday.vw_quant_ticker_coverage`
   WHERE eligibility_status = 'elegivel'
+    OR (
+      eligibility_status = 'observacao'
+      AND coverage_pct >= 0.90
+      AND avg_financial_volume >= 1000000
+      AND invalid_price_days = 0
+      AND invalid_volume_days = 0
+      AND duplicate_days <= 3
+    )
+),
+daily_dedup AS (
+  SELECT * EXCEPT(row_num)
+  FROM (
+    SELECT
+      d.*,
+      ROW_NUMBER() OVER (
+        PARTITION BY d.ticker, d.data_pregao
+        ORDER BY d.atualizado_em DESC
+      ) AS row_num
+    FROM `ingestaokraken.cotacao_intraday.cotacao_ohlcv_diario` AS d
+  )
+  WHERE row_num = 1
 ),
 raw AS (
   SELECT
@@ -148,8 +169,8 @@ raw AS (
     LAG(d.close, 5) OVER ticker_window AS close_5d_ago,
     LAG(d.close, 20) OVER ticker_window AS close_20d_ago,
     d.close - LAG(d.close, 1) OVER ticker_window AS close_delta
-  FROM `ingestaokraken.cotacao_intraday.cotacao_ohlcv_diario` AS d
-  INNER JOIN eligible AS e ON e.ticker = d.ticker
+  FROM daily_dedup AS d
+  INNER JOIN research_universe AS e ON e.ticker = d.ticker
   WINDOW ticker_window AS (PARTITION BY d.ticker ORDER BY d.data_pregao)
 ),
 base AS (
