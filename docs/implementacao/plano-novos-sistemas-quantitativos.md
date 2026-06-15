@@ -347,6 +347,8 @@ Componentes sugeridos:
 
 ## 9. Fase 5 — Validação estatística e robustez
 
+**Status:** preparada em 2026-06-15. Relatório técnico: [`docs/implementacao/fase5-validacao-estatistica-robustez.md`](fase5-validacao-estatistica-robustez.md). Script BigQuery: [`infra/bq/12_quant_phase5_statistical_robustness.sql`](../../infra/bq/12_quant_phase5_statistical_robustness.sql).
+
 ### Objetivo
 
 Separar estratégias que apenas encaixaram no passado daquelas que têm alguma estabilidade estatística.
