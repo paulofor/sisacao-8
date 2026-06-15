@@ -25,6 +25,8 @@ public class OpsBigQueryProperties {
     private String quantInventorySummaryView = "vw_quant_data_inventory_summary";
     private String quantTickerCoverageView = "vw_quant_ticker_coverage";
     private String quantDataQualityIncidentsView = "vw_quant_data_quality_incidents";
+    private String quantBaselineStatusView = "vw_quant_phase2_baseline_status";
+    private String quantStrategyDetailAlertsView = "vw_quant_phase2_strategy_detail_alerts";
 
     public boolean isEnabled() {
         return enabled;
@@ -210,6 +212,26 @@ public class OpsBigQueryProperties {
     public void setQuantDataQualityIncidentsView(String quantDataQualityIncidentsView) {
         if (quantDataQualityIncidentsView != null && !quantDataQualityIncidentsView.isBlank()) {
             this.quantDataQualityIncidentsView = quantDataQualityIncidentsView;
+        }
+    }
+
+    public String getQuantBaselineStatusView() {
+        return quantBaselineStatusView;
+    }
+
+    public void setQuantBaselineStatusView(String quantBaselineStatusView) {
+        if (quantBaselineStatusView != null && !quantBaselineStatusView.isBlank()) {
+            this.quantBaselineStatusView = quantBaselineStatusView;
+        }
+    }
+
+    public String getQuantStrategyDetailAlertsView() {
+        return quantStrategyDetailAlertsView;
+    }
+
+    public void setQuantStrategyDetailAlertsView(String quantStrategyDetailAlertsView) {
+        if (quantStrategyDetailAlertsView != null && !quantStrategyDetailAlertsView.isBlank()) {
+            this.quantStrategyDetailAlertsView = quantStrategyDetailAlertsView;
         }
     }
 

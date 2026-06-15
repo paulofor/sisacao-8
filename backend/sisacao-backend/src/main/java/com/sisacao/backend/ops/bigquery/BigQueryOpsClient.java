@@ -15,6 +15,8 @@ import com.sisacao.backend.ops.OpsOverview;
 import com.sisacao.backend.ops.PipelineJobStatus;
 import com.sisacao.backend.ops.QuantDataInventorySummary;
 import com.sisacao.backend.ops.QuantDataQualityIncident;
+import com.sisacao.backend.ops.QuantBaselineStrategy;
+import com.sisacao.backend.ops.QuantStrategyDetailAlert;
 import com.sisacao.backend.ops.QuantTickerCoverage;
 import com.sisacao.backend.ops.Signal;
 import com.sisacao.backend.ops.SignalByDateEntry;
@@ -112,6 +114,41 @@ public class BigQueryOpsClient {
         List<QuantDataQualityIncident> rows = new ArrayList<>();
         for (FieldValueList row : result.iterateAll()) {
             rows.add(toQuantDataQualityIncident(row));
+        }
+        return Collections.unmodifiableList(rows);
+    }
+
+    public List<QuantBaselineStrategy> fetchQuantBaselineStrategies() {
+        String sql = "SELECT * FROM " + qualifiedQuantView(properties.getQuantBaselineStatusView())
+                + " ORDER BY strategy_family ASC, strategy_id ASC";
+        TableResult result = runQuery(sql, Map.of());
+        List<QuantBaselineStrategy> rows = new ArrayList<>();
+        for (FieldValueList row : result.iterateAll()) {
+            rows.add(toQuantBaselineStrategy(row));
+        }
+        return Collections.unmodifiableList(rows);
+    }
+
+    public Optional<QuantBaselineStrategy> fetchQuantBaselineStrategy(String strategyId) {
+        Map<String, QueryParameterValue> params = Map.of("strategyId", QueryParameterValue.string(strategyId));
+        String sql = "SELECT * FROM " + qualifiedQuantView(properties.getQuantBaselineStatusView())
+                + " WHERE strategy_id = @strategyId LIMIT 1";
+        TableResult result = runQuery(sql, params);
+        for (FieldValueList row : result.iterateAll()) {
+            return Optional.of(toQuantBaselineStrategy(row));
+        }
+        return Optional.empty();
+    }
+
+    public List<QuantStrategyDetailAlert> fetchQuantStrategyDetailAlerts() {
+        String sql = "SELECT strategy_id, strategy_version, generated_signals, trades, expectancy_net_pct, "
+                + "profit_factor, max_drawdown_pct, ARRAY_TO_STRING(alerts, '|') AS alerts_text FROM "
+                + qualifiedQuantView(properties.getQuantStrategyDetailAlertsView())
+                + " ORDER BY strategy_id ASC, strategy_version ASC";
+        TableResult result = runQuery(sql, Map.of());
+        List<QuantStrategyDetailAlert> rows = new ArrayList<>();
+        for (FieldValueList row : result.iterateAll()) {
+            rows.add(toQuantStrategyDetailAlert(row));
         }
         return Collections.unmodifiableList(rows);
     }
@@ -325,6 +362,40 @@ public class BigQueryOpsClient {
                 getString(row, "ticker"),
                 getDate(row, "incident_date", "incidentDate"),
                 getString(row, "recommendation"));
+    }
+
+    private QuantBaselineStrategy toQuantBaselineStrategy(FieldValueList row) {
+        return new QuantBaselineStrategy(
+                getString(row, "strategy_id", "strategyId"),
+                getString(row, "strategy_family", "strategyFamily"),
+                getString(row, "strategy_version", "strategyVersion"),
+                getString(row, "hypothesis"),
+                getString(row, "configured_status", "configuredStatus"),
+                getLong(row, "generated_signals", "generatedSignals"),
+                getLong(row, "signal_days", "signalDays"),
+                getDate(row, "last_signal_date", "lastSignalDate"),
+                getLong(row, "trades"),
+                getDouble(row, "expectancy_net_pct", "expectancyNetPct"),
+                getDouble(row, "profit_factor", "profitFactor"),
+                getDouble(row, "max_drawdown_pct", "maxDrawdownPct"),
+                getDouble(row, "robustness_score", "robustnessScore"),
+                getString(row, "computed_status", "computedStatus"));
+    }
+
+    private QuantStrategyDetailAlert toQuantStrategyDetailAlert(FieldValueList row) {
+        String alertsText = getString(row, "alerts_text", "alertsText");
+        List<String> alerts = alertsText == null || alertsText.isBlank()
+                ? List.of()
+                : List.of(alertsText.split("\\|"));
+        return new QuantStrategyDetailAlert(
+                getString(row, "strategy_id", "strategyId"),
+                getString(row, "strategy_version", "strategyVersion"),
+                getLong(row, "generated_signals", "generatedSignals"),
+                getLong(row, "trades"),
+                getDouble(row, "expectancy_net_pct", "expectancyNetPct"),
+                getDouble(row, "profit_factor", "profitFactor"),
+                getDouble(row, "max_drawdown_pct", "maxDrawdownPct"),
+                alerts);
     }
 
     private Signal toSignal(FieldValueList row) {
