@@ -120,3 +120,16 @@ Mantendo este documento atualizado você garante que as rotinas automáticas do 
 | Time zone | `America/Sao_Paulo` |
 | Autenticação | OIDC com a mesma conta dedicada aos agendamentos |
 | Observações | Persiste resultados em `dq_checks_daily`/`dq_incidents` e deve sempre rodar após o pipeline completo. |
+
+### 8. `quant-daily-evaluation`
+
+| Campo | Valor recomendado |
+|-------|-------------------|
+| Serviço-alvo | Cloud Function `quant_daily_evaluation` |
+| Endpoint | `https://us-east1-<projeto>.cloudfunctions.net/quant_daily_evaluation` |
+| Método HTTP | `POST` (corpo vazio ou `{ "date": "YYYY-MM-DD" }`) |
+| Cron | `45 19 * * 1-5` (após `dq-checks`) |
+| Time zone | `America/Sao_Paulo` |
+| Autenticação | OIDC com `agendamentos-sisacao@<projeto>.iam.gserviceaccount.com` |
+| Logs esperados | Inserções idempotentes em `cotacao_intraday.quant_daily_model_evaluation` |
+| Observações | Este job não retreina nem promove modelos; ele materializa a decisão diária (`blocked`, `observe`, `paper_trading_candidate`, `approved_candidate`) para governança e futura automação controlada. |

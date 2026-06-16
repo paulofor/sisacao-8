@@ -58,6 +58,12 @@ jobs:
             source: functions/dq_checks
             service_account: sa-dq-checks@ingestaokraken.iam.gserviceaccount.com
             env: BQ_INTRADAY_DATASET=cotacao_intraday,BQ_DAILY_TABLE=cotacao_ohlcv_diario,BQ_INTRADAY_RAW_TABLE=cotacao_b3,BQ_SIGNALS_TABLE=sinais_eod,BQ_BACKTEST_METRICS_TABLE=backtest_metrics,BQ_HOLIDAYS_TABLE=feriados_b3,BQ_DQ_CHECKS_TABLE=dq_checks_daily,BQ_DQ_INCIDENTS_TABLE=dq_incidents,BQ_TICKERS_TABLE=acao_bovespa
+          - name: quant_daily_evaluation
+            entry_point: quant_daily_evaluation
+            source: functions/quant_daily_evaluation
+            service_account: sa-quant-daily-evaluation@ingestaokraken.iam.gserviceaccount.com
+            memory: 512Mi
+            env: BQ_INTRADAY_DATASET=cotacao_intraday,BQ_QUANT_EVALUATION_TABLE=quant_daily_model_evaluation,BQ_QUANT_RANKING_PERFORMANCE_VIEW=vw_quant_phase3_ranking_performance,BQ_QUANT_ROBUSTNESS_VIEW=vw_quant_phase5_robustness_dashboard,BQ_QUANT_PAPER_TRADING_VIEW=vw_quant_phase6_paper_trading_dashboard
     steps:
       - uses: actions/checkout@v4
       - name: Auth GCP
