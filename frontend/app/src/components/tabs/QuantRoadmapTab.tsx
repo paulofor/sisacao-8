@@ -17,7 +17,7 @@ import {
 import dayjs from 'dayjs'
 import type { FC } from 'react'
 
-import type { QuantBaselineStrategy, QuantRankingDailyEntry, QuantExposureRecommendation, QuantFilterEffectiveness, QuantMarketRegime, QuantRankingPerformance, QuantStrategyDetailAlert, QuantStrategyRegimePerformance, QuantRobustnessPayload, QuantPaperTradingPayload } from '../../api/ops'
+import type { QuantBaselineStrategy, QuantRankingDailyEntry, QuantExposureRecommendation, QuantFilterEffectiveness, QuantMarketRegime, QuantRankingPerformance, QuantStrategyDetailAlert, QuantStrategyRegimePerformance, QuantRobustnessPayload, QuantPaperTradingPayload, QuantCommitteePayload } from '../../api/ops'
 
 export type QuantRoadmapKey =
   | 'baseline'
@@ -70,6 +70,9 @@ interface QuantRoadmapTabProps {
   paperTrading: QuantPaperTradingPayload
   paperTradingLoading: boolean
   paperTradingError?: Error | null
+  committee: QuantCommitteePayload
+  committeeLoading: boolean
+  committeeError?: Error | null
 }
 
 const quantRoadmapItems: RoadmapItem[] = [
@@ -745,6 +748,88 @@ const PaperTradingScreen: FC<{
   )
 }
 
+
+const CommitteeRiskScreen: FC<{
+  committee: QuantCommitteePayload
+  loading: boolean
+  error?: Error | null
+}> = ({ committee, loading, error }) => {
+  const approvedCount = committee.strategies.filter((item) => ['aprovada', 'approved', 'piloto'].includes((item.decisionStatus ?? '').toLowerCase())).length
+  const pausedCount = committee.strategies.filter((item) => ['pausada', 'paused', 'reprovada', 'rejected'].includes((item.decisionStatus ?? '').toLowerCase())).length
+  const breachedLimits = committee.riskLimits.filter((item) => item.shutdownRequired || !['ok', 'normal', 'pass'].includes((item.breachStatus ?? '').toLowerCase())).length
+  const exposureAlerts = committee.exposureSnapshots.filter((item) => item.violatedLimits.length > 0 || !['ok', 'baixo', 'low'].includes((item.alertLevel ?? '').toLowerCase())).length
+
+  return (
+    <Stack spacing={3}>
+      <Stack spacing={1}>
+        <Typography variant="h4" color="text.primary" fontWeight={800}>Comitê de Estratégias, Risco e Limites</Typography>
+        <Typography variant="body1" color="text.secondary">
+          Tela operacional da Fase 7 para controlar aprovação, pausa, reprovação e limites antes de qualquer operação real controlada.
+        </Typography>
+      </Stack>
+
+      {error ? <Alert severity="error">Erro ao carregar /ops/quant/committee.</Alert> : null}
+      {loading ? <Skeleton variant="rounded" height={160} /> : null}
+
+      {!loading && !error ? (
+        <Stack direction="row" flexWrap="wrap" gap={2}>
+          <MetricCard title="Candidatas" value={formatNumber(committee.strategies.length)} helper="Estratégias na pauta do comitê" />
+          <MetricCard title="Aprovadas/piloto" value={formatNumber(approvedCount)} helper="Liberadas com governança" />
+          <MetricCard title="Pausadas/reprovadas" value={formatNumber(pausedCount)} helper="Bloqueios deliberados" />
+          <MetricCard title="Limites violados" value={formatNumber(breachedLimits)} helper="Risco exige ação" />
+          <MetricCard title="Alertas exposição" value={formatNumber(exposureAlerts)} helper="Snapshots com atenção" />
+        </Stack>
+      ) : null}
+
+      {!loading && !error && committee.strategies.length === 0 && committee.riskLimits.length === 0 && committee.exposureSnapshots.length === 0 ? (
+        <Alert severity="warning">Nenhum dado retornado. Publique as tabelas de checklist, decisões e limites auditáveis da Fase 7 e exponha /ops/quant/committee.</Alert>
+      ) : null}
+
+      <Paper elevation={0} sx={{ p: 3, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+        <Stack spacing={2}>
+          <Typography variant="h5" fontWeight={800}>Estratégias candidatas e decisões</Typography>
+          {committee.strategies.length === 0 ? <Alert severity="info">Sem estratégias candidatas na pauta.</Alert> : null}
+          <TableContainer sx={{ maxHeight: 460 }}>
+            <Table stickyHeader size="small" aria-label="Comitê de estratégias">
+              <TableHead><TableRow><TableCell>Estratégia</TableCell><TableCell>Fase</TableCell><TableCell>Decisão</TableCell><TableCell align="right">Checklist</TableCell><TableCell align="right">Expectancy</TableCell><TableCell align="right">Drawdown</TableCell><TableCell align="right">Paper trading</TableCell><TableCell>Risco</TableCell><TableCell>Última decisão</TableCell></TableRow></TableHead>
+              <TableBody>{committee.strategies.map((item) => (
+                <TableRow key={`${item.strategyId}-${item.strategyVersion}`} hover>
+                  <TableCell><Typography fontWeight={800}>{item.strategyName}</Typography><Typography variant="caption" color="text.secondary">{item.strategyId} · {item.strategyVersion}</Typography></TableCell>
+                  <TableCell><Chip size="small" color={statusColor(item.lifecycleStatus ?? '')} label={normalizeLabel(item.lifecycleStatus)} /></TableCell>
+                  <TableCell><Chip size="small" color={statusColor(item.decisionStatus ?? '')} label={normalizeLabel(item.decisionStatus)} /></TableCell>
+                  <TableCell align="right">{formatPct(item.checklistCompletionPct)}<Typography variant="caption" display="block" color="text.secondary">{formatNumber(item.checklistApprovedItems)}/{formatNumber(item.checklistTotalItems)} itens</Typography></TableCell>
+                  <TableCell align="right">{formatPct(item.expectancyNetPct)}</TableCell>
+                  <TableCell align="right">{formatPct(item.maxDrawdownPct)}</TableCell>
+                  <TableCell align="right">{formatNumber(item.paperTradingDays)} dias</TableCell>
+                  <TableCell><Chip size="small" color={statusColor(item.riskApprovalStatus ?? '')} label={normalizeLabel(item.riskApprovalStatus)} /></TableCell>
+                  <TableCell>{item.lastDecisionAt ? dayjs(item.lastDecisionAt).format('DD/MM HH:mm') : '—'}<Typography variant="caption" display="block" color="text.secondary">{item.decisionReason ?? 'Sem justificativa.'}</Typography></TableCell>
+                </TableRow>
+              ))}</TableBody>
+            </Table>
+          </TableContainer>
+        </Stack>
+      </Paper>
+
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', xl: 'repeat(2, minmax(0, 1fr))' }, gap: 3 }}>
+        <Paper elevation={0} sx={{ p: 3, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+          <Stack spacing={2}>
+            <Typography variant="h5" fontWeight={800}>Limites de risco</Typography>
+            {committee.riskLimits.length === 0 ? <Alert severity="info">Sem limites de risco cadastrados.</Alert> : null}
+            <TableContainer sx={{ maxHeight: 360 }}><Table stickyHeader size="small"><TableHead><TableRow><TableCell>Escopo</TableCell><TableCell>Ativo</TableCell><TableCell align="right">Exposição</TableCell><TableCell align="right">Risco/trade</TableCell><TableCell align="right">Perda diária</TableCell><TableCell>Status</TableCell></TableRow></TableHead><TableBody>{committee.riskLimits.map((item) => (<TableRow key={item.limitId} hover><TableCell>{normalizeLabel(item.limitScope)}<Typography variant="caption" display="block" color="text.secondary">{item.strategyId}</Typography></TableCell><TableCell>{item.ticker}</TableCell><TableCell align="right">{formatPct(item.currentExposurePct)} / {formatPct(item.maxExposurePct)}</TableCell><TableCell align="right">{formatPct(item.riskPerTradePct)}</TableCell><TableCell align="right">{formatPct(item.currentDailyLossPct)} / {formatPct(item.dailyLossLimitPct)}</TableCell><TableCell><Chip size="small" color={item.shutdownRequired ? 'error' : statusColor(item.breachStatus ?? '')} label={item.shutdownRequired ? 'desligar' : normalizeLabel(item.breachStatus)} /></TableCell></TableRow>))}</TableBody></Table></TableContainer>
+          </Stack>
+        </Paper>
+        <Paper elevation={0} sx={{ p: 3, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+          <Stack spacing={2}>
+            <Typography variant="h5" fontWeight={800}>Exposição e alertas</Typography>
+            {committee.exposureSnapshots.length === 0 ? <Alert severity="info">Sem snapshots recentes de exposição.</Alert> : null}
+            <TableContainer sx={{ maxHeight: 360 }}><Table stickyHeader size="small"><TableHead><TableRow><TableCell>Quando</TableCell><TableCell>Estratégia</TableCell><TableCell>Ativo</TableCell><TableCell align="right">Exposição</TableCell><TableCell align="right">Risco aberto</TableCell><TableCell align="right">PnL</TableCell><TableCell>Alertas</TableCell></TableRow></TableHead><TableBody>{committee.exposureSnapshots.map((item, index) => (<TableRow key={`${item.snapshotAt}-${item.strategyId}-${item.ticker}-${index}`} hover><TableCell>{item.snapshotAt ? dayjs(item.snapshotAt).format('DD/MM HH:mm') : '—'}</TableCell><TableCell>{item.strategyId}</TableCell><TableCell>{item.ticker}</TableCell><TableCell align="right">{formatPct(item.grossExposurePct)}</TableCell><TableCell align="right">{formatPct(item.openRiskPct)}</TableCell><TableCell align="right">{formatPct((item.realizedPnlPct ?? 0) + (item.unrealizedPnlPct ?? 0))}</TableCell><TableCell>{item.violatedLimits.length > 0 ? <Stack direction="row" gap={0.5} flexWrap="wrap">{item.violatedLimits.map((limit) => <Chip key={limit} size="small" color="error" label={normalizeLabel(limit)} />)}</Stack> : <Chip size="small" color={statusColor(item.alertLevel ?? '')} label={normalizeLabel(item.alertLevel)} />}</TableCell></TableRow>))}</TableBody></Table></TableContainer>
+          </Stack>
+        </Paper>
+      </Box>
+    </Stack>
+  )
+}
+
 const QuantRoadmapTab: FC<QuantRoadmapTabProps> = ({
   selectedKey,
   baselineStrategies,
@@ -777,6 +862,9 @@ const QuantRoadmapTab: FC<QuantRoadmapTabProps> = ({
   paperTrading,
   paperTradingLoading,
   paperTradingError,
+  committee,
+  committeeLoading,
+  committeeError,
 }) => {
   const item = quantRoadmapItems.find((candidate) => candidate.key === selectedKey) ?? quantRoadmapItems[0]
 
@@ -818,6 +906,10 @@ const QuantRoadmapTab: FC<QuantRoadmapTabProps> = ({
 
   if (item.key === 'paper') {
     return <PaperTradingScreen paperTrading={paperTrading} loading={paperTradingLoading} error={paperTradingError} />
+  }
+
+  if (item.key === 'comite') {
+    return <CommitteeRiskScreen committee={committee} loading={committeeLoading} error={committeeError} />
   }
 
   if (item.key === 'baseline') {
