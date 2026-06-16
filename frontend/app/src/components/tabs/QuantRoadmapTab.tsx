@@ -17,7 +17,7 @@ import {
 import dayjs from 'dayjs'
 import type { FC } from 'react'
 
-import type { QuantBaselineStrategy, QuantRankingDailyEntry, QuantExposureRecommendation, QuantFilterEffectiveness, QuantMarketRegime, QuantRankingPerformance, QuantStrategyDetailAlert, QuantStrategyRegimePerformance, QuantRobustnessPayload } from '../../api/ops'
+import type { QuantBaselineStrategy, QuantRankingDailyEntry, QuantExposureRecommendation, QuantFilterEffectiveness, QuantMarketRegime, QuantRankingPerformance, QuantStrategyDetailAlert, QuantStrategyRegimePerformance, QuantRobustnessPayload, QuantPaperTradingPayload } from '../../api/ops'
 
 export type QuantRoadmapKey =
   | 'baseline'
@@ -67,6 +67,9 @@ interface QuantRoadmapTabProps {
   robustness: QuantRobustnessPayload
   robustnessLoading: boolean
   robustnessError?: Error | null
+  paperTrading: QuantPaperTradingPayload
+  paperTradingLoading: boolean
+  paperTradingError?: Error | null
 }
 
 const quantRoadmapItems: RoadmapItem[] = [
@@ -677,6 +680,71 @@ const RobustnessScreen: FC<{
   )
 }
 
+const PaperTradingScreen: FC<{
+  paperTrading: QuantPaperTradingPayload
+  loading: boolean
+  error?: Error | null
+}> = ({ paperTrading, loading, error }) => {
+  const { dashboard, openOrders, closedOrders, diary } = paperTrading
+  const riskEvents = diary.filter((item) => ['alerta_risco', 'risk_alert', 'erro_execucao'].includes((item.eventType ?? '').toLowerCase())).length
+
+  return (
+    <Stack spacing={3}>
+      <Stack spacing={1}>
+        <Typography variant="h4" color="text.primary" fontWeight={800}>Paper Trading e Diário Operacional</Typography>
+        <Typography variant="body1" color="text.secondary">
+          Tela operacional da Fase 6 para acompanhar ordens simuladas, PnL, slippage, aderência ao backtest e eventos do diário operacional.
+        </Typography>
+      </Stack>
+
+      {error ? <Alert severity="error">Erro ao carregar /ops/quant/paper-trading.</Alert> : null}
+      {loading ? <Skeleton variant="rounded" height={160} /> : null}
+
+      {!loading && !error ? (
+        <Stack direction="row" flexWrap="wrap" gap={2}>
+          <MetricCard title="Data referência" value={formatDate(dashboard?.referenceDate)} helper="Último dashboard materializado" />
+          <MetricCard title="Ordens abertas" value={formatNumber(dashboard?.openOrders ?? openOrders.length)} helper="Posições simuladas em acompanhamento" />
+          <MetricCard title="Encerradas hoje" value={formatNumber(dashboard?.closedOrders ?? closedOrders.length)} helper="Saídas simuladas do dia" />
+          <MetricCard title="PnL diário" value={formatPct(dashboard?.dailyPnlPct)} helper={`Acumulado ${formatPct(dashboard?.cumulativePnlPct)}`} />
+          <MetricCard title="Aderência" value={normalizeLabel(dashboard?.adherenceStatus)} helper={`Divergência média ${formatPct(dashboard?.avgAbsDivergencePct)}`} />
+          <MetricCard title="Eventos de risco" value={formatNumber(riskEvents)} helper="Alertas no diário" />
+        </Stack>
+      ) : null}
+
+      {!loading && !error && !dashboard && openOrders.length === 0 && closedOrders.length === 0 && diary.length === 0 ? (
+        <Alert severity="warning">Nenhum dado retornado. Aplique as views da Fase 6 e publique o endpoint /ops/quant/paper-trading.</Alert>
+      ) : null}
+
+      <Paper elevation={0} sx={{ p: 3, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+        <Stack spacing={2}>
+          <Typography variant="h5" fontWeight={800}>Operações abertas</Typography>
+          {openOrders.length === 0 ? <Alert severity="info">Sem ordens abertas no paper trading.</Alert> : null}
+          {openOrders.length > 0 ? (
+            <TableContainer sx={{ maxHeight: 420 }}><Table stickyHeader size="small"><TableHead><TableRow><TableCell>Ordem</TableCell><TableCell>Estratégia</TableCell><TableCell>Ticker</TableCell><TableCell>Lado</TableCell><TableCell align="right">Qtd.</TableCell><TableCell align="right">Entrada esperada</TableCell><TableCell align="right">Entrada simulada</TableCell><TableCell>Status</TableCell><TableCell>Observações</TableCell></TableRow></TableHead><TableBody>{openOrders.map((item) => (<TableRow key={item.paperOrderId} hover><TableCell>{item.paperOrderId}</TableCell><TableCell>{item.strategyId}<Typography variant="caption" display="block" color="text.secondary">{item.strategyVersion}</Typography></TableCell><TableCell><Typography fontWeight={800}>{item.ticker}</Typography></TableCell><TableCell>{item.side ?? '—'}</TableCell><TableCell align="right">{formatNumber(item.quantity)}</TableCell><TableCell align="right">{formatDecimal(item.expectedEntryPrice)}</TableCell><TableCell align="right">{formatDecimal(item.simulatedEntryPrice)}</TableCell><TableCell><Chip size="small" color={statusColor(item.orderStatus ?? '')} label={normalizeLabel(item.orderStatus)} /></TableCell><TableCell>{item.notes ?? '—'}</TableCell></TableRow>))}</TableBody></Table></TableContainer>
+          ) : null}
+        </Stack>
+      </Paper>
+
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', xl: 'repeat(2, minmax(0, 1fr))' }, gap: 3 }}>
+        <Paper elevation={0} sx={{ p: 3, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+          <Stack spacing={2}>
+            <Typography variant="h5" fontWeight={800}>Encerradas hoje</Typography>
+            {closedOrders.length === 0 ? <Alert severity="info">Sem ordens encerradas no dia.</Alert> : null}
+            <TableContainer sx={{ maxHeight: 360 }}><Table stickyHeader size="small"><TableHead><TableRow><TableCell>Ticker</TableCell><TableCell>Estratégia</TableCell><TableCell align="right">PnL líquido</TableCell><TableCell align="right">Divergência</TableCell><TableCell>Saída</TableCell></TableRow></TableHead><TableBody>{closedOrders.map((item) => (<TableRow key={item.paperOrderId} hover><TableCell>{item.ticker}</TableCell><TableCell>{item.strategyId}</TableCell><TableCell align="right">{formatPct(item.netPnlPct)}</TableCell><TableCell align="right">{formatPct(item.divergencePct)}</TableCell><TableCell>{normalizeLabel(item.exitReason)}</TableCell></TableRow>))}</TableBody></Table></TableContainer>
+          </Stack>
+        </Paper>
+        <Paper elevation={0} sx={{ p: 3, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+          <Stack spacing={2}>
+            <Typography variant="h5" fontWeight={800}>Diário Operacional</Typography>
+            {diary.length === 0 ? <Alert severity="info">Sem eventos recentes no diário operacional.</Alert> : null}
+            <TableContainer sx={{ maxHeight: 360 }}><Table stickyHeader size="small"><TableHead><TableRow><TableCell>Quando</TableCell><TableCell>Evento</TableCell><TableCell>Ativo</TableCell><TableCell>Status</TableCell><TableCell>Mensagem</TableCell></TableRow></TableHead><TableBody>{diary.map((item, index) => (<TableRow key={`${item.eventTimestamp}-${item.strategyId}-${item.ticker}-${index}`} hover><TableCell>{item.eventTimestamp ? dayjs(item.eventTimestamp).format('DD/MM HH:mm') : formatDate(item.eventDate)}</TableCell><TableCell>{normalizeLabel(item.eventType)}</TableCell><TableCell>{item.ticker}<Typography variant="caption" display="block" color="text.secondary">{item.strategyId}</Typography></TableCell><TableCell><Chip size="small" color={statusColor(item.eventStatus ?? '')} label={normalizeLabel(item.eventStatus)} /></TableCell><TableCell>{item.eventMessage ?? item.operatorNotes ?? '—'}</TableCell></TableRow>))}</TableBody></Table></TableContainer>
+          </Stack>
+        </Paper>
+      </Box>
+    </Stack>
+  )
+}
+
 const QuantRoadmapTab: FC<QuantRoadmapTabProps> = ({
   selectedKey,
   baselineStrategies,
@@ -706,6 +774,9 @@ const QuantRoadmapTab: FC<QuantRoadmapTabProps> = ({
   robustness,
   robustnessLoading,
   robustnessError,
+  paperTrading,
+  paperTradingLoading,
+  paperTradingError,
 }) => {
   const item = quantRoadmapItems.find((candidate) => candidate.key === selectedKey) ?? quantRoadmapItems[0]
 
@@ -743,6 +814,10 @@ const QuantRoadmapTab: FC<QuantRoadmapTabProps> = ({
 
   if (item.key === 'robustez') {
     return <RobustnessScreen robustness={robustness} loading={robustnessLoading} error={robustnessError} />
+  }
+
+  if (item.key === 'paper') {
+    return <PaperTradingScreen paperTrading={paperTrading} loading={paperTradingLoading} error={paperTradingError} />
   }
 
   if (item.key === 'baseline') {

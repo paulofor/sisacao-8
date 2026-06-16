@@ -814,6 +814,111 @@ export const fetchQuantRobustness = async (): Promise<QuantRobustnessPayload> =>
   }
 }
 
+export interface QuantPaperTradingDashboard {
+  referenceDate: string | null
+  openOrders: number
+  closedOrders: number
+  totalOrders: number
+  dailyPnlPct: number | null
+  cumulativePnlPct: number | null
+  avgSlippagePct: number | null
+  executionRate: number | null
+  avgAbsDivergencePct: number | null
+  adherenceStatus: string | null
+}
+
+export interface QuantPaperTradingOrder {
+  paperOrderId: string
+  strategyId: string
+  strategyVersion: string
+  ticker: string
+  side: string | null
+  quantity: number
+  expectedEntryPrice: number | null
+  simulatedEntryPrice: number | null
+  expectedExitPrice: number | null
+  simulatedExitPrice: number | null
+  netPnlPct: number | null
+  divergencePct: number | null
+  orderStatus: string | null
+  exitReason: string | null
+  openedAt: string | null
+  closedAt: string | null
+  notes: string | null
+}
+
+export interface QuantOperationalDiaryEvent {
+  eventTimestamp: string | null
+  eventDate: string | null
+  eventType: string
+  strategyId: string
+  strategyVersion: string
+  ticker: string
+  side: string | null
+  eventStatus: string | null
+  eventMessage: string | null
+  operatorNotes: string | null
+}
+
+export interface QuantPaperTradingPayload {
+  dashboard: QuantPaperTradingDashboard | null
+  openOrders: QuantPaperTradingOrder[]
+  closedOrders: QuantPaperTradingOrder[]
+  diary: QuantOperationalDiaryEvent[]
+}
+
+export const fetchQuantPaperTrading = async (limit = 100): Promise<QuantPaperTradingPayload> => {
+  const response = await apiClient.get<unknown>('/ops/quant/paper-trading', { params: { limit } })
+  const data = response.data as Record<string, unknown> | null
+  const root = data && typeof data === 'object' && !Array.isArray(data) ? data : {}
+  const dashboard = root.dashboard && typeof root.dashboard === 'object' ? root.dashboard as Record<string, unknown> : null
+  const openItems = Array.isArray(root.openOrders) ? root.openOrders : Array.isArray(root.open_orders) ? root.open_orders : []
+  const closedItems = Array.isArray(root.closedOrders) ? root.closedOrders : Array.isArray(root.closed_orders) ? root.closed_orders : []
+  const diaryItems = Array.isArray(root.diary) ? root.diary : Array.isArray(root.operationalDiary) ? root.operationalDiary : Array.isArray(root.operational_diary) ? root.operational_diary : []
+  const mapOrder = (item: unknown): QuantPaperTradingOrder => {
+    const record = item as Record<string, unknown>
+    return {
+      paperOrderId: asString(record.paperOrderId ?? record.paper_order_id ?? record.orderId ?? record.order_id, '—'),
+      strategyId: asString(record.strategyId ?? record.strategy_id, '—'),
+      strategyVersion: asString(record.strategyVersion ?? record.strategy_version, '—'),
+      ticker: asString(record.ticker, '—'),
+      side: asNullableString(record.side),
+      quantity: toInteger(record.quantity),
+      expectedEntryPrice: toNumber(record.expectedEntryPrice ?? record.expected_entry_price),
+      simulatedEntryPrice: toNumber(record.simulatedEntryPrice ?? record.simulated_entry_price),
+      expectedExitPrice: toNumber(record.expectedExitPrice ?? record.expected_exit_price),
+      simulatedExitPrice: toNumber(record.simulatedExitPrice ?? record.simulated_exit_price),
+      netPnlPct: toNumber(record.netPnlPct ?? record.net_pnl_pct),
+      divergencePct: toNumber(record.divergencePct ?? record.divergence_pct),
+      orderStatus: asNullableString(record.orderStatus ?? record.order_status),
+      exitReason: asNullableString(record.exitReason ?? record.exit_reason),
+      openedAt: toIsoDateTime(record.openedAt ?? record.opened_at),
+      closedAt: toIsoDateTime(record.closedAt ?? record.closed_at),
+      notes: asNullableString(record.notes ?? record.observations),
+    }
+  }
+  return {
+    dashboard: dashboard ? {
+      referenceDate: toIsoDate(dashboard.referenceDate ?? dashboard.reference_date),
+      openOrders: toInteger(dashboard.openOrders ?? dashboard.open_orders),
+      closedOrders: toInteger(dashboard.closedOrders ?? dashboard.closed_orders),
+      totalOrders: toInteger(dashboard.totalOrders ?? dashboard.total_orders),
+      dailyPnlPct: toNumber(dashboard.dailyPnlPct ?? dashboard.daily_pnl_pct ?? dashboard.dailyNetPnlPct ?? dashboard.daily_net_pnl_pct),
+      cumulativePnlPct: toNumber(dashboard.cumulativePnlPct ?? dashboard.cumulative_pnl_pct ?? dashboard.accumulatedNetPnlPct ?? dashboard.accumulated_net_pnl_pct),
+      avgSlippagePct: toNumber(dashboard.avgSlippagePct ?? dashboard.avg_slippage_pct),
+      executionRate: toNumber(dashboard.executionRate ?? dashboard.execution_rate),
+      avgAbsDivergencePct: toNumber(dashboard.avgAbsDivergencePct ?? dashboard.avg_abs_divergence_pct),
+      adherenceStatus: asNullableString(dashboard.adherenceStatus ?? dashboard.adherence_status),
+    } : null,
+    openOrders: openItems.map(mapOrder),
+    closedOrders: closedItems.map(mapOrder),
+    diary: diaryItems.map((item) => {
+      const record = item as Record<string, unknown>
+      return { eventTimestamp: toIsoDateTime(record.eventTimestamp ?? record.event_timestamp), eventDate: toIsoDate(record.eventDate ?? record.event_date ?? record.referenceDate ?? record.reference_date), eventType: asString(record.eventType ?? record.event_type, '—'), strategyId: asString(record.strategyId ?? record.strategy_id, '—'), strategyVersion: asString(record.strategyVersion ?? record.strategy_version, '—'), ticker: asString(record.ticker, '—'), side: asNullableString(record.side), eventStatus: asNullableString(record.eventStatus ?? record.event_status ?? record.decisionStatus ?? record.decision_status), eventMessage: asNullableString(record.eventMessage ?? record.event_message ?? record.reasonCode ?? record.reason_code), operatorNotes: asNullableString(record.operatorNotes ?? record.operator_notes ?? record.userComment ?? record.user_comment) }
+    }),
+  }
+}
+
 export const fetchQuantMarketRegime = async (limit = 90): Promise<QuantMarketRegime[]> => {
   const response = await apiClient.get<unknown>('/ops/quant/market-regime', { params: { limit } })
   const items = Array.isArray(response.data) ? response.data : []

@@ -79,6 +79,10 @@ public class OpsService {
         return bigQueryOpsClient.fetchQuantFilterEffectiveness();
     }
 
+    public QuantPaperTradingPayload getQuantPaperTrading(Integer limit) {
+        return bigQueryOpsClient.fetchQuantPaperTrading(sanitizeQuantLimit(limit));
+    }
+
     public QuantBaselineStrategy getQuantBaselineStrategy(String strategyId) {
         if (strategyId == null || strategyId.isBlank()) {
             throw new OpsValidationException("O parâmetro 'strategyId' é obrigatório.");

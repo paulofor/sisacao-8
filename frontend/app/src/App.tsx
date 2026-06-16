@@ -56,6 +56,7 @@ import { useQuantMarketRegime } from './hooks/useQuantMarketRegime'
 import { useQuantExposureRecommendations } from './hooks/useQuantExposureRecommendations'
 import { useQuantStrategyRegimePerformance } from './hooks/useQuantStrategyRegimePerformance'
 import { useQuantFilterEffectiveness } from './hooks/useQuantFilterEffectiveness'
+import { useQuantPaperTrading } from './hooks/useQuantPaperTrading'
 import { useQuantRobustness } from './hooks/useQuantRobustness'
 import { useQuantTickerCoverage } from './hooks/useQuantTickerCoverage'
 
@@ -156,6 +157,7 @@ function App() {
   const quantStrategyRegimePerformanceQuery = useQuantStrategyRegimePerformance()
   const quantFilterEffectivenessQuery = useQuantFilterEffectiveness()
   const quantRobustnessQuery = useQuantRobustness()
+  const quantPaperTradingQuery = useQuantPaperTrading(150)
 
   const messages = useMemo(() => dataCollectionMessagesQuery.data ?? [], [dataCollectionMessagesQuery.data])
 
@@ -191,7 +193,9 @@ function App() {
             ] as QueryResult[]
           : selectedRoadmapKey === 'robustez'
             ? [quantRobustnessQuery] as QueryResult[]
-            : [] as QueryResult[],
+            : selectedRoadmapKey === 'paper'
+              ? [quantPaperTradingQuery] as QueryResult[]
+              : [] as QueryResult[],
   }
 
   const activeQueries = tabQueries[activeTab]
@@ -387,6 +391,9 @@ function App() {
             robustness={quantRobustnessQuery.data ?? { strategies: [], walkForward: [], parameterSensitivity: [], costStressTests: [] }}
             robustnessError={quantRobustnessQuery.error}
             robustnessLoading={quantRobustnessQuery.isLoading && !quantRobustnessQuery.data}
+            paperTrading={quantPaperTradingQuery.data ?? { dashboard: null, openOrders: [], closedOrders: [], diary: [] }}
+            paperTradingError={quantPaperTradingQuery.error}
+            paperTradingLoading={quantPaperTradingQuery.isLoading && !quantPaperTradingQuery.data}
           />
         ) : null}
           </Box>
