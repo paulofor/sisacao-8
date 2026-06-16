@@ -919,6 +919,119 @@ export const fetchQuantPaperTrading = async (limit = 100): Promise<QuantPaperTra
   }
 }
 
+
+export interface QuantCommitteeStrategy {
+  strategyId: string
+  strategyVersion: string
+  strategyName: string
+  lifecycleStatus: string | null
+  decisionStatus: string | null
+  checklistApprovedItems: number
+  checklistTotalItems: number
+  checklistCompletionPct: number | null
+  expectancyNetPct: number | null
+  maxDrawdownPct: number | null
+  paperTradingDays: number
+  riskApprovalStatus: string | null
+  lastDecisionAt: string | null
+  decisionReason: string | null
+}
+
+export interface QuantRiskLimit {
+  limitId: string
+  strategyId: string
+  ticker: string
+  limitScope: string | null
+  maxExposurePct: number | null
+  currentExposurePct: number | null
+  riskPerTradePct: number | null
+  dailyLossLimitPct: number | null
+  currentDailyLossPct: number | null
+  breachStatus: string | null
+  shutdownRequired: boolean
+  updatedAt: string | null
+}
+
+export interface QuantRiskExposureSnapshot {
+  snapshotAt: string | null
+  strategyId: string
+  ticker: string
+  grossExposurePct: number | null
+  openRiskPct: number | null
+  realizedPnlPct: number | null
+  unrealizedPnlPct: number | null
+  violatedLimits: string[]
+  alertLevel: string | null
+}
+
+export interface QuantCommitteePayload {
+  strategies: QuantCommitteeStrategy[]
+  riskLimits: QuantRiskLimit[]
+  exposureSnapshots: QuantRiskExposureSnapshot[]
+}
+
+export const fetchQuantCommittee = async (limit = 100): Promise<QuantCommitteePayload> => {
+  const response = await apiClient.get<unknown>('/ops/quant/committee', { params: { limit } })
+  const data = response.data as Record<string, unknown> | unknown[] | null
+  const root = data && typeof data === 'object' && !Array.isArray(data) ? data as Record<string, unknown> : {}
+  const strategyItems = Array.isArray(data) ? data : Array.isArray(root.strategies) ? root.strategies : Array.isArray(root.candidates) ? root.candidates : []
+  const limitItems = Array.isArray(root.riskLimits) ? root.riskLimits : Array.isArray(root.risk_limits) ? root.risk_limits : []
+  const snapshotItems = Array.isArray(root.exposureSnapshots) ? root.exposureSnapshots : Array.isArray(root.exposure_snapshots) ? root.exposure_snapshots : []
+
+  return {
+    strategies: strategyItems.map((item) => {
+      const record = item as Record<string, unknown>
+      return {
+        strategyId: asString(record.strategyId ?? record.strategy_id, '—'),
+        strategyVersion: asString(record.strategyVersion ?? record.strategy_version, '—'),
+        strategyName: asString(record.strategyName ?? record.strategy_name ?? record.strategyId ?? record.strategy_id, '—'),
+        lifecycleStatus: asNullableString(record.lifecycleStatus ?? record.lifecycle_status ?? record.stage),
+        decisionStatus: asNullableString(record.decisionStatus ?? record.decision_status ?? record.approvalStatus ?? record.approval_status),
+        checklistApprovedItems: toInteger(record.checklistApprovedItems ?? record.checklist_approved_items ?? record.approvedItems ?? record.approved_items),
+        checklistTotalItems: toInteger(record.checklistTotalItems ?? record.checklist_total_items ?? record.totalItems ?? record.total_items),
+        checklistCompletionPct: toNumber(record.checklistCompletionPct ?? record.checklist_completion_pct),
+        expectancyNetPct: toNumber(record.expectancyNetPct ?? record.expectancy_net_pct),
+        maxDrawdownPct: toNumber(record.maxDrawdownPct ?? record.max_drawdown_pct),
+        paperTradingDays: toInteger(record.paperTradingDays ?? record.paper_trading_days),
+        riskApprovalStatus: asNullableString(record.riskApprovalStatus ?? record.risk_approval_status),
+        lastDecisionAt: toIsoDateTime(record.lastDecisionAt ?? record.last_decision_at),
+        decisionReason: asNullableString(record.decisionReason ?? record.decision_reason ?? record.reason),
+      }
+    }),
+    riskLimits: limitItems.map((item) => {
+      const record = item as Record<string, unknown>
+      return {
+        limitId: asString(record.limitId ?? record.limit_id, '—'),
+        strategyId: asString(record.strategyId ?? record.strategy_id, '—'),
+        ticker: asString(record.ticker, '—'),
+        limitScope: asNullableString(record.limitScope ?? record.limit_scope),
+        maxExposurePct: toNumber(record.maxExposurePct ?? record.max_exposure_pct),
+        currentExposurePct: toNumber(record.currentExposurePct ?? record.current_exposure_pct),
+        riskPerTradePct: toNumber(record.riskPerTradePct ?? record.risk_per_trade_pct),
+        dailyLossLimitPct: toNumber(record.dailyLossLimitPct ?? record.daily_loss_limit_pct),
+        currentDailyLossPct: toNumber(record.currentDailyLossPct ?? record.current_daily_loss_pct),
+        breachStatus: asNullableString(record.breachStatus ?? record.breach_status),
+        shutdownRequired: toBoolean(record.shutdownRequired ?? record.shutdown_required),
+        updatedAt: toIsoDateTime(record.updatedAt ?? record.updated_at),
+      }
+    }),
+    exposureSnapshots: snapshotItems.map((item) => {
+      const record = item as Record<string, unknown>
+      return {
+        snapshotAt: toIsoDateTime(record.snapshotAt ?? record.snapshot_at),
+        strategyId: asString(record.strategyId ?? record.strategy_id, '—'),
+        ticker: asString(record.ticker, '—'),
+        grossExposurePct: toNumber(record.grossExposurePct ?? record.gross_exposure_pct),
+        openRiskPct: toNumber(record.openRiskPct ?? record.open_risk_pct),
+        realizedPnlPct: toNumber(record.realizedPnlPct ?? record.realized_pnl_pct),
+        unrealizedPnlPct: toNumber(record.unrealizedPnlPct ?? record.unrealized_pnl_pct),
+        violatedLimits: parseAlerts(record.violatedLimits ?? record.violated_limits),
+        alertLevel: asNullableString(record.alertLevel ?? record.alert_level),
+      }
+    }),
+  }
+}
+
 export const fetchQuantMarketRegime = async (limit = 90): Promise<QuantMarketRegime[]> => {
   const response = await apiClient.get<unknown>('/ops/quant/market-regime', { params: { limit } })
   const items = Array.isArray(response.data) ? response.data : []

@@ -58,6 +58,7 @@ import { useQuantStrategyRegimePerformance } from './hooks/useQuantStrategyRegim
 import { useQuantFilterEffectiveness } from './hooks/useQuantFilterEffectiveness'
 import { useQuantPaperTrading } from './hooks/useQuantPaperTrading'
 import { useQuantRobustness } from './hooks/useQuantRobustness'
+import { useQuantCommittee } from './hooks/useQuantCommittee'
 import { useQuantTickerCoverage } from './hooks/useQuantTickerCoverage'
 
 const severityOptions: Array<'all' | DataCollectionMessageSeverity> = [
@@ -158,6 +159,7 @@ function App() {
   const quantFilterEffectivenessQuery = useQuantFilterEffectiveness()
   const quantRobustnessQuery = useQuantRobustness()
   const quantPaperTradingQuery = useQuantPaperTrading(150)
+  const quantCommitteeQuery = useQuantCommittee(150)
 
   const messages = useMemo(() => dataCollectionMessagesQuery.data ?? [], [dataCollectionMessagesQuery.data])
 
@@ -195,7 +197,9 @@ function App() {
             ? [quantRobustnessQuery] as QueryResult[]
             : selectedRoadmapKey === 'paper'
               ? [quantPaperTradingQuery] as QueryResult[]
-              : [] as QueryResult[],
+              : selectedRoadmapKey === 'comite'
+                ? [quantCommitteeQuery] as QueryResult[]
+                : [] as QueryResult[],
   }
 
   const activeQueries = tabQueries[activeTab]
@@ -394,6 +398,9 @@ function App() {
             paperTrading={quantPaperTradingQuery.data ?? { dashboard: null, openOrders: [], closedOrders: [], diary: [] }}
             paperTradingError={quantPaperTradingQuery.error}
             paperTradingLoading={quantPaperTradingQuery.isLoading && !quantPaperTradingQuery.data}
+            committee={quantCommitteeQuery.data ?? { strategies: [], riskLimits: [], exposureSnapshots: [] }}
+            committeeError={quantCommitteeQuery.error}
+            committeeLoading={quantCommitteeQuery.isLoading && !quantCommitteeQuery.data}
           />
         ) : null}
           </Box>
