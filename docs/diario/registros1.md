@@ -346,3 +346,21 @@
 - Adicionado consumo do endpoint `/ops/quant/committee`, com contrato TypeScript e normalização de payloads em camelCase/snake_case para estratégias, limites e exposição.
 - Integrada a navegação `Fase 7 · Comitê/Risco` ao botão global de atualização por meio de hook TanStack Query dedicado.
 - Executados checks `npm run build` e `npm run lint` em `frontend/app`.
+
+## 2026-06-16 14:35 UTC — Correção do erro operacional do `backtest_daily`
+- Verificado via MCP/Cloud Run logs que o job `backtest_daily` processava 5 datas em uma invocação e concluía o lote, mas a chamada HTTP do Scheduler recebia `504` antes do término, marcando a última execução como falha.
+- Ajustado o padrão de `BACKTEST_MAX_DATES_PER_RUN` de 5 para 1 para manter a execução agendada dentro da janela de resposta HTTP; reprocessamentos em lote continuam possíveis informando `limit` na URL ou configurando explicitamente a variável de ambiente.
+- Arquivo ajustado: `functions/backtest_daily/main.py`.
+
+## 2026-06-16 14:49 UTC — Pesquisa detalhada dos logs do `backtest_daily`
+- Consultado o MCP por JSON-RPC em `http://mcpserversisacao.shop/mcp`, usando a ferramenta `cloud_run_function_logs` para o serviço `backtest-daily` nas últimas 168 horas.
+- Identificado que o erro registrado no Cloud Run/Scheduler foi `POST 504` para `https://us-east1-ingestaokraken.cloudfunctions.net/backtest_daily` em 2026-06-12 01:15:05 UTC, 2026-06-13 01:15:18 UTC e 2026-06-16 01:15:24 UTC.
+- Não apareceu traceback/exception da aplicação nesses logs; após cada `504`, a função continuou registrando `BACKTEST_DAILY_COMPLETED` para 5 datas e `BACKTEST_DAILY_BATCH_COMPLETED`, indicando falha de prazo da chamada HTTP e não falha de cálculo/persistência do backtest.
+
+## 2026-06-16 15:08 UTC — Verificação operacional das demais Cloud Functions
+- Verificados via MCP/Cloud Run logs os serviços `alerts`, `dq_checks`, `eod_signals`, `get_stock_data`, `intraday_candles`, `google_finance_price`, `quant_daily_evaluation` e `backtest_daily` nas últimas 72-168 horas.
+- Confirmado que `alerts`, `eod_signals` e `get_stock_data` tinham retornos HTTP 200 recentes; `eod_signals` registrou saída esperada para data sem pregão B3.
+- Identificados erros reais em `dq_checks`: HTTP 500 por query inválida no check `intraday_freshness` (`ativos.ativos` sem agregação) e erro secundário de serialização JSON de `date` ao persistir resultados/incidentes.
+- Identificado erro real em `intraday_candles`: HTTP 500 por frequência pandas inválida/depreciada `1H`/`H` no rollup horário; ajustado para `1h` no pacote principal e no espelho da Cloud Function.
+- Observado que `google_finance_price` teve falhas pontuais de extração para alguns tickers após fallback, mas os logs recentes consultados não indicaram HTTP 500/504 como nos casos acima.
+- Validada via MCP/BigQuery a nova forma da query de `intraday_freshness` para 2026-06-15, retornando 1 linha sem erro de agregação.

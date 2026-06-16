@@ -389,11 +389,11 @@ def _check_intraday_freshness(
             GROUP BY ticker
         )
         SELECT
-            ativos.ativos AS ativos,
-            COUNT(*) AS tickers_com_dados,
-            COUNTIF(ultima_hora >= @min_time) AS tickers_recentes,
-            MAX(ultima_hora) AS hora_maxima
-        FROM ativos, ultimos
+            ANY_VALUE(ativos.ativos) AS ativos,
+            COUNT(ultimos.ticker) AS tickers_com_dados,
+            COUNTIF(ultimos.ultima_hora >= @min_time) AS tickers_recentes,
+            MAX(ultimos.ultima_hora) AS hora_maxima
+        FROM ativos CROSS JOIN ultimos
     """
     params = [
         bigquery.ScalarQueryParameter("ref_date", "DATE", reference_date),
@@ -669,7 +669,7 @@ def _persist_results(
     for result in results:
         payloads.append(
             {
-                "check_date": reference_date,
+                "check_date": reference_date.isoformat(),
                 "check_name": result.name,
                 "component": result.component,
                 "status": result.status,
@@ -708,7 +708,7 @@ def _persist_incidents(
                     f"{reference_date.isoformat()}_{result.name}_{run_logger.run_id}"
                 ),
                 "check_name": result.name,
-                "check_date": reference_date,
+                "check_date": reference_date.isoformat(),
                 "status": result.status,
                 "severity": result.severity,
                 "details": json.dumps(result.details, ensure_ascii=False),
