@@ -31,7 +31,7 @@ BACKTEST_METRICS_TABLE_ID = os.environ.get(
 )
 FERIADOS_TABLE_ID = os.environ.get("BQ_HOLIDAYS_TABLE", "feriados_b3")
 METRICS_LOOKBACK_DAYS = int(os.environ.get("BACKTEST_METRICS_LOOKBACK_DAYS", "60"))
-MAX_DATES_PER_RUN = max(1, int(os.environ.get("BACKTEST_MAX_DATES_PER_RUN", "5")))
+MAX_DATES_PER_RUN = max(1, int(os.environ.get("BACKTEST_MAX_DATES_PER_RUN", "1")))
 JOB_NAME = os.environ.get("JOB_NAME", "backtest_daily")
 DEFAULT_BQ_LOCATION = "us-east1"
 

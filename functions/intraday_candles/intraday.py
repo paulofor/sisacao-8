@@ -125,10 +125,10 @@ def rollup_candles(
     df.sort_values(["ticker", "timestamp"], inplace=True)
     df.set_index("timestamp", inplace=True)
     freq = {
-        Timeframe.H1: "1H",
+        Timeframe.H1: "1h",
         Timeframe.DAILY: "1D",
         Timeframe.MIN15: "15min",
-    }.get(target_timeframe, "1H")
+    }.get(target_timeframe, "1h")
     aggregated: List[Candle] = []
     for ticker, group in df.groupby("ticker"):
         resampled = group.resample(freq).agg(

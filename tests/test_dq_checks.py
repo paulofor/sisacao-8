@@ -34,3 +34,69 @@ def test_check_result_severity_mapping():
         details={},
     )
     assert result_pass.severity == "INFO"
+
+
+def test_persist_results_serializes_check_date(monkeypatch):
+    captured = {}
+
+    class FakeJob:
+        def result(self):
+            return None
+
+    class FakeClient:
+        def load_table_from_json(self, rows, table_id, job_config):
+            captured["rows"] = rows
+            captured["table_id"] = table_id
+            return FakeJob()
+
+    monkeypatch.setattr(dq_main, "_get_client", lambda: FakeClient())
+    monkeypatch.setattr(dq_main, "_table_ref", lambda table: f"project.dataset.{table}")
+
+    dq_main._persist_results(
+        dq_main.dt.date(2026, 6, 16),
+        type("Logger", (), {"run_id": "run-1"})(),
+        [
+            dq_main.CheckResult(
+                name="demo",
+                component="component",
+                status="PASS",
+                details={},
+            )
+        ],
+        "test-config",
+    )
+
+    assert captured["rows"][0]["check_date"] == "2026-06-16"
+
+
+def test_persist_incidents_serializes_check_date(monkeypatch):
+    captured = {}
+
+    class FakeJob:
+        def result(self):
+            return None
+
+    class FakeClient:
+        def load_table_from_json(self, rows, table_id, job_config):
+            captured["rows"] = rows
+            captured["table_id"] = table_id
+            return FakeJob()
+
+    monkeypatch.setattr(dq_main, "_get_client", lambda: FakeClient())
+    monkeypatch.setattr(dq_main, "_table_ref", lambda table: f"project.dataset.{table}")
+
+    dq_main._persist_incidents(
+        dq_main.dt.date(2026, 6, 16),
+        type("Logger", (), {"run_id": "run-1"})(),
+        [
+            dq_main.CheckResult(
+                name="demo",
+                component="component",
+                status="FAIL",
+                details={},
+            )
+        ],
+        "test-config",
+    )
+
+    assert captured["rows"][0]["check_date"] == "2026-06-16"

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import datetime as dt
+
 import pandas as pd  # type: ignore[import-untyped]
 import pytest
 
@@ -164,3 +166,32 @@ def test_generate_conditional_signals_uses_backtest_metrics_for_score() -> None:
     )
     assert signals[0].ticker == "BBB"
     assert signals[0].score > signals[1].score
+
+
+def test_rollup_candles_uses_pandas_compatible_hourly_frequency() -> None:
+    from sisacao8.candles import Candle, Timeframe, SAO_PAULO_TZ
+    from sisacao8.intraday import rollup_candles
+
+    base_time = dt.datetime(2026, 6, 16, 10, 0, tzinfo=SAO_PAULO_TZ)
+    candles = [
+        Candle(
+            ticker="ABEV3",
+            timestamp=base_time + dt.timedelta(minutes=15 * index),
+            open=10 + index,
+            high=11 + index,
+            low=9 + index,
+            close=10.5 + index,
+            volume=1,
+            source="TEST",
+            timeframe=Timeframe.MIN15,
+            ingested_at=base_time,
+        )
+        for index in range(4)
+    ]
+
+    hourly = rollup_candles(candles)
+
+    assert len(hourly) == 1
+    assert hourly[0].timeframe == Timeframe.H1
+    assert hourly[0].open == 10
+    assert hourly[0].close == 13.5
