@@ -341,3 +341,8 @@
 - O job consolida evidências das views de ranking da Fase 3, robustez da Fase 5 e paper trading da Fase 6, gerando score, status, decisão e razões em JSON.
 - A decisão diária é deliberadamente governada (`blocked`, `observe`, `paper_trading_candidate`, `approved_candidate`) e não executa retreinamento, promoção automática ou ordens reais.
 - Adicionado deploy no GitHub Actions, configuração recomendada do Cloud Scheduler e testes unitários dos critérios de avaliação.
+## 2026-06-16 — Tela operacional da Fase 7 Comitê/Risco
+- Implementada a tela da Fase 7 no frontend, substituindo o roadmap por uma visão operacional de Comitê de Estratégias, Risco e Limites com cards de governança, tabela de candidatas, limites de risco e snapshots de exposição.
+- Adicionado consumo do endpoint `/ops/quant/committee`, com contrato TypeScript e normalização de payloads em camelCase/snake_case para estratégias, limites e exposição.
+- Integrada a navegação `Fase 7 · Comitê/Risco` ao botão global de atualização por meio de hook TanStack Query dedicado.
+- Executados checks `npm run build` e `npm run lint` em `frontend/app`.
