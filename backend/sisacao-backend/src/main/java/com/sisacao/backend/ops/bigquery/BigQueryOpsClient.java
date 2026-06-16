@@ -23,6 +23,10 @@ import com.sisacao.backend.ops.QuantMarketRegime;
 import com.sisacao.backend.ops.QuantExposureRecommendation;
 import com.sisacao.backend.ops.QuantStrategyRegimePerformance;
 import com.sisacao.backend.ops.QuantFilterEffectiveness;
+import com.sisacao.backend.ops.QuantOperationalDiaryEvent;
+import com.sisacao.backend.ops.QuantPaperTradingDashboard;
+import com.sisacao.backend.ops.QuantPaperTradingOrder;
+import com.sisacao.backend.ops.QuantPaperTradingPayload;
 import com.sisacao.backend.ops.QuantTickerCoverage;
 import com.sisacao.backend.ops.Signal;
 import com.sisacao.backend.ops.SignalByDateEntry;
@@ -229,6 +233,31 @@ public class BigQueryOpsClient {
             rows.add(toQuantFilterEffectiveness(row));
         }
         return Collections.unmodifiableList(rows);
+    }
+
+    public QuantPaperTradingPayload fetchQuantPaperTrading(int limit) {
+        QuantPaperTradingDashboard dashboard = null;
+        for (FieldValueList row : runQuery("SELECT * FROM " + qualifiedQuantView(properties.getQuantPaperTradingDashboardView())
+                + " ORDER BY reference_date DESC LIMIT 1", Map.of()).iterateAll()) {
+            dashboard = toQuantPaperTradingDashboard(row);
+        }
+        Map<String, QueryParameterValue> params = Map.of("limit", QueryParameterValue.int64(limit));
+        List<QuantPaperTradingOrder> openOrders = new ArrayList<>();
+        for (FieldValueList row : runQuery("SELECT * FROM " + qualifiedQuantView(properties.getQuantPaperTradingOpenOrdersView())
+                + " ORDER BY opened_at DESC LIMIT @limit", params).iterateAll()) {
+            openOrders.add(toQuantPaperTradingOrder(row));
+        }
+        List<QuantPaperTradingOrder> closedOrders = new ArrayList<>();
+        for (FieldValueList row : runQuery("SELECT * FROM " + qualifiedQuantView(properties.getQuantPaperTradingClosedOrdersView())
+                + " ORDER BY closed_at DESC LIMIT @limit", params).iterateAll()) {
+            closedOrders.add(toQuantPaperTradingOrder(row));
+        }
+        List<QuantOperationalDiaryEvent> diary = new ArrayList<>();
+        for (FieldValueList row : runQuery("SELECT * FROM " + qualifiedQuantView(properties.getQuantOperationalDiaryView())
+                + " ORDER BY event_timestamp DESC LIMIT @limit", params).iterateAll()) {
+            diary.add(toQuantOperationalDiaryEvent(row));
+        }
+        return new QuantPaperTradingPayload(dashboard, Collections.unmodifiableList(openOrders), Collections.unmodifiableList(closedOrders), Collections.unmodifiableList(diary));
     }
 
     public List<Signal> fetchNextSignals() {
@@ -519,6 +548,55 @@ public class BigQueryOpsClient {
                 getString(row, "ranking_status", "rankingStatus"));
     }
 
+
+    private QuantPaperTradingDashboard toQuantPaperTradingDashboard(FieldValueList row) {
+        return new QuantPaperTradingDashboard(
+                getDate(row, "reference_date", "referenceDate"),
+                getLong(row, "open_orders", "openOrders"),
+                getLong(row, "closed_orders", "closedOrders"),
+                getLong(row, "total_orders", "totalOrders"),
+                getDouble(row, "daily_pnl_pct", "dailyPnlPct", "daily_net_pnl_pct", "dailyNetPnlPct"),
+                getDouble(row, "cumulative_pnl_pct", "cumulativePnlPct", "accumulated_net_pnl_pct", "accumulatedNetPnlPct"),
+                getDouble(row, "avg_slippage_pct", "avgSlippagePct"),
+                getDouble(row, "execution_rate", "executionRate"),
+                getDouble(row, "avg_abs_divergence_pct", "avgAbsDivergencePct"),
+                getString(row, "adherence_status", "adherenceStatus"));
+    }
+
+    private QuantPaperTradingOrder toQuantPaperTradingOrder(FieldValueList row) {
+        return new QuantPaperTradingOrder(
+                getString(row, "paper_order_id", "paperOrderId", "order_id", "orderId"),
+                getString(row, "strategy_id", "strategyId"),
+                getString(row, "strategy_version", "strategyVersion"),
+                getString(row, "ticker"),
+                getString(row, "side"),
+                getLong(row, "quantity"),
+                getDouble(row, "expected_entry_price", "expectedEntryPrice"),
+                getDouble(row, "simulated_entry_price", "simulatedEntryPrice"),
+                getDouble(row, "expected_exit_price", "expectedExitPrice"),
+                getDouble(row, "simulated_exit_price", "simulatedExitPrice"),
+                getDouble(row, "net_pnl_pct", "netPnlPct"),
+                getDouble(row, "divergence_pct", "divergencePct"),
+                getString(row, "order_status", "orderStatus"),
+                getString(row, "exit_reason", "exitReason"),
+                getTimestamp(row, "opened_at", "openedAt"),
+                getTimestamp(row, "closed_at", "closedAt"),
+                getString(row, "notes", "observations"));
+    }
+
+    private QuantOperationalDiaryEvent toQuantOperationalDiaryEvent(FieldValueList row) {
+        return new QuantOperationalDiaryEvent(
+                getTimestamp(row, "event_timestamp", "eventTimestamp"),
+                getDate(row, "event_date", "eventDate", "reference_date", "referenceDate"),
+                getString(row, "event_type", "eventType"),
+                getString(row, "strategy_id", "strategyId"),
+                getString(row, "strategy_version", "strategyVersion"),
+                getString(row, "ticker"),
+                getString(row, "side"),
+                getString(row, "event_status", "eventStatus", "decision_status", "decisionStatus"),
+                getString(row, "event_message", "eventMessage", "reason_code", "reasonCode"),
+                getString(row, "operator_notes", "operatorNotes", "user_comment", "userComment"));
+    }
 
     private QuantMarketRegime toQuantMarketRegime(FieldValueList row) {
         return new QuantMarketRegime(

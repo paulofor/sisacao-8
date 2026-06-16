@@ -96,6 +96,11 @@ public class OpsController {
         return opsService.getQuantFilterEffectiveness();
     }
 
+    @GetMapping("/quant/paper-trading")
+    public QuantPaperTradingPayload getQuantPaperTrading(@RequestParam(name = "limit", required = false) Integer limit) {
+        return opsService.getQuantPaperTrading(limit);
+    }
+
     @GetMapping("/quant/strategies/{strategyId}")
     public QuantBaselineStrategy getQuantBaselineStrategy(@PathVariable String strategyId) {
         return opsService.getQuantBaselineStrategy(strategyId);

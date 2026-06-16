@@ -33,6 +33,10 @@ public class OpsBigQueryProperties {
     private String quantExposureRecommendationView = "vw_quant_phase4_exposure_recommendation";
     private String quantStrategyRegimePerformanceView = "vw_quant_phase4_strategy_regime_performance";
     private String quantFilterEffectivenessView = "vw_quant_phase4_filter_effectiveness";
+    private String quantPaperTradingDashboardView = "vw_quant_phase6_paper_trading_dashboard";
+    private String quantPaperTradingOpenOrdersView = "vw_quant_phase6_open_orders";
+    private String quantPaperTradingClosedOrdersView = "vw_quant_phase6_closed_orders_today";
+    private String quantOperationalDiaryView = "vw_quant_phase6_operational_diary";
 
     public boolean isEnabled() {
         return enabled;
@@ -300,6 +304,30 @@ public class OpsBigQueryProperties {
         if (quantFilterEffectivenessView != null && !quantFilterEffectivenessView.isBlank()) {
             this.quantFilterEffectivenessView = quantFilterEffectivenessView;
         }
+    }
+
+    public String getQuantPaperTradingDashboardView() { return quantPaperTradingDashboardView; }
+
+    public void setQuantPaperTradingDashboardView(String quantPaperTradingDashboardView) {
+        if (quantPaperTradingDashboardView != null && !quantPaperTradingDashboardView.isBlank()) { this.quantPaperTradingDashboardView = quantPaperTradingDashboardView; }
+    }
+
+    public String getQuantPaperTradingOpenOrdersView() { return quantPaperTradingOpenOrdersView; }
+
+    public void setQuantPaperTradingOpenOrdersView(String quantPaperTradingOpenOrdersView) {
+        if (quantPaperTradingOpenOrdersView != null && !quantPaperTradingOpenOrdersView.isBlank()) { this.quantPaperTradingOpenOrdersView = quantPaperTradingOpenOrdersView; }
+    }
+
+    public String getQuantPaperTradingClosedOrdersView() { return quantPaperTradingClosedOrdersView; }
+
+    public void setQuantPaperTradingClosedOrdersView(String quantPaperTradingClosedOrdersView) {
+        if (quantPaperTradingClosedOrdersView != null && !quantPaperTradingClosedOrdersView.isBlank()) { this.quantPaperTradingClosedOrdersView = quantPaperTradingClosedOrdersView; }
+    }
+
+    public String getQuantOperationalDiaryView() { return quantOperationalDiaryView; }
+
+    public void setQuantOperationalDiaryView(String quantOperationalDiaryView) {
+        if (quantOperationalDiaryView != null && !quantOperationalDiaryView.isBlank()) { this.quantOperationalDiaryView = quantOperationalDiaryView; }
     }
 
     public int getHistoryMaxRows() {
