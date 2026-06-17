@@ -377,3 +377,18 @@
 - Ajustado o cliente HTTP do frontend para não tentar fallback de base em respostas 502/503/504; com isso, falhas reais da API deixam de ser mascaradas como payload vazio/HTML do SPA e passam a acionar o estado de erro da tela.
 - Otimizada a consulta backend de `GET /ops/quant/ranking/daily`: o SQL agora qualifica a view uma única vez, projeta explicitamente apenas as colunas consumidas pela tela e reutiliza a CTE para calcular a última data disponível antes de ordenar/limitar os registros.
 - Executados `npm run lint`, `npm run build` e `mvn test` para validar frontend e backend após os ajustes.
+
+## 2026-06-17 17:12 UTC — Verificação das execuções de fim do dia de 2026-06-16
+- Consultado o MCP via JSON-RPC em `http://mcpserversisacao.shop/mcp`, usando `cloud_run_function_logs` para verificar as Cloud Functions operacionais nas últimas 36-48 horas.
+- Confirmadas execuções HTTP 200 no fechamento/rotina noturna para `alerts` (2026-06-16 21:00 UTC), `quant_daily_evaluation` (2026-06-16 22:45 UTC), `get_stock_data` (carga diária de 150 candles de 2026-06-16 às 2026-06-17 00:50 UTC), `eod_signals` (2026-06-17 01:00 UTC) e `backtest_daily` (2026-06-17 01:15 UTC).
+- Verificado no BigQuery que `cotacao_ohlcv_diario` possui 150 registros para `data_pregao=2026-06-16`, `cotacao_b3` possui 846 registros intraday de 47 tickers para `data=2026-06-16`, e as tabelas agregadas `candles_intraday_15m`/`candles_intraday_1h` possuem 846/423 registros para a mesma data.
+- Identificado que `dq_checks` executou na janela noturna, porém falhou com HTTP 500 em 2026-06-17 01:30 UTC por erro de serialização JSON de `date`; por isso `dq_checks_daily` ficou sem registros para `check_date=2026-06-16`.
+- Observado que `sinais_eod` executou com HTTP 200, mas a execução noturna gerou/persistiu sinais para `date_ref=2026-06-15` às 2026-06-16 22:00 UTC; não há registros com `date_ref=2026-06-16` no BigQuery no momento da consulta.
+- Conclusão: nem todas as funções ficaram plenamente concluídas para o fechamento de 2026-06-16; a principal falha real é `dq_checks`, e há divergência operacional a revisar em `eod_signals`/avaliação quantitativa quanto à data de referência esperada para 2026-06-16.
+
+## 2026-06-17 17:35 UTC — Correção das falhas de fechamento de 2026-06-16
+- Corrigido `dq_checks` para serializar `created_at` e valores temporais dentro de `details` antes do `load_table_from_json`, eliminando a falha HTTP 500 causada por objetos `datetime/date/time` não serializáveis pelo JSON padrão.
+- Ajustado o padrão de data de `eod_signals`: quando executado sem `date_ref` após o cutoff de 18:00 BRT, o job agora usa a própria data local do pregão em vez de subtrair um dia; antes, a execução das 22:00 BRT de 2026-06-16 caía indevidamente em `date_ref=2026-06-15`.
+- Aplicado o mesmo critério de data padrão em `quant_daily_evaluation`, para que a avaliação quantitativa noturna pós-cutoff seja materializada para o dia recém-fechado.
+- Adicionados testes unitários cobrindo serialização dos payloads de DQ e a seleção automática da data antes/depois do cutoff em `eod_signals` e `quant_daily_evaluation`.
+- Executados `pytest`, `flake8` e `black --check` nos módulos e testes impactados.

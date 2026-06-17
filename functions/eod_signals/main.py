@@ -189,7 +189,10 @@ def _parse_request_date(payload: Mapping[str, Any]) -> dt.date:
     requested = _get_first_value(payload, ("date_ref", "date"))
     if requested:
         return dt.datetime.strptime(requested, "%Y-%m-%d").date()
-    return _now_sp().date() - dt.timedelta(days=1)
+    local_now = _now_sp()
+    if local_now.time() >= dt.time(18, 0):
+        return local_now.date()
+    return local_now.date() - dt.timedelta(days=1)
 
 
 def _ensure_after_cutoff(force: bool) -> bool:
