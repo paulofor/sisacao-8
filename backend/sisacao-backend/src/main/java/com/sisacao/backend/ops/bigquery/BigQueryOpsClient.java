@@ -165,10 +165,16 @@ public class BigQueryOpsClient {
 
     public List<QuantRankingDailyEntry> fetchQuantRankingDaily(int limit) {
         Map<String, QueryParameterValue> params = Map.of("limit", QueryParameterValue.int64(limit));
-        String sql = "SELECT * FROM " + qualifiedQuantView(properties.getQuantRankingDailyView())
-                + " WHERE reference_date = (SELECT MAX(reference_date) FROM "
-                + qualifiedQuantView(properties.getQuantRankingDailyView())
-                + ") ORDER BY ranking_model_id ASC, ranking_position ASC LIMIT @limit";
+        String rankingView = qualifiedQuantView(properties.getQuantRankingDailyView());
+        String sql = "WITH ranking AS ("
+                + " SELECT ranking_model_id, ranking_model_version, reference_date, ranking_position, "
+                + "ranking_decile, ticker, final_score, relative_strength_factor, short_momentum_factor, "
+                + "relative_volume_factor, volatility_factor, mean_distance_factor, candle_quality_factor, "
+                + "index_regime_factor, current_price, liquidity_value, estimated_risk, market_regime_label, "
+                + "forward_return_5d, factor_breakdown_json, action_suggestion, confidence_label FROM " + rankingView
+                + "), latest AS (SELECT MAX(reference_date) AS reference_date FROM ranking)"
+                + " SELECT ranking.* FROM ranking INNER JOIN latest USING (reference_date)"
+                + " ORDER BY ranking_model_id ASC, ranking_position ASC LIMIT @limit";
         TableResult result = runQuery(sql, params);
         List<QuantRankingDailyEntry> rows = new ArrayList<>();
         for (FieldValueList row : result.iterateAll()) {

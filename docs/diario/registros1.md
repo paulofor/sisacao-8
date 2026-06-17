@@ -364,3 +364,16 @@
 - Identificado erro real em `intraday_candles`: HTTP 500 por frequência pandas inválida/depreciada `1H`/`H` no rollup horário; ajustado para `1h` no pacote principal e no espelho da Cloud Function.
 - Observado que `google_finance_price` teve falhas pontuais de extração para alguns tickers após fallback, mas os logs recentes consultados não indicaram HTTP 500/504 como nos casos acima.
 - Validada via MCP/BigQuery a nova forma da query de `intraday_freshness` para 2026-06-15, retornando 1 linha sem erro de agregação.
+
+## 2026-06-17 01:12 UTC — Diagnóstico do alerta da Fase 3 Ranking
+- Investigado o alerta `Nenhum ativo retornado pelo endpoint /ops/quant/ranking/daily` observado no painel operacional publicado em `http://34.194.252.70/`.
+- Confirmado por inspeção do frontend que o alerta aparece quando a lista normalizada do ranking diário fica vazia após o carregamento, e que o cliente Axios tenta uma segunda base de URL em respostas 502/503/504.
+- Testado o endpoint publicado `GET http://34.194.252.70/api/ops/quant/ranking/daily?limit=5`: a API respondeu HTTP 502 com mensagem `Falha ao consultar BigQuery` no caminho `/ops/quant/ranking/daily`.
+- Confirmado via MCP/BigQuery que a view `ingestaokraken.cotacao_intraday.vw_quant_phase3_daily_asset_ranking` não está vazia: retornou 21.128 registros e data máxima `2026-06-16`; a view de performance retornou 6 registros.
+- Conclusão operacional: o alerta visual não indica ausência real de ranking no BigQuery; ele é provocado pela falha HTTP 502 do backend e pelo fallback do cliente para a base vazia, que recebe o HTML do SPA como HTTP 200 e normaliza a resposta não-array como lista vazia.
+- Próximos passos recomendados: otimizar/materializar a consulta do ranking diário ou evitar `SELECT *` sobre a view dinâmica no endpoint, e ajustar o fallback do cliente para não mascarar respostas 502 da API como lista vazia.
+
+## 2026-06-17 01:18 UTC — Execução dos próximos passos do ranking diário
+- Ajustado o cliente HTTP do frontend para não tentar fallback de base em respostas 502/503/504; com isso, falhas reais da API deixam de ser mascaradas como payload vazio/HTML do SPA e passam a acionar o estado de erro da tela.
+- Otimizada a consulta backend de `GET /ops/quant/ranking/daily`: o SQL agora qualifica a view uma única vez, projeta explicitamente apenas as colunas consumidas pela tela e reutiliza a CTE para calcular a última data disponível antes de ordenar/limitar os registros.
+- Executados `npm run lint`, `npm run build` e `mvn test` para validar frontend e backend após os ajustes.
