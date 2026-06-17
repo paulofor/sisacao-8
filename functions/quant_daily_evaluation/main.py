@@ -133,7 +133,10 @@ def _parse_reference_date(payload: Mapping[str, Any]) -> dt.date:
     )
     if raw:
         return dt.datetime.strptime(str(raw), "%Y-%m-%d").date()
-    return _now_sp().date() - dt.timedelta(days=1)
+    local_now = _now_sp()
+    if local_now.time() >= dt.time(18, 0):
+        return local_now.date()
+    return local_now.date() - dt.timedelta(days=1)
 
 
 def _table_ref(table_id: str) -> str:

@@ -72,6 +72,28 @@ def test_fetch_daily_frame_returns_expected_columns_when_empty(monkeypatch):
     assert df.empty
 
 
+def test_parse_request_date_defaults_to_same_day_after_cutoff(monkeypatch):
+    module = import_eod_module(monkeypatch)
+    monkeypatch.setattr(
+        module,
+        "_now_sp",
+        lambda: dt.datetime(2026, 6, 16, 22, 0, tzinfo=module.SAO_PAULO_TZ),
+    )
+
+    assert module._parse_request_date({}) == dt.date(2026, 6, 16)
+
+
+def test_parse_request_date_defaults_to_previous_day_before_cutoff(monkeypatch):
+    module = import_eod_module(monkeypatch)
+    monkeypatch.setattr(
+        module,
+        "_now_sp",
+        lambda: dt.datetime(2026, 6, 17, 9, 0, tzinfo=module.SAO_PAULO_TZ),
+    )
+
+    assert module._parse_request_date({}) == dt.date(2026, 6, 16)
+
+
 def test_fetch_daily_frame_sorts_by_ticker(monkeypatch):
     module = import_eod_module(monkeypatch)
     module.client = types.SimpleNamespace(project="test-project")

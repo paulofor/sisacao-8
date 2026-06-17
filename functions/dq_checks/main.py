@@ -35,6 +35,7 @@ except ModuleNotFoundError:  # pragma: no cover - fallback for Python 3.8
             def tzname(self, value: dt.datetime | None) -> str:
                 return self.key
 
+
 from google.cloud import bigquery  # type: ignore[import-untyped]
 
 from .observability import StructuredLogger
@@ -189,6 +190,12 @@ def _parse_request_date(payload: Dict[str, Any]) -> dt.date:
     if requested:
         return dt.datetime.strptime(requested, "%Y-%m-%d").date()
     return _now_sp().date()
+
+
+def _json_default(value: Any) -> str:
+    if isinstance(value, (dt.date, dt.datetime, dt.time)):
+        return value.isoformat()
+    return str(value)
 
 
 def _table_ref(table_id: str) -> str:
@@ -674,11 +681,13 @@ def _persist_results(
                 "component": result.component,
                 "status": result.status,
                 "severity": result.severity,
-                "details": json.dumps(result.details, ensure_ascii=False),
+                "details": json.dumps(
+                    result.details, ensure_ascii=False, default=_json_default
+                ),
                 "job_name": JOB_NAME,
                 "run_id": run_logger.run_id,
                 "config_version": config_version,
-                "created_at": created_at,
+                "created_at": created_at.isoformat(sep=" ", timespec="seconds"),
             }
         )
     job_config = bigquery.LoadJobConfig(
@@ -711,11 +720,13 @@ def _persist_incidents(
                 "check_date": reference_date.isoformat(),
                 "status": result.status,
                 "severity": result.severity,
-                "details": json.dumps(result.details, ensure_ascii=False),
+                "details": json.dumps(
+                    result.details, ensure_ascii=False, default=_json_default
+                ),
                 "job_name": JOB_NAME,
                 "run_id": run_logger.run_id,
                 "config_version": config_version,
-                "created_at": created_at,
+                "created_at": created_at.isoformat(sep=" ", timespec="seconds"),
             }
         )
     job_config = bigquery.LoadJobConfig(

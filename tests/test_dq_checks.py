@@ -60,13 +60,19 @@ def test_persist_results_serializes_check_date(monkeypatch):
                 name="demo",
                 component="component",
                 status="PASS",
-                details={},
+                details={
+                    "reference_date": dq_main.dt.date(2026, 6, 16),
+                    "deadline": dq_main.dt.time(22, 0),
+                },
             )
         ],
         "test-config",
     )
 
     assert captured["rows"][0]["check_date"] == "2026-06-16"
+    assert captured["rows"][0]["created_at"]
+    assert '"reference_date": "2026-06-16"' in captured["rows"][0]["details"]
+    assert '"deadline": "22:00:00"' in captured["rows"][0]["details"]
 
 
 def test_persist_incidents_serializes_check_date(monkeypatch):
@@ -100,3 +106,4 @@ def test_persist_incidents_serializes_check_date(monkeypatch):
     )
 
     assert captured["rows"][0]["check_date"] == "2026-06-16"
+    assert captured["rows"][0]["created_at"]

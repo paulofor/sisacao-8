@@ -89,3 +89,23 @@ def test_evaluation_result_serializes_json_fields():
     assert row["readiness_score"] == 80.1235
     assert row["reasons_json"] == '["bom"]'
     assert '"positive_day_rate": 0.7' in row["metrics_json"]
+
+
+def test_parse_reference_date_defaults_to_same_day_after_cutoff(monkeypatch):
+    monkeypatch.setattr(
+        quant_eval,
+        "_now_sp",
+        lambda: dt.datetime(2026, 6, 16, 22, 45, tzinfo=quant_eval.SAO_PAULO_TZ),
+    )
+
+    assert quant_eval._parse_reference_date({}) == dt.date(2026, 6, 16)
+
+
+def test_parse_reference_date_defaults_to_previous_day_before_cutoff(monkeypatch):
+    monkeypatch.setattr(
+        quant_eval,
+        "_now_sp",
+        lambda: dt.datetime(2026, 6, 17, 9, 0, tzinfo=quant_eval.SAO_PAULO_TZ),
+    )
+
+    assert quant_eval._parse_reference_date({}) == dt.date(2026, 6, 16)
