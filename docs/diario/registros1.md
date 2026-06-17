@@ -428,3 +428,8 @@
 - Marcadas como `bloqueada_mas_recuperavel_com_reparametrizacao`: `baseline_gap_continuation_v1` (evidência negativa mais forte no desenho atual), `baseline_daily_momentum_v1` e `baseline_relative_strength_ranking_v1` (amostras maiores, médias negativas e robustez fraca). Não devem ir para paper trading, mas podem ser revisitadas com filtros de regime, custos e parâmetros novos.
 - Marcadas como `observacao/recalibracao`: `baseline_daily_breakout_v1` e `asset_ranking_weighted_v1`; o primeiro tem expectancy agregada positiva porém estatisticamente inconclusiva, e o segundo é melhor que o ranking simples, mas ainda sem retorno absoluto positivo/monotonicidade forte.
 - Mantida como `paper_trading_controlado`: `baseline_gap_fade_v1`, por ser o melhor candidato em robustez/OOS, ainda que sensível a custos e inadequado para capital real neste momento.
+
+## 2026-06-17 19:55 UTC — Tela frontend com ícones de decisão dos sistemas não neurais
+- Implementado no frontend, na tela de Estratégias Baseline da área quantitativa, um quadro de decisão operacional com os ícones aprovados pelo usuário para classificar sistemas não neurais.
+- O quadro exibe `❌` para hipóteses sem chance no desenho atual, `⛔` para bloqueadas mas recuperáveis por reparametrização, `👀` para observação/recalibração e `🧪` para paper trading controlado.
+- A tabela inclui as oito classificações discutidas: `baseline_daily_mean_reversion_v1`, `asset_ranking_simple_v1`, `baseline_gap_continuation_v1`, `baseline_daily_momentum_v1`, `baseline_relative_strength_ranking_v1`, `baseline_daily_breakout_v1`, `asset_ranking_weighted_v1` e `baseline_gap_fade_v1`.

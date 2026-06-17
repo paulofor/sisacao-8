@@ -227,6 +227,111 @@ const MetricCard: FC<{ title: string; value: string; helper?: string }> = ({ tit
   </Paper>
 )
 
+const strategyDecisionRows = [
+  {
+    icon: '❌',
+    system: 'baseline_daily_mean_reversion_v1',
+    decision: 'Sem chance no desenho atual',
+    reason: 'Amostra pequena, retorno médio muito negativo, IC95% negativo e robustez 0.',
+    color: 'error' as const,
+  },
+  {
+    icon: '❌',
+    system: 'asset_ranking_simple_v1',
+    decision: 'Sem chance no desenho atual',
+    reason: 'Sem monotonicidade, retornos Top N negativos e excesso versus aleatório negativo.',
+    color: 'error' as const,
+  },
+  {
+    icon: '⛔',
+    system: 'baseline_gap_continuation_v1',
+    decision: 'Bloqueada, mas recuperável',
+    reason: 'Evidência negativa forte no desenho atual; exige nova parametrização antes de qualquer paper trading.',
+    color: 'warning' as const,
+  },
+  {
+    icon: '⛔',
+    system: 'baseline_daily_momentum_v1',
+    decision: 'Bloqueada, mas recuperável',
+    reason: 'Amostra maior, média negativa e robustez fraca; precisa de filtros/regime/parâmetros novos.',
+    color: 'warning' as const,
+  },
+  {
+    icon: '⛔',
+    system: 'baseline_relative_strength_ranking_v1',
+    decision: 'Bloqueada, mas recuperável',
+    reason: 'Amostra razoável, média negativa e robustez fraca; não deve ir para paper trading agora.',
+    color: 'warning' as const,
+  },
+  {
+    icon: '👀',
+    system: 'baseline_daily_breakout_v1',
+    decision: 'Observação / recalibração',
+    reason: 'Expectancy agregada positiva, mas estatisticamente inconclusiva e com robustez fraca.',
+    color: 'info' as const,
+  },
+  {
+    icon: '👀',
+    system: 'asset_ranking_weighted_v1',
+    decision: 'Observação / recalibração',
+    reason: 'Melhor que o ranking simples, porém ainda sem retorno absoluto positivo e monotonicidade forte.',
+    color: 'info' as const,
+  },
+  {
+    icon: '🧪',
+    system: 'baseline_gap_fade_v1',
+    decision: 'Paper trading controlado',
+    reason: 'Melhor candidato em robustez/OOS, ainda sensível a custos e inadequado para capital real.',
+    color: 'success' as const,
+  },
+]
+
+const StrategyDecisionBoard: FC = () => (
+  <Paper elevation={0} sx={{ p: 3, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+    <Stack spacing={2}>
+      <Stack spacing={0.5}>
+        <Typography variant="h5" fontWeight={800}>Decisão operacional dos sistemas não neurais</Typography>
+        <Typography variant="body2" color="text.secondary">
+          Classificação executiva para o usuário entender rapidamente quais hipóteses devem ser encerradas,
+          bloqueadas, recalibradas ou acompanhadas em paper trading.
+        </Typography>
+      </Stack>
+      <TableContainer>
+        <Table size="small" aria-label="Decisão operacional dos sistemas quantitativos não neurais">
+          <TableHead>
+            <TableRow>
+              <TableCell sx={{ width: 72 }}>Ícone</TableCell>
+              <TableCell>Sistema</TableCell>
+              <TableCell>Status operacional</TableCell>
+              <TableCell>Leitura</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {strategyDecisionRows.map((row) => (
+              <TableRow key={row.system} hover>
+                <TableCell>
+                  <Typography component="span" role="img" aria-label={row.decision} sx={{ fontSize: 28, lineHeight: 1 }}>
+                    {row.icon}
+                  </Typography>
+                </TableCell>
+                <TableCell>
+                  <Typography fontWeight={800}>{row.system}</Typography>
+                </TableCell>
+                <TableCell>
+                  <Chip size="small" color={row.color} label={row.decision} />
+                </TableCell>
+                <TableCell>
+                  <Typography variant="body2" color="text.secondary">{row.reason}</Typography>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+    </Stack>
+  </Paper>
+)
+
 const BaselineStrategiesScreen: FC<{
   strategies: QuantBaselineStrategy[]
   loading: boolean
@@ -249,6 +354,8 @@ const BaselineStrategiesScreen: FC<{
           trades e métricas suficientes para sair do roadmap e avançar para validação.
         </Typography>
       </Stack>
+
+      <StrategyDecisionBoard />
 
       {error ? <Alert severity="error">Erro ao carregar estratégias baseline pelo backend.</Alert> : null}
       {alertsError ? <Alert severity="error">Erro ao carregar alertas de detalhe das estratégias.</Alert> : null}
