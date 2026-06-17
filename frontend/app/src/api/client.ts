@@ -32,11 +32,7 @@ apiClient.interceptors.response.use(
     const nextBaseUrlCandidateIndex = currentBaseUrlCandidateIndex + 1
 
     const responseStatus = error.response?.status as number | undefined
-    const canRetryOnStatus =
-      responseStatus === 404 ||
-      responseStatus === 502 ||
-      responseStatus === 503 ||
-      responseStatus === 504
+    const canRetryOnStatus = responseStatus === 404
 
     if (!requestConfig || nextBaseUrlCandidateIndex >= baseURLCandidates.length || !canRetryOnStatus) {
       return Promise.reject(error)
