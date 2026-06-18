@@ -440,3 +440,22 @@
 - Confirmado no BigQuery que `cotacao_ohlcv_diario` possui 150 registros para `data_pregao=2026-06-17`, `sinais_eod` possui 5 sinais para `date_ref=2026-06-17`, `dq_checks_daily` possui 8 checks para `check_date=2026-06-17`, `quant_daily_model_evaluation` possui 12 avaliações para `reference_date=2026-06-17`, e as tabelas `candles_intraday_15m`/`candles_intraday_1h` possuem 829/423 registros para `reference_date=2026-06-17`.
 - `backtest_daily` executou com HTTP 200 às 2026-06-18 01:15 UTC e processou `date_ref=2026-05-21`, com 5 sinais, 5 trades e 46 métricas; o BigQuery confirmou 46 linhas em `backtest_metrics` para `as_of_date=2026-05-21`.
 - Conclusão: as funções noturnas verificadas em 2026-06-18 executaram com sucesso; não foi identificada falha HTTP 500/504 nem erro severo na janela consultada.
+
+## 2026-06-18 00:00 UTC — Explicação do sistema de backtest diário
+- Revisado o módulo `functions/backtest_daily` e a documentação operacional das Cloud Functions para responder à solicitação sobre o sistema que executa backtest todos os dias.
+- Confirmado que o job `backtest_daily` busca sinais EOD, carrega candles OHLCV diários, simula entradas/saídas de forma determinística, persiste trades e recalcula métricas rolling no BigQuery.
+- Registrado que a última verificação operacional documentada indicou execução HTTP 200 em 2026-06-18 01:15 UTC, processando `date_ref=2026-05-21` com 5 sinais, 5 trades e 46 métricas.
+
+## 2026-06-18 00:00 UTC — Explicação da geração dos sinais EOD
+- Revisado o módulo `functions/eod_signals` para responder como os sinais usados pelo backtest diário são gerados.
+- Confirmado que `eod_signals` executa após cutoff de 18:00 BRT, seleciona a data de referência, carrega configuração versionada, lê candles diários em `cotacao_ohlcv_diario`, opcionalmente filtra por volume, consulta métricas recentes de `backtest_metrics`, gera até 5 sinais condicionais por ranking e persiste em `sinais_eod`.
+- Resumida a regra de sinal: para cada ticker elegível são montados candidatos BUY/SELL conforme configuração; BUY entra abaixo do fechamento por `x_pct`, SELL entra acima do fechamento por `x_pct`, com target/stop percentuais e score baseado em histórico de backtest, liquidez e penalidade de volatilidade.
+
+## 2026-06-18 00:00 UTC — Avaliação de substituir etapas de sinal por rede neural
+- Revisada a possibilidade de substituir parte do fluxo de geração de sinais EOD por saída de rede neural, especialmente os passos de configuração/ranking heurístico descritos anteriormente.
+- Conclusão técnica: é possível, mas a rede neural existente em `functions/pattern_detection` ainda é experimental e retorna ações `buy`/`sell`/`hold` a partir de probabilidades; para produção seria necessário criar rotina de inferência versionada, tabela de predições, calibração de confiança, regras de target/stop/horizonte e governança antes de alimentar `sinais_eod`.
+- Recomendação: manter o backtest diário como validador e evoluir o `eod_signals` para consumir uma tabela de predições neurais quando o modelo estiver treinado, versionado e aprovado em paper trading.
+
+## 2026-06-18 00:00 UTC — Plano de sinais EOD com redes neurais
+- Criado o documento `docs/plano-sinais-neurais-eod.md` com o plano para iniciar um sistema de sinais EOD baseado em redes neurais mantendo a lógica de entrada para o pregão seguinte com percentual de diferença sobre o fechamento.
+- O plano define arquitetura com tabela intermediária de predições neurais, job de inferência EOD, adaptação controlada do `eod_signals`, manutenção do `backtest_daily` como validador, fases de implementação, métricas, riscos e critérios de pronto.
