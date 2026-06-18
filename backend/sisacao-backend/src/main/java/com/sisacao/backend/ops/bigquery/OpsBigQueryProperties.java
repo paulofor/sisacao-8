@@ -37,6 +37,7 @@ public class OpsBigQueryProperties {
     private String quantPaperTradingOpenOrdersView = "vw_quant_phase6_open_orders";
     private String quantPaperTradingClosedOrdersView = "vw_quant_phase6_closed_orders_today";
     private String quantOperationalDiaryView = "vw_quant_phase6_operational_diary";
+    private String neuralTrainingDataAllocationView = "vw_neural_eod_training_dataset_quality";
 
     public boolean isEnabled() {
         return enabled;
@@ -328,6 +329,16 @@ public class OpsBigQueryProperties {
 
     public void setQuantOperationalDiaryView(String quantOperationalDiaryView) {
         if (quantOperationalDiaryView != null && !quantOperationalDiaryView.isBlank()) { this.quantOperationalDiaryView = quantOperationalDiaryView; }
+    }
+
+    public String getNeuralTrainingDataAllocationView() {
+        return neuralTrainingDataAllocationView;
+    }
+
+    public void setNeuralTrainingDataAllocationView(String neuralTrainingDataAllocationView) {
+        if (neuralTrainingDataAllocationView != null && !neuralTrainingDataAllocationView.isBlank()) {
+            this.neuralTrainingDataAllocationView = neuralTrainingDataAllocationView;
+        }
     }
 
     public int getHistoryMaxRows() {

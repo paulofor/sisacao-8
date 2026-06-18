@@ -35,6 +35,10 @@ public class OpsService {
         return bigQueryOpsClient.fetchOpenIncidents();
     }
 
+    public List<NeuralTrainingDataAllocation> getNeuralTrainingDataAllocation() {
+        return bigQueryOpsClient.fetchNeuralTrainingDataAllocation();
+    }
+
     public QuantDataInventorySummary getQuantDataInventorySummary() {
         return bigQueryOpsClient.fetchQuantDataInventorySummary();
     }

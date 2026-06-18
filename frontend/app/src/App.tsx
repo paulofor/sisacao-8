@@ -32,6 +32,7 @@ import ColetasTab from './components/tabs/ColetasTab'
 import IncidentesTab from './components/tabs/IncidentesTab'
 import OperacaoTab from './components/tabs/OperacaoTab'
 import QuantPhase0Tab from './components/tabs/QuantPhase0Tab'
+import NeuralTrainingDataTab from './components/tabs/NeuralTrainingDataTab'
 import QuantRoadmapTab, { type QuantRoadmapKey } from './components/tabs/QuantRoadmapTab'
 import SinaisTab from './components/tabs/SinaisTab'
 import { useCandlesTableDailyCounts } from './hooks/useCandlesTableDailyCounts'
@@ -45,6 +46,7 @@ import { useOpsDqLatest } from './hooks/useOpsDqLatest'
 import { useOpsIncidentsOpen } from './hooks/useOpsIncidentsOpen'
 import { useOpsOverview } from './hooks/useOpsOverview'
 import { useOpsPipeline } from './hooks/useOpsPipeline'
+import { useNeuralTrainingDataAllocation } from './hooks/useNeuralTrainingDataAllocation'
 import { useOpsSignalsNext } from './hooks/useOpsSignalsNext'
 import { useQuantDataInventorySummary } from './hooks/useQuantDataInventorySummary'
 import { useQuantBaselineStrategies } from './hooks/useQuantBaselineStrategies'
@@ -90,6 +92,7 @@ type TabValue =
   | 'incidentes'
   | 'backtest'
   | 'quant-roadmap'
+  | 'neural-training-data'
 
 type MenuItem = {
   label: string
@@ -106,6 +109,12 @@ const menuGroups: Array<{ title: string; items: MenuItem[] }> = [
       { label: 'Pipeline', value: 'operacao', icon: DashboardIcon },
       { label: 'Sinais EOD', value: 'sinais', icon: InsightsIcon },
       { label: 'Incidentes', value: 'incidentes', icon: ChecklistIcon },
+    ],
+  },
+  {
+    title: 'Redes neurais',
+    items: [
+      { label: 'Dados de treino', value: 'neural-training-data', icon: ScienceIcon },
     ],
   },
   {
@@ -147,6 +156,7 @@ function App() {
   const opsIncidentsOpenQuery = useOpsIncidentsOpen()
   const opsBacktestTradesQuery = useOpsBacktestTrades(200)
   const quantInventorySummaryQuery = useQuantDataInventorySummary()
+  const neuralTrainingDataAllocationQuery = useNeuralTrainingDataAllocation()
   const quantTickerCoverageQuery = useQuantTickerCoverage(150)
   const quantDataQualityIncidentsQuery = useQuantDataQualityIncidents(150)
   const quantBaselineStrategiesQuery = useQuantBaselineStrategies()
@@ -179,6 +189,7 @@ function App() {
     ] as QueryResult[],
     operacao: [opsOverviewQuery, opsPipelineQuery, opsDqLatestQuery] as QueryResult[],
     'quant-fase0': [quantInventorySummaryQuery, quantTickerCoverageQuery, quantDataQualityIncidentsQuery] as QueryResult[],
+    'neural-training-data': [neuralTrainingDataAllocationQuery] as QueryResult[],
     sinais: [opsSignalsNextQuery] as QueryResult[],
     incidentes: [opsIncidentsOpenQuery] as QueryResult[],
     backtest: [opsBacktestTradesQuery] as QueryResult[],
@@ -338,6 +349,14 @@ function App() {
             incidents={quantDataQualityIncidentsQuery.data ?? []}
             incidentsError={quantDataQualityIncidentsQuery.error}
             incidentsLoading={quantDataQualityIncidentsQuery.isLoading && (quantDataQualityIncidentsQuery.data ?? []).length === 0}
+          />
+        ) : null}
+
+        {activeTab === 'neural-training-data' ? (
+          <NeuralTrainingDataTab
+            allocation={neuralTrainingDataAllocationQuery.data ?? []}
+            allocationError={neuralTrainingDataAllocationQuery.error}
+            allocationLoading={neuralTrainingDataAllocationQuery.isLoading && (neuralTrainingDataAllocationQuery.data ?? []).length === 0}
           />
         ) : null}
 
