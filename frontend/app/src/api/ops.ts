@@ -92,6 +92,25 @@ export interface OpsIncident {
   createdAt: string | null
 }
 
+export interface NeuralTrainingDataAllocation {
+  featureVersion: string
+  labelVersion: string
+  datasetSplit: string | null
+  rowsCount: number
+  tickersCount: number
+  minReferenceDate: string | null
+  maxReferenceDate: string | null
+  upCount: number
+  downCount: number
+  neutralCount: number
+  upRatio: number | null
+  downRatio: number | null
+  neutralRatio: number | null
+  missingOhlcvCount: number
+  zeroVolumeCount: number
+  suspiciousCandleCount: number
+}
+
 const asString = (value: unknown, fallback = ''): string => {
   if (typeof value === 'string') {
     return value
@@ -339,6 +358,36 @@ export const fetchOpsIncidentsOpen = async (): Promise<OpsIncident[]> => {
       status: asUpperString(record.status) ?? '—',
       runId: asNullableString(record.runId ?? record.run_id),
       createdAt: toIsoDateTime(record.createdAt ?? record.created_at ?? record.timestamp),
+    }
+  })
+}
+
+export const fetchNeuralTrainingDataAllocation = async (): Promise<NeuralTrainingDataAllocation[]> => {
+  const response = await apiClient.get<unknown>('/ops/neural/training-data/allocation')
+  const items = Array.isArray(response.data) ? response.data : []
+
+  return items.map((item) => {
+    const record = item as Record<string, unknown>
+
+    return {
+      featureVersion: asString(record.featureVersion ?? record.feature_version, '—'),
+      labelVersion: asString(record.labelVersion ?? record.label_version, '—'),
+      datasetSplit: asNullableString(record.datasetSplit ?? record.dataset_split),
+      rowsCount: toInteger(record.rowsCount ?? record.rows_count),
+      tickersCount: toInteger(record.tickersCount ?? record.tickers_count),
+      minReferenceDate: toIsoDate(record.minReferenceDate ?? record.min_reference_date),
+      maxReferenceDate: toIsoDate(record.maxReferenceDate ?? record.max_reference_date),
+      upCount: toInteger(record.upCount ?? record.up_count),
+      downCount: toInteger(record.downCount ?? record.down_count),
+      neutralCount: toInteger(record.neutralCount ?? record.neutral_count),
+      upRatio: toNumber(record.upRatio ?? record.up_ratio),
+      downRatio: toNumber(record.downRatio ?? record.down_ratio),
+      neutralRatio: toNumber(record.neutralRatio ?? record.neutral_ratio),
+      missingOhlcvCount: toInteger(record.missingOhlcvCount ?? record.missing_ohlcv_count),
+      zeroVolumeCount: toInteger(record.zeroVolumeCount ?? record.zero_volume_count),
+      suspiciousCandleCount: toInteger(
+        record.suspiciousCandleCount ?? record.suspicious_candle_count,
+      ),
     }
   })
 }

@@ -245,10 +245,12 @@ Esses valores devem ser tratados como parâmetros versionados e não como consta
 
 ### Fase 2 — Dataset de treino
 
-- Montar dataset histórico por ticker/data.
-- Criar labels `up`, `down`, `neutral` usando horizonte e threshold versionados.
-- Separar treino/validação/teste em ordem cronológica.
-- Evitar vazamento temporal.
+**Status:** executada em 2026-06-18. Detalhes em `docs/implementacao/fase2-sinais-neurais-eod-dataset.md`; código em `sisacao8/neural_dataset.py`; DDL em `infra/bq/17_neural_eod_training_dataset.sql`.
+
+- [x] Montar dataset histórico por ticker/data.
+- [x] Criar labels `up`, `down`, `neutral` usando horizonte e threshold versionados.
+- [x] Separar treino/validação/teste em ordem cronológica.
+- [x] Evitar vazamento temporal.
 
 ### Fase 3 — Treino neural baseline
 

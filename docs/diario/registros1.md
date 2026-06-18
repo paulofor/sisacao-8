@@ -471,3 +471,17 @@
 - Criada a documentação `docs/implementacao/fase1-sinais-neurais-eod-schema.md`, registrando schema mínimo de features, convenções de `model_id`, `model_version`, `feature_version`, `inference_config_version` e contratos de entrada/saída para o futuro job de inferência.
 - Atualizado o plano neural para marcar a Fase 1 como executada e atualizado o README de infraestrutura BigQuery para listar o novo script.
 - Alteração exclusivamente documental/DDL; não houve mudança em funções executáveis nem ativação de sinais neurais em produção.
+
+
+## 2026-06-18 00:00 UTC — Fase 2 do plano de sinais EOD neurais
+- Executada a Fase 2 do plano `docs/plano-sinais-neurais-eod.md`, com foco na construção do dataset histórico supervisionado para treino neural.
+- Criado o módulo `sisacao8/neural_dataset.py`, que gera features tabulares versionadas até `reference_date`, labels por barreiras `up/down/neutral` e split temporal treino/validação/teste com embargo para reduzir vazamento.
+- Criado o script BigQuery `infra/bq/17_neural_eod_training_dataset.sql`, com a tabela `cotacao_intraday.neural_eod_training_dataset` e a view de qualidade `vw_neural_eod_training_dataset_quality`.
+- Criada a documentação `docs/implementacao/fase2-sinais-neurais-eod-dataset.md`, registrando features, labels, split temporal, prevenção de vazamento e critérios de saída.
+- Adicionados testes unitários em `tests/test_neural_dataset.py` para validar geração do dataset e embargo dos splits.
+
+## 2026-06-18 00:00 UTC — Tela de dados de treino para redes neurais
+- Criado no frontend um novo grupo de menu `Redes neurais` com o subitem `Dados de treino`, voltado a acompanhar a alocação cronológica do dataset neural EOD.
+- Adicionada a tela `NeuralTrainingDataTab`, exibindo cards de volume, janela histórica, versões de features/labels, distribuição direcional, flags de qualidade, barra de alocação por split e tabela detalhada por treino/validação/teste/embargo.
+- Adicionado o hook `useNeuralTrainingDataAllocation` e a normalização TypeScript para consumir `GET /ops/neural/training-data/allocation`.
+- Exposto no backend Spring o endpoint `GET /ops/neural/training-data/allocation`, lendo a view BigQuery `vw_neural_eod_training_dataset_quality` para permitir que o usuário acompanhe a alocação dos dados de treino.

@@ -11,6 +11,7 @@ import com.sisacao.backend.ops.DqCheck;
 import com.sisacao.backend.ops.OpsDataAccessException;
 import com.sisacao.backend.ops.OpsBacktestTrade;
 import com.sisacao.backend.ops.OpsIncident;
+import com.sisacao.backend.ops.NeuralTrainingDataAllocation;
 import com.sisacao.backend.ops.OpsOverview;
 import com.sisacao.backend.ops.PipelineJobStatus;
 import com.sisacao.backend.ops.QuantDataInventorySummary;
@@ -93,6 +94,22 @@ public class BigQueryOpsClient {
             incidents.add(toIncident(row));
         }
         return Collections.unmodifiableList(incidents);
+    }
+
+    public List<NeuralTrainingDataAllocation> fetchNeuralTrainingDataAllocation() {
+        String sql = "SELECT * FROM " + qualifiedQuantView(properties.getNeuralTrainingDataAllocationView())
+                + " ORDER BY feature_version ASC, label_version ASC, "
+                + "CASE dataset_split "
+                + "WHEN 'train' THEN 1 "
+                + "WHEN 'validation' THEN 2 "
+                + "WHEN 'test' THEN 3 "
+                + "ELSE 4 END";
+        TableResult result = runQuery(sql, Map.of());
+        List<NeuralTrainingDataAllocation> rows = new ArrayList<>();
+        for (FieldValueList row : result.iterateAll()) {
+            rows.add(toNeuralTrainingDataAllocation(row));
+        }
+        return Collections.unmodifiableList(rows);
     }
 
     public QuantDataInventorySummary fetchQuantDataInventorySummary() {
@@ -435,6 +452,26 @@ public class BigQueryOpsClient {
                 getString(row, "status"),
                 getString(row, "runId", "run_id"),
                 getTimestamp(row, "createdAt", "created_at"));
+    }
+
+    private NeuralTrainingDataAllocation toNeuralTrainingDataAllocation(FieldValueList row) {
+        return new NeuralTrainingDataAllocation(
+                getString(row, "feature_version", "featureVersion"),
+                getString(row, "label_version", "labelVersion"),
+                getString(row, "dataset_split", "datasetSplit"),
+                getLong(row, "rows_count", "rowsCount"),
+                getLong(row, "tickers_count", "tickersCount"),
+                getDate(row, "min_reference_date", "minReferenceDate"),
+                getDate(row, "max_reference_date", "maxReferenceDate"),
+                getLong(row, "up_count", "upCount"),
+                getLong(row, "down_count", "downCount"),
+                getLong(row, "neutral_count", "neutralCount"),
+                getDouble(row, "up_ratio", "upRatio"),
+                getDouble(row, "down_ratio", "downRatio"),
+                getDouble(row, "neutral_ratio", "neutralRatio"),
+                getLong(row, "missing_ohlcv_count", "missingOhlcvCount"),
+                getLong(row, "zero_volume_count", "zeroVolumeCount"),
+                getLong(row, "suspicious_candle_count", "suspiciousCandleCount"));
     }
 
     private QuantDataInventorySummary toQuantDataInventorySummary(FieldValueList row) {
