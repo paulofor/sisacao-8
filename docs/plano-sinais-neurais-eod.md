@@ -236,10 +236,12 @@ Esses valores devem ser tratados como parâmetros versionados e não como consta
 
 ### Fase 1 — Especificação e schema
 
-- Criar DDL da tabela `neural_eod_predictions`.
-- Definir schema mínimo de features.
-- Definir convenção de `model_id`, `model_version` e `feature_version`.
-- Documentar contratos de entrada/saída.
+**Status:** executada em 2026-06-18. Detalhes em `docs/implementacao/fase1-sinais-neurais-eod-schema.md`; DDL em `infra/bq/16_neural_eod_predictions.sql`.
+
+- [x] Criar DDL da tabela `neural_eod_predictions`.
+- [x] Definir schema mínimo de features.
+- [x] Definir convenção de `model_id`, `model_version` e `feature_version`.
+- [x] Documentar contratos de entrada/saída.
 
 ### Fase 2 — Dataset de treino
 
