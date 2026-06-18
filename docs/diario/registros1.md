@@ -464,3 +464,10 @@
 - Expandido o plano `docs/plano-sinais-neurais-eod.md` com uma seção completa para implantação do processo de treino de redes neurais EOD.
 - Documentadas recomendações para separação temporal de dados, construção de dataset supervisionado, definição de labels por barreiras, prevenção de vazamento, comparação de arquiteturas neurais, protocolo de treino, seleção de thresholds, critérios de promoção, período de testes, retreinamento e governança.
 - Alteração exclusivamente documental, sem impacto em código executável.
+
+## 2026-06-18 00:00 UTC — Fase 1 do plano de sinais EOD neurais
+- Executada a Fase 1 do plano `docs/plano-sinais-neurais-eod.md`, com foco em especificação e schema antes de qualquer alteração operacional no `eod_signals`.
+- Criado o script BigQuery `infra/bq/16_neural_eod_predictions.sql` com a tabela `cotacao_intraday.neural_eod_predictions` para probabilidades neurais brutas e a view `vw_neural_eod_predictions_latest` para consumo da última predição por ativo/data/modelo.
+- Criada a documentação `docs/implementacao/fase1-sinais-neurais-eod-schema.md`, registrando schema mínimo de features, convenções de `model_id`, `model_version`, `feature_version`, `inference_config_version` e contratos de entrada/saída para o futuro job de inferência.
+- Atualizado o plano neural para marcar a Fase 1 como executada e atualizado o README de infraestrutura BigQuery para listar o novo script.
+- Alteração exclusivamente documental/DDL; não houve mudança em funções executáveis nem ativação de sinais neurais em produção.
