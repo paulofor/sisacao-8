@@ -111,6 +111,25 @@ export interface NeuralTrainingDataAllocation {
   suspiciousCandleCount: number
 }
 
+export interface NeuralTrainingRun {
+  modelId: string
+  modelVersion: string
+  status: string | null
+  featureVersion: string
+  labelVersion: string
+  trainingDatasetSnapshot: string | null
+  artifactUri: string | null
+  featureColumnsCount: number
+  labelClassesCount: number
+  directionalPrecision: number | null
+  coverage: number | null
+  validationAccuracy: number | null
+  testAccuracy: number | null
+  trainedAt: string | null
+  createdAt: string | null
+  notes: string | null
+}
+
 const asString = (value: unknown, fallback = ''): string => {
   if (typeof value === 'string') {
     return value
@@ -388,6 +407,44 @@ export const fetchNeuralTrainingDataAllocation = async (): Promise<NeuralTrainin
       suspiciousCandleCount: toInteger(
         record.suspiciousCandleCount ?? record.suspicious_candle_count,
       ),
+    }
+  })
+}
+
+export const fetchNeuralTrainingRuns = async (): Promise<NeuralTrainingRun[]> => {
+  const response = await apiClient.get<unknown>('/ops/neural/training-runs')
+  const items = Array.isArray(response.data) ? response.data : []
+
+  return items.map((item) => {
+    const record = item as Record<string, unknown>
+
+    return {
+      modelId: asString(record.modelId ?? record.model_id, '—'),
+      modelVersion: asString(record.modelVersion ?? record.model_version, '—'),
+      status: asNullableString(record.status),
+      featureVersion: asString(record.featureVersion ?? record.feature_version, '—'),
+      labelVersion: asString(record.labelVersion ?? record.label_version, '—'),
+      trainingDatasetSnapshot: asNullableString(
+        record.trainingDatasetSnapshot ?? record.training_dataset_snapshot,
+      ),
+      artifactUri: asNullableString(record.artifactUri ?? record.artifact_uri),
+      featureColumnsCount: toInteger(
+        record.featureColumnsCount ?? record.feature_columns_count,
+      ),
+      labelClassesCount: toInteger(
+        record.labelClassesCount ?? record.label_classes_count,
+      ),
+      directionalPrecision: toNumber(
+        record.directionalPrecision ?? record.directional_precision,
+      ),
+      coverage: toNumber(record.coverage),
+      validationAccuracy: toNumber(
+        record.validationAccuracy ?? record.validation_accuracy,
+      ),
+      testAccuracy: toNumber(record.testAccuracy ?? record.test_accuracy),
+      trainedAt: toIsoDateTime(record.trainedAt ?? record.trained_at),
+      createdAt: toIsoDateTime(record.createdAt ?? record.created_at),
+      notes: asNullableString(record.notes),
     }
   })
 }

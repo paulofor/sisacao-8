@@ -6,6 +6,7 @@ import DashboardIcon from '@mui/icons-material/Dashboard'
 import InsightsIcon from '@mui/icons-material/Insights'
 import InventoryIcon from '@mui/icons-material/Inventory'
 import ScienceIcon from '@mui/icons-material/Science'
+import ModelTrainingIcon from '@mui/icons-material/ModelTraining'
 import TimelineIcon from '@mui/icons-material/Timeline'
 import {
   AppBar,
@@ -33,6 +34,7 @@ import IncidentesTab from './components/tabs/IncidentesTab'
 import OperacaoTab from './components/tabs/OperacaoTab'
 import QuantPhase0Tab from './components/tabs/QuantPhase0Tab'
 import NeuralTrainingDataTab from './components/tabs/NeuralTrainingDataTab'
+import NeuralTrainingRunsTab from './components/tabs/NeuralTrainingRunsTab'
 import QuantRoadmapTab, { type QuantRoadmapKey } from './components/tabs/QuantRoadmapTab'
 import SinaisTab from './components/tabs/SinaisTab'
 import { useCandlesTableDailyCounts } from './hooks/useCandlesTableDailyCounts'
@@ -47,6 +49,7 @@ import { useOpsIncidentsOpen } from './hooks/useOpsIncidentsOpen'
 import { useOpsOverview } from './hooks/useOpsOverview'
 import { useOpsPipeline } from './hooks/useOpsPipeline'
 import { useNeuralTrainingDataAllocation } from './hooks/useNeuralTrainingDataAllocation'
+import { useNeuralTrainingRuns } from './hooks/useNeuralTrainingRuns'
 import { useOpsSignalsNext } from './hooks/useOpsSignalsNext'
 import { useQuantDataInventorySummary } from './hooks/useQuantDataInventorySummary'
 import { useQuantBaselineStrategies } from './hooks/useQuantBaselineStrategies'
@@ -93,6 +96,7 @@ type TabValue =
   | 'backtest'
   | 'quant-roadmap'
   | 'neural-training-data'
+  | 'neural-training-runs'
 
 type MenuItem = {
   label: string
@@ -115,6 +119,7 @@ const menuGroups: Array<{ title: string; items: MenuItem[] }> = [
     title: 'Redes neurais',
     items: [
       { label: 'Dados de treino', value: 'neural-training-data', icon: ScienceIcon },
+      { label: 'Treinos', value: 'neural-training-runs', icon: ModelTrainingIcon },
     ],
   },
   {
@@ -157,6 +162,7 @@ function App() {
   const opsBacktestTradesQuery = useOpsBacktestTrades(200)
   const quantInventorySummaryQuery = useQuantDataInventorySummary()
   const neuralTrainingDataAllocationQuery = useNeuralTrainingDataAllocation()
+  const neuralTrainingRunsQuery = useNeuralTrainingRuns()
   const quantTickerCoverageQuery = useQuantTickerCoverage(150)
   const quantDataQualityIncidentsQuery = useQuantDataQualityIncidents(150)
   const quantBaselineStrategiesQuery = useQuantBaselineStrategies()
@@ -190,6 +196,7 @@ function App() {
     operacao: [opsOverviewQuery, opsPipelineQuery, opsDqLatestQuery] as QueryResult[],
     'quant-fase0': [quantInventorySummaryQuery, quantTickerCoverageQuery, quantDataQualityIncidentsQuery] as QueryResult[],
     'neural-training-data': [neuralTrainingDataAllocationQuery] as QueryResult[],
+    'neural-training-runs': [neuralTrainingRunsQuery] as QueryResult[],
     sinais: [opsSignalsNextQuery] as QueryResult[],
     incidentes: [opsIncidentsOpenQuery] as QueryResult[],
     backtest: [opsBacktestTradesQuery] as QueryResult[],
@@ -357,6 +364,14 @@ function App() {
             allocation={neuralTrainingDataAllocationQuery.data ?? []}
             allocationError={neuralTrainingDataAllocationQuery.error}
             allocationLoading={neuralTrainingDataAllocationQuery.isLoading && (neuralTrainingDataAllocationQuery.data ?? []).length === 0}
+          />
+        ) : null}
+
+        {activeTab === 'neural-training-runs' ? (
+          <NeuralTrainingRunsTab
+            runs={neuralTrainingRunsQuery.data ?? []}
+            runsError={neuralTrainingRunsQuery.error}
+            runsLoading={neuralTrainingRunsQuery.isLoading && (neuralTrainingRunsQuery.data ?? []).length === 0}
           />
         ) : null}
 

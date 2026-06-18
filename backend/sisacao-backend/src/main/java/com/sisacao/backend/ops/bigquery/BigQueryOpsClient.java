@@ -12,6 +12,7 @@ import com.sisacao.backend.ops.OpsDataAccessException;
 import com.sisacao.backend.ops.OpsBacktestTrade;
 import com.sisacao.backend.ops.OpsIncident;
 import com.sisacao.backend.ops.NeuralTrainingDataAllocation;
+import com.sisacao.backend.ops.NeuralTrainingRun;
 import com.sisacao.backend.ops.OpsOverview;
 import com.sisacao.backend.ops.PipelineJobStatus;
 import com.sisacao.backend.ops.QuantDataInventorySummary;
@@ -108,6 +109,24 @@ public class BigQueryOpsClient {
         List<NeuralTrainingDataAllocation> rows = new ArrayList<>();
         for (FieldValueList row : result.iterateAll()) {
             rows.add(toNeuralTrainingDataAllocation(row));
+        }
+        return Collections.unmodifiableList(rows);
+    }
+
+    public List<NeuralTrainingRun> fetchNeuralTrainingRuns() {
+        String sql = "SELECT "
+                + "model_id, model_version, status, feature_version, label_version, "
+                + "training_dataset_snapshot, artifact_uri, "
+                + "ARRAY_LENGTH(feature_columns) AS feature_columns_count, "
+                + "ARRAY_LENGTH(label_classes) AS label_classes_count, "
+                + "directional_precision, coverage, validation_accuracy, test_accuracy, "
+                + "trained_at, created_at, notes "
+                + "FROM " + qualifiedQuantView(properties.getNeuralModelRegistryTable())
+                + " ORDER BY trained_at DESC, created_at DESC LIMIT 100";
+        TableResult result = runQuery(sql, Map.of());
+        List<NeuralTrainingRun> rows = new ArrayList<>();
+        for (FieldValueList row : result.iterateAll()) {
+            rows.add(toNeuralTrainingRun(row));
         }
         return Collections.unmodifiableList(rows);
     }
@@ -472,6 +491,26 @@ public class BigQueryOpsClient {
                 getLong(row, "missing_ohlcv_count", "missingOhlcvCount"),
                 getLong(row, "zero_volume_count", "zeroVolumeCount"),
                 getLong(row, "suspicious_candle_count", "suspiciousCandleCount"));
+    }
+
+    private NeuralTrainingRun toNeuralTrainingRun(FieldValueList row) {
+        return new NeuralTrainingRun(
+                getString(row, "model_id", "modelId"),
+                getString(row, "model_version", "modelVersion"),
+                getString(row, "status"),
+                getString(row, "feature_version", "featureVersion"),
+                getString(row, "label_version", "labelVersion"),
+                getString(row, "training_dataset_snapshot", "trainingDatasetSnapshot"),
+                getString(row, "artifact_uri", "artifactUri"),
+                getLong(row, "feature_columns_count", "featureColumnsCount"),
+                getLong(row, "label_classes_count", "labelClassesCount"),
+                getDouble(row, "directional_precision", "directionalPrecision"),
+                getDouble(row, "coverage"),
+                getDouble(row, "validation_accuracy", "validationAccuracy"),
+                getDouble(row, "test_accuracy", "testAccuracy"),
+                getTimestamp(row, "trained_at", "trainedAt"),
+                getTimestamp(row, "created_at", "createdAt"),
+                getString(row, "notes"));
     }
 
     private QuantDataInventorySummary toQuantDataInventorySummary(FieldValueList row) {

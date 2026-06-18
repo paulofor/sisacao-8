@@ -254,10 +254,12 @@ Esses valores devem ser tratados como parâmetros versionados e não como consta
 
 ### Fase 3 — Treino neural baseline
 
-- Começar com MLP simples.
-- Registrar métricas por classe.
-- Avaliar matriz de confusão, precisão direcional e cobertura.
-- Salvar artefato do modelo com versão.
+**Status:** executada em 2026-06-18. Detalhes em `docs/implementacao/fase3-sinais-neurais-eod-treino-baseline.md`; código em `sisacao8/neural_training.py`; registro BigQuery em `infra/bq/18_neural_model_registry.sql`.
+
+- [x] Começar com MLP simples.
+- [x] Registrar métricas por classe.
+- [x] Avaliar matriz de confusão, precisão direcional e cobertura.
+- [x] Salvar artefato do modelo com versão.
 
 ### Fase 4 — Inferência EOD sem produção
 

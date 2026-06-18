@@ -38,6 +38,7 @@ public class OpsBigQueryProperties {
     private String quantPaperTradingClosedOrdersView = "vw_quant_phase6_closed_orders_today";
     private String quantOperationalDiaryView = "vw_quant_phase6_operational_diary";
     private String neuralTrainingDataAllocationView = "vw_neural_eod_training_dataset_quality";
+    private String neuralModelRegistryTable = "neural_model_registry";
 
     public boolean isEnabled() {
         return enabled;
@@ -338,6 +339,16 @@ public class OpsBigQueryProperties {
     public void setNeuralTrainingDataAllocationView(String neuralTrainingDataAllocationView) {
         if (neuralTrainingDataAllocationView != null && !neuralTrainingDataAllocationView.isBlank()) {
             this.neuralTrainingDataAllocationView = neuralTrainingDataAllocationView;
+        }
+    }
+
+    public String getNeuralModelRegistryTable() {
+        return neuralModelRegistryTable;
+    }
+
+    public void setNeuralModelRegistryTable(String neuralModelRegistryTable) {
+        if (neuralModelRegistryTable != null && !neuralModelRegistryTable.isBlank()) {
+            this.neuralModelRegistryTable = neuralModelRegistryTable;
         }
     }
 

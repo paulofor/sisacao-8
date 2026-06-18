@@ -29,6 +29,7 @@ done
 | `06_schema_snapshot.sql` | Script SQL para inventariar tabelas existentes e estrutura atual (metadados, partição, cluster e colunas), com validação de dataset/região. |
 | `16_neural_eod_predictions.sql` | Tabela e view das predições neurais EOD brutas da Fase 1 do plano neural. |
 | `17_neural_eod_training_dataset.sql` | Tabela e view de qualidade do dataset supervisionado da Fase 2 neural. |
+| `18_neural_model_registry.sql` | Tabela de registro dos artefatos, métricas e status dos modelos neurais EOD da Fase 3. |
 | `views_ops.sql` | Views da Ops API (`vw_ops_*`) com overview, pipeline, DQ, sinais e incidentes. |
 
 Os scripts podem ser reaplicados sem efeitos colaterais graças ao uso de

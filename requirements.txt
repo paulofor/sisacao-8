@@ -5,6 +5,7 @@ isort
 pytest
 mypy
 pandas
+numpy
 pyarrow
 google-cloud-bigquery>=3.12
 db-dtypes
