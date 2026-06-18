@@ -103,6 +103,36 @@ class OpsControllerTest {
                 .andExpect(jsonPath("$[0].incidentId", is("inc-001")));
     }
 
+
+    @Test
+    void shouldReturnNeuralTrainingRuns() throws Exception {
+        List<NeuralTrainingRun> runs = List.of(new NeuralTrainingRun(
+                "neural_eod_mlp",
+                "neural_eod_mlp_v1_20260618",
+                "candidate",
+                "feature_eod_tabular_v1",
+                "label_eod_barrier_v1",
+                "snapshot-123",
+                "gs://models/neural_eod_mlp_v1_20260618/model.keras",
+                19L,
+                3L,
+                0.61,
+                0.42,
+                0.58,
+                0.55,
+                OffsetDateTime.parse("2026-06-18T20:30:00Z"),
+                OffsetDateTime.parse("2026-06-18T20:35:00Z"),
+                "Baseline inicial"));
+        given(opsService.getNeuralTrainingRuns()).willReturn(runs);
+
+        mockMvc.perform(get("/ops/neural/training-runs"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].modelId", is("neural_eod_mlp")))
+                .andExpect(jsonPath("$[0].status", is("candidate")))
+                .andExpect(jsonPath("$[0].testAccuracy", is(0.55)));
+    }
+
     @Test
     void shouldReturnNextSignals() throws Exception {
         List<Signal> signals = List.of(new Signal(

@@ -485,3 +485,16 @@
 - Adicionada a tela `NeuralTrainingDataTab`, exibindo cards de volume, janela histórica, versões de features/labels, distribuição direcional, flags de qualidade, barra de alocação por split e tabela detalhada por treino/validação/teste/embargo.
 - Adicionado o hook `useNeuralTrainingDataAllocation` e a normalização TypeScript para consumir `GET /ops/neural/training-data/allocation`.
 - Exposto no backend Spring o endpoint `GET /ops/neural/training-data/allocation`, lendo a view BigQuery `vw_neural_eod_training_dataset_quality` para permitir que o usuário acompanhe a alocação dos dados de treino.
+
+## 2026-06-18 20:30 UTC — Fase 3 neural: treino baseline MLP
+- Executada a Fase 3 do plano `docs/plano-sinais-neurais-eod.md`, criando o contrato de treino do baseline neural MLP para sinais EOD.
+- Criado o módulo `sisacao8/neural_training.py`, com preparação de arrays por split cronológico, scaler ajustado apenas no treino, codificação estável das classes `down`/`neutral`/`up`, treino Keras do MLP, métricas por split e geração de manifesto versionado.
+- Criado o script BigQuery `infra/bq/18_neural_model_registry.sql`, com a tabela `cotacao_intraday.neural_model_registry` para registrar artefatos, métricas, contratos de feature/label e status de governança.
+- Criada a documentação `docs/implementacao/fase3-sinais-neurais-eod-treino-baseline.md`, registrando modelo, versões, métricas, artefatos e critérios de saída.
+- Adicionados testes unitários em `tests/test_neural_training.py` para validar preparação dos arrays, métricas de avaliação e manifesto do artefato.
+
+## 2026-06-18 21:05 UTC — Tela de acompanhamento de treinos neurais
+- Criada a tela `NeuralTrainingRunsTab` no frontend para o usuário acompanhar treinos neurais, exibindo cards de quantidade, último treino, melhor acurácia de teste, precisão direcional e tabela com versões, status, métricas, contrato e artefato.
+- Adicionado o hook `useNeuralTrainingRuns` e a normalização TypeScript para consumir `GET /ops/neural/training-runs`.
+- Exposto no backend Spring o endpoint `GET /ops/neural/training-runs`, lendo a tabela BigQuery `neural_model_registry` para listar os artefatos registrados.
+- Adicionado o item de menu `Redes neurais > Treinos`, separado da tela de dados de treino para diferenciar materialização de dataset e acompanhamento dos modelos treinados.

@@ -41,6 +41,11 @@ public class OpsController {
         return opsService.getNeuralTrainingDataAllocation();
     }
 
+    @GetMapping("/neural/training-runs")
+    public List<NeuralTrainingRun> getNeuralTrainingRuns() {
+        return opsService.getNeuralTrainingRuns();
+    }
+
     @GetMapping("/quant/inventory-summary")
     public QuantDataInventorySummary getQuantDataInventorySummary() {
         return opsService.getQuantDataInventorySummary();
