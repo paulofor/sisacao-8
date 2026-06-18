@@ -459,3 +459,8 @@
 ## 2026-06-18 00:00 UTC — Plano de sinais EOD com redes neurais
 - Criado o documento `docs/plano-sinais-neurais-eod.md` com o plano para iniciar um sistema de sinais EOD baseado em redes neurais mantendo a lógica de entrada para o pregão seguinte com percentual de diferença sobre o fechamento.
 - O plano define arquitetura com tabela intermediária de predições neurais, job de inferência EOD, adaptação controlada do `eod_signals`, manutenção do `backtest_daily` como validador, fases de implementação, métricas, riscos e critérios de pronto.
+
+## 2026-06-18 13:43:37 UTC-3
+- Expandido o plano `docs/plano-sinais-neurais-eod.md` com uma seção completa para implantação do processo de treino de redes neurais EOD.
+- Documentadas recomendações para separação temporal de dados, construção de dataset supervisionado, definição de labels por barreiras, prevenção de vazamento, comparação de arquiteturas neurais, protocolo de treino, seleção de thresholds, critérios de promoção, período de testes, retreinamento e governança.
+- Alteração exclusivamente documental, sem impacto em código executável.
