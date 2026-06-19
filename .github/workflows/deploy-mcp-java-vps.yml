@@ -82,7 +82,7 @@ jobs:
 
             test -r /opt/sisacao/chaves/codex.json
 
-            docker run -d \
+            container_id="$(docker run -d \
               --name sisacao8-mcp-server-java \
               -p 80:80 \
               -e GCP_PROJECT="${{ secrets.GCP_PROJECT }}" \
@@ -93,8 +93,41 @@ jobs:
               -e GOOGLE_APPLICATION_CREDENTIALS="/opt/sisacao/chaves/codex.json" \
               -e CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE="/opt/sisacao/chaves/codex.json" \
               -v /opt/sisacao/chaves/codex.json:/opt/sisacao/chaves/codex.json:ro \
-              "${MCP_IMAGE}"
+              "${MCP_IMAGE}")"
 
             sleep 2
             docker ps --filter name=sisacao8-mcp-server-java
             docker logs --tail 100 sisacao8-mcp-server-java || true
+
+            container_status="$(docker inspect -f '{{.State.Status}}' "${container_id}")"
+            if [ "${container_status}" != "running" ]; then
+              echo "[deploy] container sisacao8-mcp-server-java não ficou em execução. Status: ${container_status}"
+              docker inspect "${container_id}" || true
+              docker logs --tail 200 "${container_id}" || true
+              exit 1
+            fi
+
+            for attempt in $(seq 1 30); do
+              http_status="$(curl -sS -o /tmp/mcp_initialize.out -w '%{http_code}' \
+                -X POST 'http://127.0.0.1/mcp' \
+                -H 'Content-Type: application/json' \
+                -H 'Accept: application/json, text/event-stream' \
+                --data '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"deploy-smoke-test","version":"1.0"}}}' || true)"
+
+              if [ "${http_status}" = "200" ]; then
+                echo "[deploy] smoke test MCP initialize OK."
+                break
+              fi
+
+              echo "[deploy] aguardando MCP responder initialize (tentativa ${attempt}/30, http_status=${http_status})."
+              docker logs --tail 40 "${container_id}" || true
+              sleep 2
+            done
+
+            if [ "${http_status}" != "200" ]; then
+              echo "[deploy] smoke test MCP initialize falhou. Última resposta:"
+              cat /tmp/mcp_initialize.out || true
+              docker inspect "${container_id}" || true
+              docker logs --tail 200 "${container_id}" || true
+              exit 1
+            fi

@@ -563,3 +563,16 @@
 - Verificado o item 1 (DDL/view): o endpoint publicado `GET http://34.194.252.70/api/ops/neural/training-data/allocation` respondeu `200` com lista vazia (`[]`), indicando que o backend conseguiu consultar `vw_neural_eod_training_dataset_quality`; se a view/tabela não existisse, o backend propagaria erro de BigQuery em vez de retornar lista vazia.
 - Verificado o item 2 (deploy da função): a URL padrão da Cloud Function Gen2 `https://us-east1-ingestaokraken.cloudfunctions.net/neural_training_dataset` respondeu no Cloud Functions endpoint, confirmando que a função está publicada; a chamada `HEAD` retornou `500` por tentar executar a função sem payload/janela adequada, não por ausência de deploy.
 - Tentado novamente o MCP obrigatório via JSON-RPC HTTP em `http://mcpserversisacao.shop/mcp`; o endpoint respondeu `503 Service Unavailable` com falha de conexão upstream, então a verificação direta por MCP/BigQuery permaneceu indisponível.
+
+## 2026-06-19 21:45 UTC — Investigação do HTTP 500 em neural_training_dataset
+- Investigado o erro HTTP 500 reportado na chamada pública da Cloud Function `neural_training_dataset` para a janela `2021-06-19` a `2026-06-18` e snapshot `neural_eod_training_dataset_2026-06-18_v1`.
+- Tentada consulta de logs via `gcloud logging read` e `gcloud functions logs read`, mas o ambiente local não possui `gcloud` instalado.
+- Tentada inicialização do MCP obrigatório em `http://mcpserversisacao.shop/mcp` via JSON-RPC, mas o endpoint retornou `503`/connection refused, impedindo acesso operacional a logs/BigQuery por esse canal.
+- Pela revisão estática da função, o ponto mais provável de falha continua sendo a execução pesada da materialização histórica completa em memória/HTTP: a função carrega candles de todo o período para pandas, monta todo o dataset e faz `load_table_from_json` em lote único, enquanto o deploy atual define apenas `1Gi` de memória e não define timeout customizado.
+- Retentado acesso ao MCP com timeouts maiores (`60s`, `120s` e `180s`) usando HTTP/JSON-RPC; todas as tentativas retornaram `503` rapidamente (`connection refused` antes de headers), confirmando que o problema não é timeout curto do cliente, e sim indisponibilidade/conexão recusada no upstream do MCP.
+- Recebida evidência operacional do usuário mostrando `docker ps` no host do MCP sem containers em execução; confirmado que o erro `503` externo é compatível com o MCP Java fora do ar, não com falha da URL ou timeout do cliente.
+
+## 2026-06-19 22:20 UTC — Hardening do workflow de publicação do MCP Java
+- Revisado o workflow `.github/workflows/deploy-mcp-java-vps.yml`: ele fazia build/push da imagem, removia containers antigos e executava `docker run`, mas apenas imprimia `docker ps`/logs sem falhar explicitamente se o container encerrasse logo após o start.
+- Ajustado o deploy do MCP Java para capturar o `container_id`, validar via `docker inspect` que o status permaneceu `running` e executar smoke test local `POST http://127.0.0.1/mcp` com JSON-RPC `initialize` antes de considerar a publicação bem-sucedida.
+- Com esse ajuste, o workflow passa a falhar com logs/inspect quando o MCP não fica no ar, evitando falso positivo de deploy enquanto `http://mcpserversisacao.shop/mcp` retorna `503`.
