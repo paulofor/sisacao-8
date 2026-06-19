@@ -366,3 +366,128 @@ def generate_conditional_signals(
         if len(selected) >= limit:
             break
     return selected
+
+
+def generate_neural_conditional_signals(
+    rows: Iterable[Mapping[str, object]] | pd.DataFrame,
+    *,
+    top_n: int = MAX_SIGNALS_PER_DAY,
+    x_pct: float = 0.02,
+    target_pct: float = 0.07,
+    stop_pct: float = 0.07,
+    allow_sell: bool = True,
+    horizon_days: int = DEFAULT_HORIZON_DAYS,
+    ranking_key: str = "neural_confidence_v1",
+    min_buy_confidence: float = 0.60,
+    min_sell_confidence: float = 0.60,
+) -> list[ConditionalSignal]:
+    """Generate operational EOD signals from approved neural predictions.
+
+    Expected input columns are the daily candle fields plus neural prediction
+    fields: ``suggested_action``, ``confidence`` and optionally probabilities.
+    ``HOLD`` predictions are deliberately ignored because only directional
+    intentions can become executable signals.
+    """
+
+    limit = min(max(0, int(top_n)), MAX_SIGNALS_PER_DAY)
+    if limit == 0:
+        return []
+    if x_pct < 0:
+        raise ValueError("x_pct deve ser não negativo")
+    if target_pct <= 0 or stop_pct <= 0:
+        raise ValueError("target_pct e stop_pct devem ser positivos")
+    if horizon_days <= 0:
+        raise ValueError("horizon_days deve ser positivo")
+    if isinstance(rows, pd.DataFrame):
+        df = rows.copy()
+    else:
+        df = pd.DataFrame(list(rows))
+    if df.empty:
+        return []
+    for required in ("ticker", "close", "suggested_action", "confidence"):
+        if required not in df.columns:
+            raise KeyError(f"Missing column '{required}' for neural signal generation")
+
+    df["ticker"] = df["ticker"].astype(str).str.upper().str.strip()
+    df["suggested_action"] = df["suggested_action"].astype(str).str.upper().str.strip()
+    df["close"] = pd.to_numeric(df["close"], errors="coerce")
+    df["confidence"] = pd.to_numeric(df["confidence"], errors="coerce")
+    if "volume_financeiro" in df.columns:
+        df["volume_financeiro"] = pd.to_numeric(
+            df["volume_financeiro"], errors="coerce"
+        )
+    if "volume" in df.columns:
+        df["volume"] = pd.to_numeric(df["volume"], errors="coerce")
+    if "qtd_negociada" in df.columns:
+        df["qtd_negociada"] = pd.to_numeric(df["qtd_negociada"], errors="coerce")
+
+    df = df.dropna(subset=["close", "confidence"])
+    df = df[df["ticker"] != ""]
+    df = df[df["suggested_action"].isin(["BUY", "SELL"])]
+    if not allow_sell:
+        df = df[df["suggested_action"] == "BUY"]
+    df = df[
+        ((df["suggested_action"] == "BUY") & (df["confidence"] >= min_buy_confidence))
+        | (
+            (df["suggested_action"] == "SELL")
+            & (df["confidence"] >= min_sell_confidence)
+        )
+    ]
+    if df.empty:
+        return []
+
+    candidates: list[Mapping[str, object]] = []
+    for _, row in df.iterrows():
+        side = str(row["suggested_action"])
+        close_price = float(row["close"])
+        liquidity_value = float(
+            row.get("volume_financeiro")
+            or row.get("volume")
+            or row.get("qtd_negociada")
+            or 0.0
+        )
+        candidates.append(
+            _build_candidate(
+                str(row["ticker"]),
+                side,
+                close_price,
+                x_pct=x_pct,
+                target_pct=target_pct,
+                stop_pct=stop_pct,
+                preferred_side=side,
+                score=float(row["confidence"]),
+                volume=liquidity_value,
+                ranking_key=ranking_key,
+                horizon_days=horizon_days,
+            )
+        )
+
+    candidates.sort(key=lambda item: (-item["score"], item["ticker"], item["side"]))
+    selected: list[ConditionalSignal] = []
+    used = set()
+    for candidate in candidates:
+        ticker = candidate["ticker"]
+        if ticker in used:
+            continue
+        selected.append(
+            ConditionalSignal(
+                ticker=str(ticker),
+                side=str(candidate["side"]),
+                entry=float(candidate["entry"]),
+                target=float(candidate["target"]),
+                stop=float(candidate["stop"]),
+                rank=len(selected) + 1,
+                x_rule=str(candidate["x_rule"]),
+                y_target_pct=float(candidate["y_target_pct"]),
+                y_stop_pct=float(candidate["y_stop_pct"]),
+                volume=float(candidate["volume"]),
+                close=float(candidate["close"]),
+                score=float(candidate["score"]),
+                ranking_key=str(candidate["ranking_key"]),
+                horizon_days=int(candidate["horizon_days"]),
+            )
+        )
+        used.add(ticker)
+        if len(selected) >= limit:
+            break
+    return selected

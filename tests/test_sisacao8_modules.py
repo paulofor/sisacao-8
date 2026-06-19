@@ -169,7 +169,7 @@ def test_generate_conditional_signals_uses_backtest_metrics_for_score() -> None:
 
 
 def test_rollup_candles_uses_pandas_compatible_hourly_frequency() -> None:
-    from sisacao8.candles import Candle, Timeframe, SAO_PAULO_TZ
+    from sisacao8.candles import SAO_PAULO_TZ, Candle, Timeframe
     from sisacao8.intraday import rollup_candles
 
     base_time = dt.datetime(2026, 6, 16, 10, 0, tzinfo=SAO_PAULO_TZ)
@@ -195,3 +195,39 @@ def test_rollup_candles_uses_pandas_compatible_hourly_frequency() -> None:
     assert hourly[0].timeframe == Timeframe.H1
     assert hourly[0].open == 10
     assert hourly[0].close == 13.5
+
+
+def test_generate_neural_conditional_signals_filters_hold_and_thresholds() -> None:
+    from sisacao8.signals import generate_neural_conditional_signals
+
+    rows = [
+        {
+            "ticker": "PETR4",
+            "close": 10.0,
+            "volume_financeiro": 1_000_000,
+            "suggested_action": "BUY",
+            "confidence": 0.65,
+        },
+        {
+            "ticker": "VALE3",
+            "close": 20.0,
+            "volume_financeiro": 2_000_000,
+            "suggested_action": "HOLD",
+            "confidence": 0.90,
+        },
+        {
+            "ticker": "ABEV3",
+            "close": 12.0,
+            "volume_financeiro": 3_000_000,
+            "suggested_action": "SELL",
+            "confidence": 0.55,
+        },
+    ]
+
+    signals = generate_neural_conditional_signals(rows, top_n=5)
+
+    assert len(signals) == 1
+    assert signals[0].ticker == "PETR4"
+    assert signals[0].side == "BUY"
+    assert signals[0].ranking_key == "neural_confidence_v1"
+    assert signals[0].score == 0.65

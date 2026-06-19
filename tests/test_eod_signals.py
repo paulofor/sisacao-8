@@ -187,3 +187,39 @@ def test_table_refs_allow_dedicated_datasets(monkeypatch):
         module._strategy_config_table()
         == "test-project.strategy_ds.parametros_estrategia"
     )
+
+
+def test_fetch_neural_predictions_uses_reference_and_valid_for(monkeypatch):
+    module = import_eod_module(monkeypatch)
+    module.client = types.SimpleNamespace(project="test-project")
+    captured = {}
+
+    def fake_query_rows(query, *, job_config=None):
+        captured["query"] = query
+        captured["params"] = {
+            param.name: param.value for param in job_config.query_parameters
+        }
+        return [
+            {
+                "ticker": "petr4",
+                "model_id": "neural_eod_mlp",
+                "model_version": "v1",
+                "feature_version": "feature_eod_v1",
+                "prob_up": 0.7,
+                "prob_down": 0.2,
+                "prob_neutral": 0.1,
+                "suggested_action": "BUY",
+                "confidence": 0.7,
+            }
+        ]
+
+    monkeypatch.setattr(module, "_query_rows", fake_query_rows)
+
+    df = module._fetch_neural_predictions(dt.date(2026, 6, 18), dt.date(2026, 6, 19))
+
+    assert "neural_eod_predictions" in captured["query"]
+    assert captured["params"] == {
+        "ref_date": dt.date(2026, 6, 18),
+        "valid_for": dt.date(2026, 6, 19),
+    }
+    assert df["ticker"].tolist() == ["PETR4"]

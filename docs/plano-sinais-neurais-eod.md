@@ -272,10 +272,12 @@ Esses valores devem ser tratados como parâmetros versionados e não como consta
 
 ### Fase 5 — Sinais neurais em paralelo
 
-- Ativar modo `neural` ou `hybrid` em ambiente controlado.
-- Gravar sinais neurais com `model_version` própria.
-- Não substituir imediatamente os sinais heurísticos.
-- Comparar resultados via `backtest_daily`.
+**Status:** executada em 2026-06-19. Detalhes em `docs/implementacao/fase5-sinais-neurais-eod-paralelo.md`; adaptação em `functions/eod_signals/` e `sisacao8/signals.py`.
+
+- [x] Ativar modo `neural` ou `hybrid` em ambiente controlado.
+- [x] Gravar sinais neurais com `model_version` própria.
+- [x] Não substituir imediatamente os sinais heurísticos.
+- [x] Comparar resultados via `backtest_daily`.
 
 ### Fase 6 — Paper trading
 
