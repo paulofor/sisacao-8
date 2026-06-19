@@ -1,9 +1,17 @@
 """Utility package for Sisacao-8 data engineering pipelines."""
 
-from .candles import Candle, Timeframe, ensure_timezone, summarize_flags
 from .b3 import parse_b3_daily_zip
-from .intraday import build_intraday_candles, rollup_candles
-from .signals import ConditionalSignal, generate_conditional_signals
+from .backtest import (
+    BacktestTrade,
+    DailyBar,
+    SignalPayload,
+    build_candle_lookup,
+    build_signal_payloads,
+)
+from .backtest import compute_metrics as compute_backtest_metrics
+from .backtest import (
+    run_backtest,
+)
 from .calendar import (
     add_trading_days,
     is_trading_day,
@@ -11,16 +19,14 @@ from .calendar import (
     normalize_holidays,
     previous_trading_day,
 )
-from .backtest import (
-    BacktestTrade,
-    DailyBar,
-    SignalPayload,
-    build_candle_lookup,
-    build_signal_payloads,
-    compute_metrics as compute_backtest_metrics,
-    run_backtest,
-)
+from .candles import Candle, Timeframe, ensure_timezone, summarize_flags
+from .intraday import build_intraday_candles, rollup_candles
 from .observability import StructuredLogger
+from .signals import (
+    ConditionalSignal,
+    generate_conditional_signals,
+    generate_neural_conditional_signals,
+)
 
 __all__ = [
     "Candle",
@@ -31,6 +37,7 @@ __all__ = [
     "build_intraday_candles",
     "rollup_candles",
     "generate_conditional_signals",
+    "generate_neural_conditional_signals",
     "parse_b3_daily_zip",
     "add_trading_days",
     "is_trading_day",

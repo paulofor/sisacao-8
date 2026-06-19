@@ -17,11 +17,12 @@ if __package__:
     from .signals import (
         DEFAULT_HORIZON_DAYS,
         DEFAULT_RANKING_KEY,
-        MODEL_VERSION,
         MAX_SIGNALS_PER_DAY,
+        MODEL_VERSION,
         ConditionalSignal,
         compute_source_snapshot,
         generate_conditional_signals,
+        generate_neural_conditional_signals,
     )
 else:
     from candles import SAO_PAULO_TZ
@@ -29,11 +30,12 @@ else:
     from signals import (
         DEFAULT_HORIZON_DAYS,
         DEFAULT_RANKING_KEY,
-        MODEL_VERSION,
         MAX_SIGNALS_PER_DAY,
+        MODEL_VERSION,
         ConditionalSignal,
         compute_source_snapshot,
         generate_conditional_signals,
+        generate_neural_conditional_signals,
     )
 
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
@@ -47,6 +49,16 @@ SIGNALS_TABLE_ID = os.environ.get("BQ_SIGNALS_TABLE", "sinais_eod")
 FERIADOS_TABLE_ID = os.environ.get("BQ_HOLIDAYS_TABLE", "feriados_b3")
 BACKTEST_METRICS_TABLE_ID = os.environ.get(
     "BQ_BACKTEST_METRICS_TABLE", "backtest_metrics"
+)
+NEURAL_PREDICTIONS_TABLE_ID = os.environ.get(
+    "BQ_NEURAL_PREDICTIONS_TABLE", "neural_eod_predictions"
+)
+SIGNAL_SOURCE = os.environ.get("SIGNAL_SOURCE", "heuristic").strip().lower()
+NEURAL_MIN_BUY_CONFIDENCE = float(os.environ.get("NEURAL_MIN_BUY_CONFIDENCE", "0.60"))
+NEURAL_MIN_SELL_CONFIDENCE = float(os.environ.get("NEURAL_MIN_SELL_CONFIDENCE", "0.60"))
+NEURAL_RANKING_KEY = os.environ.get("NEURAL_SIGNAL_RANKING_KEY", "neural_confidence_v1")
+HYBRID_RANKING_KEY = os.environ.get(
+    "HYBRID_SIGNAL_RANKING_KEY", "hybrid_neural_heuristic_v1"
 )
 MIN_VOLUME = float(os.environ.get("MIN_SIGNAL_VOLUME", "0"))
 EARLY_RUN = os.environ.get("ALLOW_EARLY_SIGNAL", "false").lower() == "true"
@@ -367,6 +379,51 @@ def _fetch_daily_frame(reference_date: dt.date) -> pd.DataFrame:
     return df
 
 
+def _fetch_neural_predictions(
+    reference_date: dt.date, valid_for: dt.date
+) -> pd.DataFrame:
+    expected_columns = [
+        "ticker",
+        "model_id",
+        "model_version",
+        "feature_version",
+        "prob_up",
+        "prob_down",
+        "prob_neutral",
+        "suggested_action",
+        "confidence",
+        "source_snapshot",
+        "job_run_id",
+    ]
+    query = (
+        "SELECT ticker, model_id, model_version, feature_version, prob_up, "
+        "prob_down, prob_neutral, suggested_action, confidence, "
+        "source_snapshot, job_run_id "
+        f"FROM `{_table_ref(NEURAL_PREDICTIONS_TABLE_ID)}` "
+        "WHERE reference_date = @ref_date AND valid_for = @valid_for"
+    )
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ScalarQueryParameter("ref_date", "DATE", reference_date),
+            bigquery.ScalarQueryParameter("valid_for", "DATE", valid_for),
+        ]
+    )
+    df = pd.DataFrame(
+        _query_rows(query, job_config=job_config), columns=expected_columns
+    )
+    if "ticker" in df.columns:
+        df["ticker"] = df["ticker"].astype(str).str.upper().str.strip()
+        df.sort_values(["ticker", "confidence"], ascending=[True, False], inplace=True)
+        df.drop_duplicates(subset=["ticker"], keep="first", inplace=True)
+    logging.info(
+        "Consulta de predições neurais concluída para %s/%s: %s registros",
+        reference_date,
+        valid_for,
+        len(df),
+    )
+    return df
+
+
 def _fetch_latest_metrics() -> pd.DataFrame:
     table = _metrics_table()
     query = f"""
@@ -384,15 +441,24 @@ def _fetch_latest_metrics() -> pd.DataFrame:
         return pd.DataFrame()
 
 
-def _delete_partition(table_id: str, reference_date: dt.date) -> None:
-    query = "DELETE FROM `" f"{table_id}" "` WHERE date_ref = @ref_date"
+def _delete_model_signals(
+    table_id: str, reference_date: dt.date, model_version: str
+) -> None:
+    query = (
+        "DELETE FROM `"
+        f"{table_id}"
+        "` WHERE date_ref = @ref_date AND model_version = @model_version"
+    )
     job_config = bigquery.QueryJobConfig(
         query_parameters=[
-            bigquery.ScalarQueryParameter("ref_date", "DATE", reference_date)
+            bigquery.ScalarQueryParameter("ref_date", "DATE", reference_date),
+            bigquery.ScalarQueryParameter("model_version", "STRING", model_version),
         ]
     )
     _get_client().query(query, job_config=job_config).result()
-    logging.info("Partição de %s removida em %s", reference_date, table_id)
+    logging.info(
+        "Sinais %s/%s removidos em %s", reference_date, model_version, table_id
+    )
 
 
 def _persist_signals(
@@ -406,13 +472,14 @@ def _persist_signals(
     *,
     run_id: str,
     config_version: str,
+    model_version: str = MODEL_VERSION,
 ) -> None:
     rows = [
         signal.to_bq_row(
             reference_date=reference_date,
             valid_for=valid_for,
             created_at=created_at,
-            model_version=MODEL_VERSION,
+            model_version=model_version,
             source_snapshot=source_snapshot,
             code_version=code_version,
         )
@@ -461,11 +528,17 @@ def generate_eod_signals(request: Any) -> Dict[str, Any]:
     reason = _get_first_value(payload, ("reason",))
     mode = payload.get("mode")
     force = _as_bool(payload.get("force"))
+    signal_source = str(payload.get("signal_source") or SIGNAL_SOURCE).strip().lower()
+    if signal_source not in {"heuristic", "neural", "hybrid"}:
+        return {
+            "status": "error",
+            "reason": f"SIGNAL_SOURCE inválido: {signal_source}",
+        }, 400
     if reason:
         run_logger.update_context(reason=reason)
     if mode:
         run_logger.update_context(mode=mode)
-    run_logger.update_context(force=force)
+    run_logger.update_context(force=force, signal_source=signal_source)
 
     reference_date = _parse_request_date(payload)
     run_logger.update_context(date_ref=reference_date.isoformat())
@@ -569,17 +642,95 @@ def generate_eod_signals(request: Any) -> Dict[str, Any]:
 
     limit = strategy_config.max_signals
     metrics_df = _fetch_latest_metrics()
-    signals = generate_conditional_signals(
-        frame,
-        top_n=limit,
-        x_pct=strategy_config.x_pct,
-        target_pct=strategy_config.target_pct,
-        stop_pct=strategy_config.stop_pct,
-        allow_sell=strategy_config.allow_sell,
-        horizon_days=strategy_config.horizon_days,
-        ranking_key=RANKING_KEY,
-        backtest_metrics=metrics_df,
-    )
+    effective_model_version = MODEL_VERSION
+    effective_ranking_key = RANKING_KEY
+    if signal_source == "heuristic":
+        signals = generate_conditional_signals(
+            frame,
+            top_n=limit,
+            x_pct=strategy_config.x_pct,
+            target_pct=strategy_config.target_pct,
+            stop_pct=strategy_config.stop_pct,
+            allow_sell=strategy_config.allow_sell,
+            horizon_days=strategy_config.horizon_days,
+            ranking_key=RANKING_KEY,
+            backtest_metrics=metrics_df,
+        )
+    else:
+        predictions = _fetch_neural_predictions(reference_date, valid_for)
+        if predictions.empty:
+            message = f"Sem predições neurais disponíveis para {reference_date}"
+            run_logger.warn(message, reason="empty_neural_predictions")
+            logging.warning(message)
+            return {
+                "status": "empty",
+                "reason": message,
+                "request_reason": reason,
+                "config_version": strategy_config.config_version,
+                "signal_source": signal_source,
+            }
+        frame = frame.merge(predictions, on="ticker", how="inner")
+        if frame.empty:
+            run_logger.warn(
+                "Nenhum candle casou com predições neurais",
+                reason="neural_join_empty",
+            )
+            return {
+                "status": "filtered",
+                "reason": "neural_join",
+                "request_reason": reason,
+                "config_version": strategy_config.config_version,
+                "signal_source": signal_source,
+            }
+        if signal_source == "hybrid":
+            heuristic = generate_conditional_signals(
+                frame,
+                top_n=len(frame),
+                x_pct=strategy_config.x_pct,
+                target_pct=strategy_config.target_pct,
+                stop_pct=strategy_config.stop_pct,
+                allow_sell=strategy_config.allow_sell,
+                horizon_days=strategy_config.horizon_days,
+                ranking_key=HYBRID_RANKING_KEY,
+                backtest_metrics=metrics_df,
+            )
+            heuristic_scores = {(s.ticker, s.side): s.score for s in heuristic}
+            frame["confidence"] = frame.apply(
+                lambda row: 0.7 * float(row.get("confidence") or 0)
+                + 0.3
+                * heuristic_scores.get(
+                    (
+                        str(row.get("ticker")).upper(),
+                        str(row.get("suggested_action")).upper(),
+                    ),
+                    0.0,
+                ),
+                axis=1,
+            )
+            effective_ranking_key = HYBRID_RANKING_KEY
+        else:
+            effective_ranking_key = NEURAL_RANKING_KEY
+        signals = generate_neural_conditional_signals(
+            frame,
+            top_n=limit,
+            x_pct=strategy_config.x_pct,
+            target_pct=strategy_config.target_pct,
+            stop_pct=strategy_config.stop_pct,
+            allow_sell=strategy_config.allow_sell,
+            horizon_days=strategy_config.horizon_days,
+            ranking_key=effective_ranking_key,
+            min_buy_confidence=NEURAL_MIN_BUY_CONFIDENCE,
+            min_sell_confidence=NEURAL_MIN_SELL_CONFIDENCE,
+        )
+        model_versions = sorted(
+            {
+                str(value)
+                for value in frame.get("model_version", [])
+                if str(value).strip()
+            }
+        )
+        if model_versions:
+            effective_model_version = "neural:" + "+".join(model_versions)
     created_at = _now_sp()
     created_at_naive = _naive_sp(created_at)
     source_snapshot = compute_source_snapshot(frame.to_dict("records"))
@@ -599,13 +750,13 @@ def generate_eod_signals(request: Any) -> Dict[str, Any]:
     response = {
         "date_ref": reference_date.isoformat(),
         "valid_for": valid_for.isoformat(),
-        "model_version": MODEL_VERSION,
+        "model_version": effective_model_version,
         "signals": [
             signal.to_dict(
                 reference_date=reference_date,
                 valid_for=valid_for,
                 created_at=created_at,
-                model_version=MODEL_VERSION,
+                model_version=effective_model_version,
                 source_snapshot=source_snapshot,
                 code_version=code_version,
             )
@@ -613,16 +764,17 @@ def generate_eod_signals(request: Any) -> Dict[str, Any]:
         ],
         "requested": initial_rows,
         "generated": len(signals),
-        "ranking_key": RANKING_KEY,
+        "ranking_key": effective_ranking_key,
         "horizon_days": strategy_config.horizon_days,
         "config_version": strategy_config.config_version,
         "request_reason": reason,
         "mode": mode,
         "force": force,
+        "signal_source": signal_source,
     }
 
     table_id = _table_ref(SIGNALS_TABLE_ID)
-    _delete_partition(table_id, reference_date)
+    _delete_model_signals(table_id, reference_date, effective_model_version)
     _persist_signals(
         table_id,
         signals,
@@ -633,6 +785,7 @@ def generate_eod_signals(request: Any) -> Dict[str, Any]:
         code_version,
         run_id=run_logger.run_id,
         config_version=strategy_config.config_version,
+        model_version=effective_model_version,
     )
 
     response["stored"] = len(signals)

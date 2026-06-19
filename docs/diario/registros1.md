@@ -510,3 +510,10 @@
 - Corrigido o script `infra/bq/18_neural_model_registry.sql` removendo `NOT NULL` dos campos `feature_columns ARRAY<STRING>` e `label_classes ARRAY<STRING>`.
 - Motivo: BigQuery não permite aplicar `NOT NULL` diretamente a campos do tipo `ARRAY`; arrays nulos são armazenados como arrays vazios, causando erro ao executar o DDL.
 - Validação local realizada por busca textual para confirmar que não restaram colunas `ARRAY<...> NOT NULL` no script corrigido.
+
+## 2026-06-19 00:00 UTC — Fase 5 neural: sinais em paralelo
+- Executada a Fase 5 do plano `docs/plano-sinais-neurais-eod.md`, adaptando o `eod_signals` para aceitar `SIGNAL_SOURCE=heuristic|neural|hybrid`, mantendo `heuristic` como padrão.
+- Implementada a leitura de `neural_eod_predictions` por `reference_date` e `valid_for`, com descarte de `HOLD`, thresholds de confiança BUY/SELL e geração de sinais condicionais com a regra canônica de entrada/target/stop.
+- Sinais neurais passam a ser gravados com `model_version` própria (`neural:<versão_do_modelo>`) e `ranking_key` neural/híbrida, preservando rastreabilidade para o `backtest_daily`.
+- Ajustada a exclusão pré-inserção para remover apenas sinais da mesma data e `model_version`, evitando substituir os sinais heurísticos no mesmo pregão.
+- Criada a documentação `docs/implementacao/fase5-sinais-neurais-eod-paralelo.md` e adicionados testes unitários para a consulta de predições e a geração de sinais neurais.
