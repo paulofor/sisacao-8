@@ -19,6 +19,11 @@ Este arquivo fornece contexto a agentes de IA (OpenAI Codex, ChatGPT, etc.) sob
 - **Estado atual:** Primeira Cloud Function implementada (`get_stock_data`).
 - **Próximo marco:** Evoluir o processo de coleta e documentar novas funções.
 
+## 1.1. Investigação e resolução de causas prováveis
+- Sempre que identificar uma possível causa para um problema operacional, bug, falha de deploy, erro de dados ou comportamento inesperado, use as ferramentas disponíveis no ambiente para confirmar a hipótese antes de tratá-la como conclusão.
+- Quando a hipótese for confirmada, resolva o problema no mesmo fluxo de trabalho sempre que a correção estiver dentro do escopo e das permissões disponíveis.
+- Registre no diário do projeto quais ferramentas/comandos foram usados para confirmar a causa e qual correção foi aplicada.
+
 ## 2. Convenções de código
 - **Formatação:** `black` + `isort`
 - **Lint:** `flake8` com `flake8-bugbear`

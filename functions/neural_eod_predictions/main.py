@@ -226,8 +226,9 @@ def _load_model(artifact_dir: Path) -> Any:
 def _load_candles(client: bigquery.Client, reference_date: dt.date) -> pd.DataFrame:
     start_date = reference_date - dt.timedelta(days=LOOKBACK_DAYS)
     query = f"""
-        SELECT ticker, data_pregao, open, high, low, close, volume,
-               COALESCE(financial_volume, close * volume) AS financial_volume
+        SELECT ticker, data_pregao, open, high, low, close,
+               qtd_negociada AS volume,
+               volume_financeiro AS financial_volume
         FROM `{_table_ref(DAILY_TABLE_ID)}`
         WHERE data_pregao BETWEEN @start_date AND @reference_date
         ORDER BY ticker, data_pregao

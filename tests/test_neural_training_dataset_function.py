@@ -109,3 +109,15 @@ def test_request_payload_merges_query_args_and_json_body():
     payload = module._request_payload(request)
 
     assert payload == {"start_date": "2024-01-01", "end_date": "2024-01-31"}
+
+
+def test_load_candles_uses_daily_table_volume_columns(monkeypatch):
+    fake_client = _FakeClient()
+    monkeypatch.setattr(module, "_BQ_CLIENT", fake_client)
+
+    module._load_candles(fake_client, dt.date(2024, 1, 1), dt.date(2024, 1, 31))
+
+    query = fake_client.queries[-1]
+    assert "qtd_negociada AS volume" in query
+    assert "volume_financeiro AS financial_volume" in query
+    assert " close * volume" not in query

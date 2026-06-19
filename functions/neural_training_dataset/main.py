@@ -192,8 +192,9 @@ def _load_candles(
     client: bigquery.Client, start_date: dt.date, end_date: dt.date
 ) -> pd.DataFrame:
     query = f"""
-        SELECT ticker, data_pregao, open, high, low, close, volume,
-               COALESCE(financial_volume, close * volume) AS financial_volume
+        SELECT ticker, data_pregao, open, high, low, close,
+               qtd_negociada AS volume,
+               volume_financeiro AS financial_volume
         FROM `{_table_ref(DAILY_TABLE_ID)}`
         WHERE data_pregao BETWEEN @start_date AND @end_date
         ORDER BY ticker, data_pregao
