@@ -546,3 +546,15 @@
 - A função lê candles de `cotacao_intraday.cotacao_ohlcv_diario`, tenta carregar feriados de `cotacao_intraday.feriados_b3`, aplica parâmetros de labels/splits, adiciona `dataset_snapshot`, `created_at` e `metadata_json`, remove snapshot anterior quando solicitado e grava no BigQuery.
 - Adicionados testes unitários para validar a carga via cliente BigQuery fake e a composição do payload HTTP.
 - Documentada a operação e o comando de publicação GCP em `docs/implementacao/fase2-sinais-neurais-eod-materializacao.md`; tentativa de deploy local ficou bloqueada porque `gcloud` não está instalado no ambiente de execução.
+
+## 2026-06-19 16:41 UTC — Diagnóstico pós-criação da função de dataset neural
+- Revalidado o endpoint publicado `GET http://34.194.252.70/api/ops/neural/training-data/allocation`: a API respondeu `200` com lista vazia (`[]`), confirmando que a tela continua sem dados porque a view de qualidade ainda não possui linhas agregadas.
+- Revisada a Cloud Function `functions/neural_training_dataset`: ela já materializa o dataset supervisionado quando executada, lendo `cotacao_intraday.cotacao_ohlcv_diario`, aplicando splits/labels e gravando em `cotacao_intraday.neural_eod_training_dataset`.
+- Conclusão operacional: falta aplicar/confirmar o DDL da tabela/view, publicar a Cloud Function no GCP, conceder IAM de BigQuery à service account, executar a função com janela histórica válida e validar se `vw_neural_eod_training_dataset_quality` passou a retornar linhas para o backend/frontend.
+- Tentado acesso obrigatório ao MCP via JSON-RPC HTTP em `http://mcpserversisacao.shop/mcp`; o servidor respondeu `503 Service Unavailable` por timeout do upstream, então a validação BigQuery direta via MCP não ficou disponível neste diagnóstico.
+
+## 2026-06-19 16:52 UTC — Correção do deploy automático da função neural_training_dataset
+- Verificado o workflow `.github/workflows/deploy.yml`: apesar de o gatilho cobrir `functions/**`, a matriz `deploy-cloud-functions` não incluía `neural_training_dataset`, portanto a função nova não seria publicada automaticamente no push para `main`.
+- Adicionada `neural_training_dataset` à matriz de deploy com source `functions/neural_training_dataset`, entry point `neural_training_dataset`, variáveis BigQuery necessárias e memória de `1Gi` para suportar pandas/pyarrow durante a materialização histórica.
+- Atualizada a documentação de materialização para deixar claro que a publicação padrão é via workflow automático e que o comando `gcloud functions deploy` é apenas fallback manual.
+- Tentado novamente o MCP obrigatório via JSON-RPC HTTP em `http://mcpserversisacao.shop/mcp`; o endpoint retornou `503 Service Unavailable` por timeout do upstream, impossibilitando confirmar pelo MCP se a função já existe no GCP.
