@@ -505,3 +505,8 @@
 - Adicionada a função pública `build_inference_features` em `sisacao8/neural_dataset.py`, reutilizando o mesmo contrato de features da Fase 2 sem labels futuras nem splits de treino.
 - Documentado o contrato operacional em `docs/implementacao/fase4-sinais-neurais-eod-inferencia.md`, reforçando que a fase não grava em `sinais_eod` e não altera o `backtest_daily`.
 - Adicionados testes unitários em `tests/test_neural_inference.py` para validar ações sugeridas, snapshots, versões e normalização das probabilidades.
+
+## 2026-06-19 00:00 UTC — Correção do DDL do registro neural no BigQuery
+- Corrigido o script `infra/bq/18_neural_model_registry.sql` removendo `NOT NULL` dos campos `feature_columns ARRAY<STRING>` e `label_classes ARRAY<STRING>`.
+- Motivo: BigQuery não permite aplicar `NOT NULL` diretamente a campos do tipo `ARRAY`; arrays nulos são armazenados como arrays vazios, causando erro ao executar o DDL.
+- Validação local realizada por busca textual para confirmar que não restaram colunas `ARRAY<...> NOT NULL` no script corrigido.
