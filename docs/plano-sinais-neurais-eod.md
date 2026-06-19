@@ -289,9 +289,11 @@ Esses valores devem ser tratados como parâmetros versionados e não como consta
 
 ### Fase 7 — Promoção controlada
 
-- Promover apenas modelos com robustez fora da amostra.
-- Exigir aprovação explícita antes de qualquer uso com capital real.
-- Manter fallback para `heuristic`.
+**Status:** executada em 2026-06-19. Detalhes em `docs/implementacao/fase7-sinais-neurais-eod-promocao-controlada.md`; código em `sisacao8/neural_promotion.py`; DDL em `infra/bq/20_neural_eod_controlled_promotion.sql`.
+
+- [x] Promover apenas modelos com robustez fora da amostra.
+- [x] Exigir aprovação explícita antes de qualquer uso com capital real.
+- [x] Manter fallback para `heuristic`.
 
 ## 9. Métricas de avaliação
 

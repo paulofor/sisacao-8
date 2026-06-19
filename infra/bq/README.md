@@ -30,6 +30,8 @@ done
 | `16_neural_eod_predictions.sql` | Tabela e view das predições neurais EOD brutas da Fase 1 do plano neural. |
 | `17_neural_eod_training_dataset.sql` | Tabela e view de qualidade do dataset supervisionado da Fase 2 neural. |
 | `18_neural_model_registry.sql` | Tabela de registro dos artefatos, métricas e status dos modelos neurais EOD da Fase 3. |
+| `19_neural_eod_paper_trading.sql` | Critérios, avaliações e views do paper trading neural EOD da Fase 6. |
+| `20_neural_eod_controlled_promotion.sql` | Critérios, decisões e views de promoção controlada neural EOD da Fase 7. |
 | `views_ops.sql` | Views da Ops API (`vw_ops_*`) com overview, pipeline, DQ, sinais e incidentes. |
 
 Os scripts podem ser reaplicados sem efeitos colaterais graças ao uso de

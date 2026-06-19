@@ -523,3 +523,9 @@
 - Criado módulo `sisacao8/neural_paper_trading.py` para avaliar profit factor, win rate, fill rate, drawdown, retorno médio, sensibilidade a custos e gerar ordens simuladas sem capital real.
 - Criado DDL `infra/bq/19_neural_eod_paper_trading.sql` com critérios versionados, avaliações de liberação e views de métricas de paper trading neural.
 - Documentada a implementação em `docs/implementacao/fase6-sinais-neurais-eod-paper-trading.md` e atualizado o plano principal `docs/plano-sinais-neurais-eod.md` com status da fase.
+
+## 2026-06-19 00:00 UTC — Fase 7 neural: promoção controlada
+- Executada a Fase 7 do plano de sinais neurais EOD, adicionando gate de promoção controlada para impedir substituição automática do fluxo heurístico.
+- Criado módulo `sisacao8/neural_promotion.py` para avaliar robustez OOS, desempenho em paper trading, divergência contra backtest e aprovação explícita antes de liberar uso controlado.
+- Criado DDL `infra/bq/20_neural_eod_controlled_promotion.sql` com critérios versionados, decisões auditáveis e views para fonte segura `hybrid` com fallback `heuristic`.
+- Documentada a implementação em `docs/implementacao/fase7-sinais-neurais-eod-promocao-controlada.md` e atualizado o plano principal com status da fase.
