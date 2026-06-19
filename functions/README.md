@@ -13,3 +13,4 @@ Cada subdiretório contém uma função ou job HTTP com `main.py` e `requirement
 - `dq_checks`: executa checks diários de qualidade de dados e incidentes.
 - `quant_daily_evaluation`: materializa a avaliação diária de ranking, robustez e paper trading em `quant_daily_model_evaluation`.
 - `neural_eod_predictions`: gera predições neurais EOD em shadow mode e grava somente em `neural_eod_predictions`, sem criar sinais operacionais.
+- `neural_training_dataset`: materializa o dataset supervisionado neural EOD em `neural_eod_training_dataset` para alimentar treino, auditoria e a tela de dados de treino.

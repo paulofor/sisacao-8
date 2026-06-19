@@ -529,3 +529,20 @@
 - Criado módulo `sisacao8/neural_promotion.py` para avaliar robustez OOS, desempenho em paper trading, divergência contra backtest e aprovação explícita antes de liberar uso controlado.
 - Criado DDL `infra/bq/20_neural_eod_controlled_promotion.sql` com critérios versionados, decisões auditáveis e views para fonte segura `hybrid` com fallback `heuristic`.
 - Documentada a implementação em `docs/implementacao/fase7-sinais-neurais-eod-promocao-controlada.md` e atualizado o plano principal com status da fase.
+
+## 2026-06-19 12:25 UTC — Diagnóstico da tela neural de dados de treino
+- Investigada a tela `Redes neurais — Dados de treino` reportada sem informação no painel operacional publicado em `http://34.194.252.70/`.
+- Confirmado por chamada HTTP ao endpoint publicado `GET /api/ops/neural/training-data/allocation` que a API retorna lista vazia (`[]`), portanto o frontend exibe corretamente o alerta de ausência de alocação materializada.
+- Revisado o fluxo de código: o frontend consome `GET /ops/neural/training-data/allocation`, o backend consulta a view BigQuery `vw_neural_eod_training_dataset_quality`, e essa view só retorna linhas quando a tabela `cotacao_intraday.neural_eod_training_dataset` já recebeu dataset supervisionado materializado.
+- Tentada consulta ao MCP obrigatório via JSON-RPC em `http://mcpserversisacao.shop/mcp`, mas o serviço respondeu com falha de conexão do upstream; diagnóstico baseado no endpoint público do backend e nos contratos versionados no repositório.
+
+## 2026-06-19 12:30 UTC — Esclarecimento sobre existência e carga do dataset neural
+- Respondida a dúvida operacional sobre `cotacao_intraday.neural_eod_training_dataset`: o repositório possui DDL para criar a tabela e a view de qualidade, e o backend publicado consegue consultar a view sem erro, retornando lista vazia.
+- Identificado que não existe, no repositório atual, Cloud Function/job/script operacional que leia candles históricos, execute `sisacao8.neural_dataset.build_training_dataset` e grave o resultado em `cotacao_intraday.neural_eod_training_dataset`.
+- Conclusão: o contrato e o builder do dataset existem, mas a rotina de materialização/carga do dataset ainda precisa ser implementada ou executada manualmente fora do código versionado.
+
+## 2026-06-19 12:45 UTC — Cloud Function de materialização do dataset neural
+- Criada a Cloud Function HTTP `functions/neural_training_dataset` para materializar `cotacao_intraday.neural_eod_training_dataset` a partir de candles históricos diários e do builder `sisacao8.neural_dataset.build_training_dataset`.
+- A função lê candles de `cotacao_intraday.cotacao_ohlcv_diario`, tenta carregar feriados de `cotacao_intraday.feriados_b3`, aplica parâmetros de labels/splits, adiciona `dataset_snapshot`, `created_at` e `metadata_json`, remove snapshot anterior quando solicitado e grava no BigQuery.
+- Adicionados testes unitários para validar a carga via cliente BigQuery fake e a composição do payload HTTP.
+- Documentada a operação e o comando de publicação GCP em `docs/implementacao/fase2-sinais-neurais-eod-materializacao.md`; tentativa de deploy local ficou bloqueada porque `gcloud` não está instalado no ambiente de execução.
