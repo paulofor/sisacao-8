@@ -281,9 +281,11 @@ Esses valores devem ser tratados como parâmetros versionados e não como consta
 
 ### Fase 6 — Paper trading
 
-- Liberar somente se o backtest neural superar critérios mínimos.
-- Monitorar fill rate, win rate, retorno médio, profit factor, drawdown e sensibilidade a custos.
-- Manter limites baixos e logs completos.
+**Status:** executada em 2026-06-19. Detalhes em `docs/implementacao/fase6-sinais-neurais-eod-paper-trading.md`; código em `sisacao8/neural_paper_trading.py`; DDL em `infra/bq/19_neural_eod_paper_trading.sql`.
+
+- [x] Liberar somente se o backtest neural superar critérios mínimos.
+- [x] Monitorar fill rate, win rate, retorno médio, profit factor, drawdown e sensibilidade a custos.
+- [x] Manter limites baixos e logs completos.
 
 ### Fase 7 — Promoção controlada
 

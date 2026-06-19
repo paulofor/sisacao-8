@@ -517,3 +517,9 @@
 - Sinais neurais passam a ser gravados com `model_version` própria (`neural:<versão_do_modelo>`) e `ranking_key` neural/híbrida, preservando rastreabilidade para o `backtest_daily`.
 - Ajustada a exclusão pré-inserção para remover apenas sinais da mesma data e `model_version`, evitando substituir os sinais heurísticos no mesmo pregão.
 - Criada a documentação `docs/implementacao/fase5-sinais-neurais-eod-paralelo.md` e adicionados testes unitários para a consulta de predições e a geração de sinais neurais.
+
+## 2026-06-19 00:42:15 UTC-3
+- Executada a Fase 6 do plano de sinais neurais EOD, adicionando gate conservador para liberar modelos neurais apenas quando métricas mínimas de backtest forem atendidas.
+- Criado módulo `sisacao8/neural_paper_trading.py` para avaliar profit factor, win rate, fill rate, drawdown, retorno médio, sensibilidade a custos e gerar ordens simuladas sem capital real.
+- Criado DDL `infra/bq/19_neural_eod_paper_trading.sql` com critérios versionados, avaliações de liberação e views de métricas de paper trading neural.
+- Documentada a implementação em `docs/implementacao/fase6-sinais-neurais-eod-paper-trading.md` e atualizado o plano principal `docs/plano-sinais-neurais-eod.md` com status da fase.
