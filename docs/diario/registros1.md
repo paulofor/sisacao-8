@@ -576,3 +576,18 @@
 - Revisado o workflow `.github/workflows/deploy-mcp-java-vps.yml`: ele fazia build/push da imagem, removia containers antigos e executava `docker run`, mas apenas imprimia `docker ps`/logs sem falhar explicitamente se o container encerrasse logo após o start.
 - Ajustado o deploy do MCP Java para capturar o `container_id`, validar via `docker inspect` que o status permaneceu `running` e executar smoke test local `POST http://127.0.0.1/mcp` com JSON-RPC `initialize` antes de considerar a publicação bem-sucedida.
 - Com esse ajuste, o workflow passa a falhar com logs/inspect quando o MCP não fica no ar, evitando falso positivo de deploy enquanto `http://mcpserversisacao.shop/mcp` retorna `503`.
+
+## 2026-06-19 23:40 UTC — Verificação do 500 em neural_training_dataset via MCP
+- Consultado o MCP em `http://mcpserversisacao.shop/mcp` via JSON-RPC para verificar logs da Cloud Function `neural_training_dataset` após erro HTTP 500 reportado pelo usuário na chamada de 2026-06-19 23:36 UTC.
+- Confirmado nos logs do serviço Cloud Run `neural-training-dataset` que a função iniciou a execução do POST, mas falhou antes de materializar o dataset: a consulta BigQuery em `_load_candles` retornou `400 Unrecognized name: volume at [2:61]`.
+- Conclusão operacional: a função foi invocada/executada parcialmente, porém não concluiu com sucesso nem chegou à etapa de gravação em `cotacao_intraday.neural_eod_training_dataset`; é necessário corrigir o SELECT da função para usar o nome real da coluna de volume na tabela fonte.
+
+## 2026-06-19 23:55 UTC — Correção das colunas de volume nas funções neurais
+- Corrigida a query de candles da Cloud Function `neural_training_dataset` para ler o schema real de `cotacao_intraday.cotacao_ohlcv_diario`: `qtd_negociada AS volume` e `volume_financeiro AS financial_volume`, eliminando a referência inválida às colunas inexistentes `volume`/`financial_volume`.
+- Aplicada a mesma correção preventiva em `neural_eod_predictions`, que reutiliza o contrato neural `volume`/`financial_volume` em pandas, mas também lê a tabela diária com os nomes físicos `qtd_negociada`/`volume_financeiro`.
+- Adicionado teste unitário garantindo que `_load_candles` em `neural_training_dataset` gera a query com os aliases corretos para o schema diário publicado.
+
+
+## 2026-06-19 20:45:47 UTC-3 — Atualização do AGENTS sobre confirmação de hipóteses
+- Adicionada diretriz ao `AGENTS.md` exigindo que, ao identificar uma possível causa de problema, o agente use as ferramentas disponíveis para confirmar a hipótese antes de concluir a análise.
+- A nova orientação também determina resolver o problema no mesmo fluxo quando a hipótese for confirmada e a correção estiver dentro do escopo/permissões, registrando ferramentas e correção no diário do projeto.
