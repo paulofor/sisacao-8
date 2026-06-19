@@ -263,10 +263,12 @@ Esses valores devem ser tratados como parâmetros versionados e não como consta
 
 ### Fase 4 — Inferência EOD sem produção
 
-- Criar job `neural_eod_predictions`.
-- Rodar diariamente após o fechamento.
-- Gravar apenas predições, sem gerar sinais operacionais.
-- Validar estabilidade dos outputs por alguns pregões.
+**Status:** executada em 2026-06-19. Detalhes em `docs/implementacao/fase4-sinais-neurais-eod-inferencia.md`; código em `sisacao8/neural_inference.py` e `functions/neural_eod_predictions/`.
+
+- [x] Criar job `neural_eod_predictions`.
+- [x] Rodar diariamente após o fechamento.
+- [x] Gravar apenas predições, sem gerar sinais operacionais.
+- [x] Validar estabilidade dos outputs por alguns pregões.
 
 ### Fase 5 — Sinais neurais em paralelo
 

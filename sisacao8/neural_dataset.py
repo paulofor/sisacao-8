@@ -97,6 +97,28 @@ def build_training_dataset(
     return dataset
 
 
+def build_inference_features(
+    candles: pd.DataFrame,
+    min_history_days: int = DEFAULT_MIN_HISTORY_DAYS,
+) -> pd.DataFrame:
+    """Return feature rows for neural EOD inference without historical labels.
+
+    The output uses the same feature contract as ``build_training_dataset`` but
+    intentionally skips label creation, temporal split assignment and future
+    candles. It is therefore safe for the daily inference job that runs after
+    the close of ``reference_date``.
+    """
+
+    if min_history_days < 1:
+        raise ValueError("min_history_days must be positive")
+    prepared = _prepare_candles(candles)
+    return (
+        _build_features(prepared, min_history_days)
+        .sort_values(["reference_date", "ticker"])
+        .reset_index(drop=True)
+    )
+
+
 def assign_temporal_splits(
     reference_dates: pd.Series, split_config: TemporalSplitConfig | None = None
 ) -> pd.Series:

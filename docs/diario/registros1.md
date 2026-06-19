@@ -498,3 +498,10 @@
 - Adicionado o hook `useNeuralTrainingRuns` e a normalização TypeScript para consumir `GET /ops/neural/training-runs`.
 - Exposto no backend Spring o endpoint `GET /ops/neural/training-runs`, lendo a tabela BigQuery `neural_model_registry` para listar os artefatos registrados.
 - Adicionado o item de menu `Redes neurais > Treinos`, separado da tela de dados de treino para diferenciar materialização de dataset e acompanhamento dos modelos treinados.
+
+## 2026-06-19 00:00 UTC — Fase 4 neural: inferência EOD sem produção
+- Executada a Fase 4 do plano `docs/plano-sinais-neurais-eod.md`, criando o job `functions/neural_eod_predictions` para gerar predições neurais em shadow mode após o fechamento.
+- Criado o módulo `sisacao8/neural_inference.py`, responsável por carregar o scaler do manifesto, transformar features EOD, normalizar probabilidades, classificar `BUY`/`SELL`/`HOLD` por threshold e montar linhas auditáveis para `neural_eod_predictions`.
+- Adicionada a função pública `build_inference_features` em `sisacao8/neural_dataset.py`, reutilizando o mesmo contrato de features da Fase 2 sem labels futuras nem splits de treino.
+- Documentado o contrato operacional em `docs/implementacao/fase4-sinais-neurais-eod-inferencia.md`, reforçando que a fase não grava em `sinais_eod` e não altera o `backtest_daily`.
+- Adicionados testes unitários em `tests/test_neural_inference.py` para validar ações sugeridas, snapshots, versões e normalização das probabilidades.
