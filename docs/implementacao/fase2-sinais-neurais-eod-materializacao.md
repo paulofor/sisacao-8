@@ -54,6 +54,14 @@ Resposta esperada:
 
 ## Publicação GCP
 
+A publicação padrão é automática pelo workflow `.github/workflows/deploy.yml`
+quando alterações em `functions/**` ou no próprio workflow são integradas na
+branch `main`. A função `neural_training_dataset` deve permanecer listada na
+matriz `deploy-cloud-functions` para evitar que o código exista no repositório
+sem ser publicado no ambiente GCP.
+
+### Fallback manual
+
 Com `gcloud` autenticado no projeto `ingestaokraken`, publicar a partir da raiz do repositório:
 
 ```bash

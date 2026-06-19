@@ -64,6 +64,12 @@ jobs:
             service_account: sa-quant-daily-evaluation@ingestaokraken.iam.gserviceaccount.com
             memory: 512Mi
             env: BQ_INTRADAY_DATASET=cotacao_intraday,BQ_QUANT_EVALUATION_TABLE=quant_daily_model_evaluation,BQ_QUANT_RANKING_PERFORMANCE_VIEW=vw_quant_phase3_ranking_performance,BQ_QUANT_ROBUSTNESS_VIEW=vw_quant_phase5_robustness_dashboard,BQ_QUANT_PAPER_TRADING_VIEW=vw_quant_phase6_paper_trading_dashboard
+          - name: neural_training_dataset
+            entry_point: neural_training_dataset
+            source: functions/neural_training_dataset
+            service_account: sa-neural-training-dataset@ingestaokraken.iam.gserviceaccount.com
+            memory: 1Gi
+            env: BQ_INTRADAY_DATASET=cotacao_intraday,BQ_DAILY_TABLE=cotacao_ohlcv_diario,BQ_HOLIDAYS_TABLE=feriados_b3,BQ_NEURAL_TRAINING_DATASET_TABLE=neural_eod_training_dataset,BQ_LOCATION=us-east1
     steps:
       - uses: actions/checkout@v4
       - name: Auth GCP
