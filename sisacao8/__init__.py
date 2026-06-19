@@ -21,6 +21,13 @@ from .calendar import (
 )
 from .candles import Candle, Timeframe, ensure_timezone, summarize_flags
 from .intraday import build_intraday_candles, rollup_candles
+from .neural_promotion import (
+    NeuralPromotionCriteria,
+    NeuralPromotionDecision,
+    build_promotion_audit_record,
+    evaluate_neural_promotion,
+    latest_controlled_promotion,
+)
 from .observability import StructuredLogger
 from .signals import (
     ConditionalSignal,
@@ -51,5 +58,10 @@ __all__ = [
     "build_signal_payloads",
     "run_backtest",
     "compute_backtest_metrics",
+    "NeuralPromotionCriteria",
+    "NeuralPromotionDecision",
+    "build_promotion_audit_record",
+    "evaluate_neural_promotion",
+    "latest_controlled_promotion",
     "StructuredLogger",
 ]
