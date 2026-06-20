@@ -69,7 +69,15 @@ jobs:
             source: functions/neural_training_dataset
             service_account: sa-neural-training-dataset@ingestaokraken.iam.gserviceaccount.com
             memory: 1Gi
+            timeout: 1800s
             env: BQ_INTRADAY_DATASET=cotacao_intraday,BQ_DAILY_TABLE=cotacao_ohlcv_diario,BQ_HOLIDAYS_TABLE=feriados_b3,BQ_NEURAL_TRAINING_DATASET_TABLE=neural_eod_training_dataset,BQ_LOCATION=us-east1
+          - name: neural_training
+            entry_point: neural_training
+            source: functions/neural_training
+            service_account: sa-neural-training@ingestaokraken.iam.gserviceaccount.com
+            memory: 2Gi
+            timeout: 3600s
+            env: BQ_INTRADAY_DATASET=cotacao_intraday,BQ_NEURAL_TRAINING_DATASET_TABLE=neural_eod_training_dataset,BQ_NEURAL_MODEL_REGISTRY_TABLE=neural_model_registry,BQ_LOCATION=us-east1,NEURAL_MODEL_ARTIFACT_BUCKET=sisacao8-neural-artifacts,NEURAL_MODEL_ARTIFACT_PREFIX=neural-eod-models
     steps:
       - uses: actions/checkout@v4
       - name: Auth GCP
@@ -157,6 +165,10 @@ jobs:
 
           if [ -n "${{ matrix.memory }}" ]; then
             deploy_cmd+=("--memory=${{ matrix.memory }}")
+          fi
+
+          if [ -n "${{ matrix.timeout }}" ]; then
+            deploy_cmd+=("--timeout=${{ matrix.timeout }}")
           fi
 
           for attempt in 1 2 3; do

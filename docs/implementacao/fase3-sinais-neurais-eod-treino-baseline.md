@@ -5,7 +5,8 @@ Esta fase cria o primeiro contrato executável para treinar um modelo neural EOD
 ## Entregáveis
 
 - Código reutilizável: `sisacao8/neural_training.py`.
-- Testes unitários: `tests/test_neural_training.py`.
+- Job produtivo HTTP: `functions/neural_training`.
+- Testes unitários: `tests/test_neural_training.py` e `tests/test_neural_training_function.py`.
 - Registro BigQuery: `infra/bq/18_neural_model_registry.sql`.
 
 ## Modelo baseline
@@ -49,6 +50,31 @@ A avaliação registra, por split cronológico:
 
 O hash `dataset_snapshot` é calculado a partir de ticker, data de referência, split e label das linhas materializadas, permitindo rastrear o conjunto usado no treino.
 
+
+## Execução produtiva
+
+A Cloud Function HTTP `neural_training` fecha a lacuna entre os dados de treino e a tela de acompanhamento de treinos. Ela:
+
+1. lê o snapshot solicitado, ou o snapshot mais recente, em `cotacao_intraday.neural_eod_training_dataset`;
+2. filtra linhas com `dataset_split` preenchido para treinar apenas splits cronológicos válidos;
+3. executa `train_baseline_mlp()` com hiperparâmetros recebidos por payload ou defaults auditáveis;
+4. publica `model.keras` e `manifest.json` em `gs://<NEURAL_MODEL_ARTIFACT_BUCKET>/<NEURAL_MODEL_ARTIFACT_PREFIX>/<model_version>` quando o bucket estiver configurado;
+5. insere uma linha em `cotacao_intraday.neural_model_registry` com status inicial `candidate`, URI do artefato, contrato de features/labels e métricas de validação/teste.
+
+Payload mínimo recomendado:
+
+```json
+{
+  "dataset_snapshot": "neural_eod_training_dataset_2026-06-18_v1",
+  "model_version": "neural_eod_mlp_v1_20260620",
+  "epochs": 40,
+  "batch_size": 256,
+  "status": "candidate"
+}
+```
+
+Após a inserção no registry, o endpoint `GET /ops/neural/training-runs` passa a retornar o treino para a tela **Redes neurais — Treinos**.
+
 ## Registro em BigQuery
 
 O script `18_neural_model_registry.sql` cria `cotacao_intraday.neural_model_registry`, que deve receber uma linha por artefato treinado com status inicial `candidate`. A promoção para `shadow`, `paper` ou `approved` permanece manual/controlada em fases posteriores.
@@ -59,6 +85,7 @@ A Fase 3 está concluída quando:
 
 1. o código consegue preparar arrays sem vazamento entre splits;
 2. a MLP baseline pode ser treinada e salva com versão;
-3. as métricas mínimas por classe, matriz de confusão, precisão direcional e cobertura são calculadas;
-4. existe tabela de registro para governança dos artefatos;
-5. nenhum sinal operacional é gerado automaticamente.
+3. o job produtivo publica o artefato e grava o registry com status `candidate`;
+4. as métricas mínimas por classe, matriz de confusão, precisão direcional e cobertura são calculadas;
+5. existe tabela de registro para governança dos artefatos;
+6. nenhum sinal operacional é gerado automaticamente.
