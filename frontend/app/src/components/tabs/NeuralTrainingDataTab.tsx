@@ -73,6 +73,8 @@ const sumRows = (rows: NeuralTrainingDataAllocation[]) => {
       zeroVolumeCount: totals.zeroVolumeCount + row.zeroVolumeCount,
       suspiciousCandleCount:
         totals.suspiciousCandleCount + row.suspiciousCandleCount,
+      targetHitCount: totals.targetHitCount + row.targetHitCount,
+      stopHitCount: totals.stopHitCount + row.stopHitCount,
     }),
     {
       rowsCount: 0,
@@ -83,6 +85,8 @@ const sumRows = (rows: NeuralTrainingDataAllocation[]) => {
       missingOhlcvCount: 0,
       zeroVolumeCount: 0,
       suspiciousCandleCount: 0,
+      targetHitCount: 0,
+      stopHitCount: 0,
     },
   )
 }
@@ -215,6 +219,20 @@ const NeuralTrainingDataTab: FC<NeuralTrainingDataTabProps> = ({
               )} neutro`}
             />
             <SummaryCard
+              title="Alvos atingidos"
+              value={formatNumber(totals.targetHitCount)}
+              helper={`${formatPct(
+                totals.targetHitCount / totals.rowsCount,
+              )} das linhas com alvo em BUY ou SELL`}
+            />
+            <SummaryCard
+              title="Stops atingidos"
+              value={formatNumber(totals.stopHitCount)}
+              helper={`${formatPct(
+                totals.stopHitCount / totals.rowsCount,
+              )} das linhas com stop em BUY ou SELL`}
+            />
+            <SummaryCard
               title="Flags de qualidade"
               value={formatNumber(qualityIssues)}
               helper="OHLCV ausente, volume zero ou candle suspeito"
@@ -266,6 +284,8 @@ const NeuralTrainingDataTab: FC<NeuralTrainingDataTabProps> = ({
                       <TableCell align="right">Alta</TableCell>
                       <TableCell align="right">Queda</TableCell>
                       <TableCell align="right">Neutro</TableCell>
+                      <TableCell align="right">Alvo</TableCell>
+                      <TableCell align="right">Stop</TableCell>
                       <TableCell align="right">Flags DQ</TableCell>
                     </TableRow>
                   </TableHead>
@@ -301,6 +321,16 @@ const NeuralTrainingDataTab: FC<NeuralTrainingDataTabProps> = ({
                           </TableCell>
                           <TableCell align="right">
                             {formatNumber(row.neutralCount)} ({formatPct(row.neutralRatio)})
+                          </TableCell>
+                          <TableCell align="right">
+                            {`${formatNumber(row.targetHitCount)} (${formatPct(
+                              row.targetHitCount / row.rowsCount,
+                            )})`}
+                          </TableCell>
+                          <TableCell align="right">
+                            {`${formatNumber(row.stopHitCount)} (${formatPct(
+                              row.stopHitCount / row.rowsCount,
+                            )})`}
                           </TableCell>
                           <TableCell align="right">
                             {formatNumber(rowQualityIssues)}

@@ -492,7 +492,9 @@ public class BigQueryOpsClient {
                 getDouble(row, "neutral_ratio", "neutralRatio"),
                 getLong(row, "missing_ohlcv_count", "missingOhlcvCount"),
                 getLong(row, "zero_volume_count", "zeroVolumeCount"),
-                getLong(row, "suspicious_candle_count", "suspiciousCandleCount"));
+                getLong(row, "suspicious_candle_count", "suspiciousCandleCount"),
+                getLong(row, "target_hit_count", "targetHitCount"),
+                getLong(row, "stop_hit_count", "stopHitCount"));
     }
 
     private NeuralTrainingRun toNeuralTrainingRun(FieldValueList row) {

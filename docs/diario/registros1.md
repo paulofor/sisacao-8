@@ -692,3 +692,19 @@
 - Ajustado `frontend/app/src/components/tabs/NeuralTrainingRunsTab.tsx` para calcular e exibir acurácia de treino, precisão direcional de treino, cobertura de treino e amostras de treino no painel da rede mais recente.
 - Adicionadas colunas de acurácia de treino e linhas de treino na tabela de treinos; as colunas de precisão direcional e cobertura agora usam fallback para métricas de `test` e, se inexistentes, para métricas de `train`, evitando exibir `—` quando o indicador já está disponível no JSON auditável.
 - Validações executadas: `npm --prefix frontend/app run lint` e `npm --prefix frontend/app run build`.
+
+## 2026-06-20 20:47 UTC — Resposta sobre duplicidade e qualidade dos treinos neurais
+- Investigada a dúvida do usuário sobre os dois registros exibidos na aba "Redes neurais — Treinos".
+- Validado via MCP obrigatório em `http://mcpserversisacao.shop/mcp`, usando JSON-RPC `initialize` e `tools/call` com `bigquery_query`, que existem 2 registros em `ingestaokraken.cotacao_intraday.neural_model_registry`: `neural_eod_mlp_v1_20260620_003` e `neural_eod_mlp_v1_20260620_002`.
+- Confirmado que ambos usam o mesmo `model_id=neural_eod_mlp`, o mesmo `feature_version=feature_eod_tabular_v1`, o mesmo `label_version=label_eod_barrier_v1`, o mesmo snapshot `neural_eod_training_dataset_2026-06-18_v1` e métricas de treino idênticas (`accuracy=0.4795995466565924`, `directional_precision=0.48405466970387245`, `coverage=0.33169625991688706`, `rows_count=5294`).
+- Registrado que o modelo `_002` foi uma execução temporária com artefato local em `/tmp`, enquanto o `_003` é a repetição com artefato persistido em `gs://sisacao8-neural-artifacts/neural-eod-models/neural_eod_mlp_v1_20260620_003`.
+- Conclusão operacional: o resultado ainda não deve ser considerado bom/aprovado porque só há métrica de treino; `validation_accuracy`, `test_accuracy`, `directional_precision` e `coverage` consolidados seguem nulos, sem evidência fora da amostra.
+- Confirmado no código que o Y usado no treino é `label_class`, versão `label_eod_barrier_v1`, codificado em três classes (`down`, `neutral`, `up`) a partir de uma regra de barreira futura EOD: entrada a 2%, alvo a 7%, stop a 7% e horizonte de 15 pregões.
+
+## 2026-06-20 23:55 UTC — Exibição de alvos e stops nos dados de treino neural
+- Atendida a solicitação para mostrar na tela "Redes neurais — Dados de treino" quantas linhas do dataset supervisionado atingiram valor alvo e quantas atingiram valor stop.
+- Atualizada a view BigQuery `vw_neural_eod_training_dataset_quality` para agregar `target_hit_count` e `stop_hit_count` por versão de features, versão de labels e split temporal, considerando linhas em que `buy_net_return` ou `sell_net_return` atingiram respectivamente o alvo de 7% ou o stop de -7%.
+- Atualizado o contrato `NeuralTrainingDataAllocation` no backend e no frontend para transportar os novos campos `targetHitCount` e `stopHitCount` pelo endpoint `GET /ops/neural/training-data/allocation`.
+- Ajustada a aba de dados de treino para exibir cards consolidados de "Alvos atingidos" e "Stops atingidos" e colunas "Alvo"/"Stop" no detalhamento por split.
+- Adicionado teste de controller garantindo que a API serializa `targetHitCount` e `stopHitCount` na resposta da alocação neural.
+- Validações executadas: `npm --prefix frontend/app run lint`, `npm --prefix frontend/app run build` e `cd backend/sisacao-backend && ./mvnw -q test`.

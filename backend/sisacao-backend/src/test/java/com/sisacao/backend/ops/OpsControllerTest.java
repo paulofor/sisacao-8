@@ -103,6 +103,37 @@ class OpsControllerTest {
                 .andExpect(jsonPath("$[0].incidentId", is("inc-001")));
     }
 
+    @Test
+    void shouldReturnNeuralTrainingDataAllocationWithTargetAndStopCounts() throws Exception {
+        List<NeuralTrainingDataAllocation> allocation = List.of(new NeuralTrainingDataAllocation(
+                "feature_eod_tabular_v1",
+                "label_eod_barrier_v1",
+                "train",
+                100L,
+                12L,
+                java.time.LocalDate.parse("2026-03-30"),
+                java.time.LocalDate.parse("2026-06-17"),
+                30L,
+                25L,
+                45L,
+                0.30,
+                0.25,
+                0.45,
+                0L,
+                1L,
+                2L,
+                18L,
+                7L));
+        given(opsService.getNeuralTrainingDataAllocation()).willReturn(allocation);
+
+        mockMvc.perform(get("/ops/neural/training-data/allocation"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].datasetSplit", is("train")))
+                .andExpect(jsonPath("$[0].targetHitCount", is(18)))
+                .andExpect(jsonPath("$[0].stopHitCount", is(7)));
+    }
+
 
     @Test
     void shouldReturnNeuralTrainingRuns() throws Exception {
