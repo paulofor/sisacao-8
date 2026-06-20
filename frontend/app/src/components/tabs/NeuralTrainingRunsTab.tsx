@@ -12,6 +12,7 @@ import {
   TableHead,
   TableRow,
   Typography,
+  LinearProgress,
 } from '@mui/material'
 import dayjs from 'dayjs'
 import type { FC } from 'react'
@@ -23,6 +24,55 @@ interface NeuralTrainingRunsTabProps {
   runsError?: Error | null
   runsLoading: boolean
 }
+
+
+interface NeuralSplitMetrics {
+  rowsCount: number | null
+  accuracy: number | null
+  directionalPrecision: number | null
+  coverage: number | null
+}
+
+const asNumber = (value: unknown): number | null =>
+  typeof value === 'number' && Number.isFinite(value) ? value : null
+
+const parseMetricsJson = (value: string | null | undefined): Record<string, unknown> => {
+  if (!value) return {}
+  try {
+    const parsed = JSON.parse(value) as unknown
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : {}
+  } catch {
+    return {}
+  }
+}
+
+const splitMetrics = (
+  run: NeuralTrainingRun,
+  split: 'train' | 'validation' | 'test',
+): NeuralSplitMetrics => {
+  const metrics = parseMetricsJson(run.metricsJson)
+  const splitValue = metrics[split]
+  const splitRecord =
+    splitValue && typeof splitValue === 'object' && !Array.isArray(splitValue)
+      ? (splitValue as Record<string, unknown>)
+      : {}
+
+  return {
+    rowsCount: asNumber(splitRecord.rows_count ?? splitRecord.rowsCount),
+    accuracy:
+      asNumber(splitRecord.accuracy) ??
+      (split === 'validation' ? run.validationAccuracy : split === 'test' ? run.testAccuracy : null),
+    directionalPrecision:
+      asNumber(splitRecord.directional_precision ?? splitRecord.directionalPrecision) ??
+      (split === 'test' ? run.directionalPrecision : null),
+    coverage: asNumber(splitRecord.coverage) ?? (split === 'test' ? run.coverage : null),
+  }
+}
+
+const latestTestMetrics = (runs: NeuralTrainingRun[]) =>
+  latestRun(runs) ? splitMetrics(latestRun(runs), 'test') : null
 
 const formatNumber = (value: number | null | undefined) =>
   typeof value === 'number' && Number.isFinite(value)
@@ -113,6 +163,7 @@ const NeuralTrainingRunsTab: FC<NeuralTrainingRunsTabProps> = ({
   const approvedCount = runs.filter(
     (run) => run.status?.toLowerCase() === 'approved',
   ).length
+  const latestTest = latestTestMetrics(runs)
 
   return (
     <Stack spacing={3}>
@@ -161,6 +212,37 @@ const NeuralTrainingRunsTab: FC<NeuralTrainingRunsTabProps> = ({
             />
           </Stack>
 
+          <Paper
+            elevation={0}
+            sx={{ p: 2.5, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}
+          >
+            <Stack spacing={1.5}>
+              <Typography variant="h6" fontWeight={800}>
+                Performance da rede mais recente no split de teste
+              </Typography>
+              <Stack direction="row" flexWrap="wrap" gap={2}>
+                <SummaryCard title="Acurácia teste" value={formatPct(latestTest?.accuracy)} />
+                <SummaryCard
+                  title="Precisão direcional"
+                  value={formatPct(latestTest?.directionalPrecision)}
+                />
+                <SummaryCard title="Cobertura direcional" value={formatPct(latestTest?.coverage)} />
+                <SummaryCard title="Amostras testadas" value={formatNumber(latestTest?.rowsCount)} />
+              </Stack>
+              {typeof latestTest?.accuracy === 'number' ? (
+                <LinearProgress
+                  variant="determinate"
+                  value={Math.max(0, Math.min(100, latestTest.accuracy * 100))}
+                  sx={{ height: 10, borderRadius: 999 }}
+                />
+              ) : null}
+              <Typography variant="caption" color="text.secondary">
+                Métricas extraídas do registro auditável do treino (`metrics_json`), com fallback para
+                os campos consolidados quando o detalhe por split não estiver presente.
+              </Typography>
+            </Stack>
+          </Paper>
+
           <TableContainer
             component={Paper}
             elevation={0}
@@ -174,6 +256,7 @@ const NeuralTrainingRunsTab: FC<NeuralTrainingRunsTabProps> = ({
                   <TableCell>Treinado em</TableCell>
                   <TableCell align="right">Validação</TableCell>
                   <TableCell align="right">Teste</TableCell>
+                  <TableCell align="right">Linhas teste</TableCell>
                   <TableCell align="right">Precisão dir.</TableCell>
                   <TableCell align="right">Cobertura</TableCell>
                   <TableCell>Contrato</TableCell>
@@ -203,6 +286,7 @@ const NeuralTrainingRunsTab: FC<NeuralTrainingRunsTabProps> = ({
                     <TableCell>{formatDateTime(run.trainedAt)}</TableCell>
                     <TableCell align="right">{formatPct(run.validationAccuracy)}</TableCell>
                     <TableCell align="right">{formatPct(run.testAccuracy)}</TableCell>
+                    <TableCell align="right">{formatNumber(splitMetrics(run, 'test').rowsCount)}</TableCell>
                     <TableCell align="right">{formatPct(run.directionalPrecision)}</TableCell>
                     <TableCell align="right">{formatPct(run.coverage)}</TableCell>
                     <TableCell>

@@ -16,6 +16,8 @@ public record NeuralTrainingRun(
         Double coverage,
         Double validationAccuracy,
         Double testAccuracy,
+        String metricsJson,
+        String confusionMatrixJson,
         OffsetDateTime trainedAt,
         OffsetDateTime createdAt,
         String notes) {

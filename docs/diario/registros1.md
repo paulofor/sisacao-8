@@ -673,3 +673,9 @@
 - Sincronizada a mesma correção na cópia vendorizada da Cloud Function `functions/neural_training_dataset/sisacao8/neural_dataset.py`, usada no deploy da materialização do dataset neural.
 - Adicionados testes unitários para reproduzir a janela curta semelhante ao snapshot atual, garantir que `train`, `validation` e `test` sejam gerados, e validar que a Cloud Function materializa registros carregados com os três splits.
 - Checks executados: `python -m pytest tests/test_neural_dataset.py tests/test_neural_training_dataset_function.py`, `python -m flake8 sisacao8/neural_dataset.py functions/neural_training_dataset/sisacao8/neural_dataset.py tests/test_neural_dataset.py tests/test_neural_training_dataset_function.py`, `python -m black --check sisacao8/neural_dataset.py functions/neural_training_dataset/sisacao8/neural_dataset.py tests/test_neural_dataset.py tests/test_neural_training_dataset_function.py`, `python -m isort --check-only sisacao8/neural_dataset.py functions/neural_training_dataset/sisacao8/neural_dataset.py tests/test_neural_dataset.py tests/test_neural_training_dataset_function.py`, `python -m flake8` e `python -m pytest`.
+
+## 2026-06-20 18:29:54 UTC-3
+- Confirmada pela tela reportada que a aba "Redes neurais — Treinos" exibia apenas campos consolidados de acurácia/precisão quando disponíveis, sem abrir o detalhamento de performance salvo em `metrics_json`.
+- Ajustado o backend para retornar `metrics_json` e `confusion_matrix_json` do `neural_model_registry` via endpoint `/ops/neural/training-runs`.
+- Ajustado o frontend para interpretar `metrics_json`, exibir painel de performance da rede mais recente no split de teste e adicionar a coluna de linhas testadas por treino.
+- Validações executadas: `npm --prefix frontend/app run lint`, `npm --prefix frontend/app run build` e `cd backend/sisacao-backend && ./mvnw -q test`.
