@@ -597,3 +597,22 @@
 - Confirmado via MCP obrigatório em `http://mcpserversisacao.shop/mcp`, usando JSON-RPC `initialize`, `tools/list`, `cloud_run_function_logs` e `bigquery_query`, que a correção anterior das colunas de volume já estava no deploy e que o novo erro é `ModuleNotFoundError: No module named 'db_dtypes'` seguido de `ValueError: Please install the 'db-dtypes' package to use this function` ao executar `QueryJob.to_dataframe()`.
 - Confirmado também via BigQuery/MCP que a tabela `ingestaokraken.cotacao_intraday.cotacao_ohlcv_diario` possui as colunas físicas `qtd_negociada` e `volume_financeiro`, compatíveis com o SELECT atual da função.
 - Corrigido `functions/neural_training_dataset/requirements.txt` para incluir `db-dtypes`, dependência exigida pelo cliente BigQuery ao converter resultados para pandas DataFrame em runtime.
+
+## 2026-06-20 03:10 UTC — Correção de valores não finitos no dataset neural
+- Investigado o HTTP 500 reportado na Cloud Function `neural_training_dataset` para a chamada de 2026-06-20 03:03:04 UTC, snapshot `neural_eod_training_dataset_2026-06-18_v1`.
+- Reproduzida nova chamada HTTP ao endpoint publicado, que retornou `500` após cerca de 15s, confirmando que a função existe e falha durante o processamento.
+- Tentado acesso obrigatório ao MCP via JSON-RPC HTTP em `http://mcpserversisacao.shop/mcp` com `initialize` e `tools/list`; o endpoint retornou `503 Service Unavailable` por timeout do upstream, então logs/BigQuery não ficaram disponíveis por esse canal neste momento.
+- Como `gcloud` não está instalado no ambiente, a consulta direta de logs via `gcloud functions logs read neural_training_dataset --region=us-east1` também não ficou disponível.
+- Confirmado por revisão e teste local que `_json_safe_value` removia apenas `NaN`, mas preservava `Infinity`, `-Infinity` e `pd.NA`; esses valores podem surgir em features financeiras com denominadores/rolling windows nulos ou constantes e quebrar a serialização/carga JSON no BigQuery.
+- Corrigida a normalização de registros enviados ao BigQuery para transformar valores escalares ausentes ou não finitos em `None`, mantendo datas/timestamps e metadados JSON seguros.
+- Adicionado teste unitário cobrindo `NaN`, `Infinity`, `-Infinity`, `pd.NA` e número finito em `_json_safe_value`.
+- Checks executados: `python -m pytest tests/test_neural_training_dataset_function.py`, `python -m flake8 functions/neural_training_dataset/main.py tests/test_neural_training_dataset_function.py`, `python -m pytest`, `python -m black --check functions/neural_training_dataset/main.py tests/test_neural_training_dataset_function.py` e `python -m isort --check-only functions/neural_training_dataset/main.py tests/test_neural_training_dataset_function.py`.
+
+## 2026-06-20 03:20 UTC — Confirmação via MCP do erro atual em neural_training_dataset
+- Refeito o acesso obrigatório ao MCP Server via JSON-RPC em `http://mcpserversisacao.shop/mcp`: `initialize` retornou sessão válida e `tools/list` confirmou as ferramentas disponíveis.
+- Consultado `cloud_run_function_logs` com `function_name=neural_training_dataset`, `hours=1` e `limit=120`, confirmando nos logs do Cloud Run a falha reportada pelo usuário às 03:03 UTC.
+- Causa confirmada: a carga JSON no BigQuery falhou em `_load_dataset` porque `days_to_event_sell` chegou como `1.0`, mas a coluna BigQuery é `INT64`; o erro registrado foi `Could not convert value ... to integer. Field: days_to_event_sell; Value: 1.0`.
+- Causa secundária confirmada: `_load_holidays` ainda consultava a coluna inexistente `data`; consulta de schema via MCP/BigQuery em `INFORMATION_SCHEMA.COLUMNS` confirmou que `feriados_b3` usa `data_feriado`, `nome_feriado`, `mercado`, `ativo` e `atualizado_em`.
+- Corrigida a query de feriados para usar `data_feriado AS holiday_date`, filtrar por `data_feriado` e considerar somente feriados ativos.
+- Corrigida a sanitização dos registros para converter campos inteiros nullable (`days_to_event_buy` e `days_to_event_sell`) de floats vindos do pandas para inteiros JSON antes do `load_table_from_json`, preservando `None` quando o evento não existe.
+- Adicionados testes unitários para validar o schema publicado de `feriados_b3` e a conversão dos campos inteiros nullable.

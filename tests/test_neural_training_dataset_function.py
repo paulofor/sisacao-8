@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import math
 from types import SimpleNamespace
 
 import pandas as pd
@@ -121,3 +122,41 @@ def test_load_candles_uses_daily_table_volume_columns(monkeypatch):
     assert "qtd_negociada AS volume" in query
     assert "volume_financeiro AS financial_volume" in query
     assert " close * volume" not in query
+
+
+def test_load_holidays_uses_published_holiday_schema(monkeypatch):
+    fake_client = _FakeClient()
+    monkeypatch.setattr(module, "_BQ_CLIENT", fake_client)
+
+    module._load_holidays(fake_client, dt.date(2024, 1, 1), dt.date(2024, 1, 31))
+
+    query = fake_client.queries[-1]
+    assert "data_feriado AS holiday_date" in query
+    assert "WHERE data_feriado BETWEEN @start_date AND @end_date" in query
+    assert "ativo IS TRUE" in query
+    assert "SELECT data AS holiday_date" not in query
+
+
+def test_json_safe_value_removes_non_finite_numbers():
+    assert module._json_safe_value(float("nan")) is None
+    assert module._json_safe_value(float("inf")) is None
+    assert module._json_safe_value(float("-inf")) is None
+    assert module._json_safe_value(pd.NA) is None
+    assert module._json_safe_value(1.5) == 1.5
+    assert math.isfinite(module._json_safe_value(1.5))
+
+
+def test_json_safe_record_casts_nullable_integer_fields():
+    record = module._json_safe_record(
+        {
+            "days_to_event_buy": 2.0,
+            "days_to_event_sell": pd.NA,
+            "return_5d": 1.25,
+        }
+    )
+
+    assert record == {
+        "days_to_event_buy": 2,
+        "days_to_event_sell": None,
+        "return_5d": 1.25,
+    }
