@@ -120,6 +120,8 @@ class OpsControllerTest {
                 0.42,
                 0.58,
                 0.55,
+                "{\"test\":{\"accuracy\":0.55,\"rows_count\":120}}",
+                "[[10,1,2],[1,8,1],[2,1,11]]",
                 OffsetDateTime.parse("2026-06-18T20:30:00Z"),
                 OffsetDateTime.parse("2026-06-18T20:35:00Z"),
                 "Baseline inicial"));
@@ -130,7 +132,8 @@ class OpsControllerTest {
                 .andExpect(jsonPath("$", hasSize(1)))
                 .andExpect(jsonPath("$[0].modelId", is("neural_eod_mlp")))
                 .andExpect(jsonPath("$[0].status", is("candidate")))
-                .andExpect(jsonPath("$[0].testAccuracy", is(0.55)));
+                .andExpect(jsonPath("$[0].testAccuracy", is(0.55)))
+                .andExpect(jsonPath("$[0].metricsJson", is("{\"test\":{\"accuracy\":0.55,\"rows_count\":120}}")));
     }
 
     @Test

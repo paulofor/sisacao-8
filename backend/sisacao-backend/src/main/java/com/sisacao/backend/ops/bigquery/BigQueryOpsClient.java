@@ -120,6 +120,8 @@ public class BigQueryOpsClient {
                 + "ARRAY_LENGTH(feature_columns) AS feature_columns_count, "
                 + "ARRAY_LENGTH(label_classes) AS label_classes_count, "
                 + "directional_precision, coverage, validation_accuracy, test_accuracy, "
+                + "TO_JSON_STRING(metrics_json) AS metrics_json, "
+                + "TO_JSON_STRING(confusion_matrix_json) AS confusion_matrix_json, "
                 + "trained_at, created_at, notes "
                 + "FROM " + qualifiedQuantView(properties.getNeuralModelRegistryTable())
                 + " ORDER BY trained_at DESC, created_at DESC LIMIT 100";
@@ -508,6 +510,8 @@ public class BigQueryOpsClient {
                 getDouble(row, "coverage"),
                 getDouble(row, "validation_accuracy", "validationAccuracy"),
                 getDouble(row, "test_accuracy", "testAccuracy"),
+                getString(row, "metrics_json", "metricsJson"),
+                getString(row, "confusion_matrix_json", "confusionMatrixJson"),
                 getTimestamp(row, "trained_at", "trainedAt"),
                 getTimestamp(row, "created_at", "createdAt"),
                 getString(row, "notes"));

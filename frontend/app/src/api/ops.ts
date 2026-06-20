@@ -125,6 +125,8 @@ export interface NeuralTrainingRun {
   coverage: number | null
   validationAccuracy: number | null
   testAccuracy: number | null
+  metricsJson: string | null
+  confusionMatrixJson: string | null
   trainedAt: string | null
   createdAt: string | null
   notes: string | null
@@ -442,6 +444,10 @@ export const fetchNeuralTrainingRuns = async (): Promise<NeuralTrainingRun[]> =>
         record.validationAccuracy ?? record.validation_accuracy,
       ),
       testAccuracy: toNumber(record.testAccuracy ?? record.test_accuracy),
+      metricsJson: asNullableString(record.metricsJson ?? record.metrics_json),
+      confusionMatrixJson: asNullableString(
+        record.confusionMatrixJson ?? record.confusion_matrix_json,
+      ),
       trainedAt: toIsoDateTime(record.trainedAt ?? record.trained_at),
       createdAt: toIsoDateTime(record.createdAt ?? record.created_at),
       notes: asNullableString(record.notes),
