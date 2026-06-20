@@ -99,6 +99,8 @@ def test_neural_training_dataset_materializes_and_loads_rows(monkeypatch):
     first_row = fake_client.loaded_rows[0]
     assert first_row["dataset_snapshot"] == "snapshot_test"
     assert first_row["metadata_json"]["builder"].endswith("build_training_dataset")
+    loaded_splits = {row["dataset_split"] for row in fake_client.loaded_rows}
+    assert {"train", "validation", "test"}.issubset(loaded_splits)
 
 
 def test_request_payload_merges_query_args_and_json_body():
