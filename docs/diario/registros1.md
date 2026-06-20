@@ -591,3 +591,9 @@
 ## 2026-06-19 20:45:47 UTC-3 — Atualização do AGENTS sobre confirmação de hipóteses
 - Adicionada diretriz ao `AGENTS.md` exigindo que, ao identificar uma possível causa de problema, o agente use as ferramentas disponíveis para confirmar a hipótese antes de concluir a análise.
 - A nova orientação também determina resolver o problema no mesmo fluxo quando a hipótese for confirmada e a correção estiver dentro do escopo/permissões, registrando ferramentas e correção no diário do projeto.
+
+## 2026-06-20 00:15 UTC — Correção de dependência em neural_training_dataset
+- Investigado o novo HTTP 500 reportado para a Cloud Function `neural_training_dataset` na chamada de 2026-06-20 00:08 UTC com janela `2021-06-19` a `2026-06-18`.
+- Confirmado via MCP obrigatório em `http://mcpserversisacao.shop/mcp`, usando JSON-RPC `initialize`, `tools/list`, `cloud_run_function_logs` e `bigquery_query`, que a correção anterior das colunas de volume já estava no deploy e que o novo erro é `ModuleNotFoundError: No module named 'db_dtypes'` seguido de `ValueError: Please install the 'db-dtypes' package to use this function` ao executar `QueryJob.to_dataframe()`.
+- Confirmado também via BigQuery/MCP que a tabela `ingestaokraken.cotacao_intraday.cotacao_ohlcv_diario` possui as colunas físicas `qtd_negociada` e `volume_financeiro`, compatíveis com o SELECT atual da função.
+- Corrigido `functions/neural_training_dataset/requirements.txt` para incluir `db-dtypes`, dependência exigida pelo cliente BigQuery ao converter resultados para pandas DataFrame em runtime.
