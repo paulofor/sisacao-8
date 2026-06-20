@@ -132,10 +132,16 @@ def assign_temporal_splits(
     split_boundary = split_config.train_pct + split_config.validation_pct
     valid_end_idx = int(len(unique_dates) * split_boundary)
     train_dates = set(unique_dates[:train_end_idx])
-    validation_dates = set(
-        unique_dates[train_end_idx + split_config.embargo_days : valid_end_idx]
+    validation_embargo_days = _bounded_embargo_days(
+        split_config.embargo_days, valid_end_idx - train_end_idx
     )
-    test_dates = set(unique_dates[valid_end_idx + split_config.embargo_days :])
+    test_embargo_days = _bounded_embargo_days(
+        split_config.embargo_days, len(unique_dates) - valid_end_idx
+    )
+    validation_dates = set(
+        unique_dates[train_end_idx + validation_embargo_days : valid_end_idx]
+    )
+    test_dates = set(unique_dates[valid_end_idx + test_embargo_days :])
 
     def classify(value: object) -> str | None:
         date_value = pd.Timestamp(value).date()
@@ -148,6 +154,14 @@ def assign_temporal_splits(
         return None
 
     return reference_dates.map(classify)
+
+
+def _bounded_embargo_days(
+    configured_embargo_days: int, split_capacity_days: int
+) -> int:
+    if split_capacity_days <= 0:
+        return 0
+    return min(configured_embargo_days, split_capacity_days // 2)
 
 
 def _prepare_candles(candles: pd.DataFrame) -> pd.DataFrame:

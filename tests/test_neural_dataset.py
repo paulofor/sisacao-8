@@ -61,3 +61,14 @@ def test_assign_temporal_splits_leaves_embargo_gap() -> None:
     assert splits.iloc[6] == "validation"
     assert pd.isna(splits.iloc[8])
     assert splits.iloc[9] == "test"
+
+
+def test_assign_temporal_splits_caps_embargo_for_short_windows() -> None:
+    dates = pd.Series(pd.date_range("2024-03-30", periods=80, freq="D").date)
+
+    splits = assign_temporal_splits(dates, TemporalSplitConfig(embargo_days=15))
+
+    assert splits.eq("train").sum() == 52
+    assert splits.eq("validation").sum() == 7
+    assert splits.eq("test").sum() == 7
+    assert splits.isna().sum() > 0
