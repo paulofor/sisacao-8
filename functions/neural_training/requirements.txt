@@ -1,0 +1,6 @@
+google-cloud-bigquery>=3.12
+google-cloud-storage
+pandas
+numpy
+db-dtypes
+tensorflow-cpu>=2.12,<3

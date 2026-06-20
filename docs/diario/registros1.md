@@ -622,3 +622,20 @@
 - Registrado que o MCP deve permanecer em HTTP, que timeouts/503 exigem repetir o `initialize` e capturar novo `mcp-session-id`, e que todas as chamadas seguintes devem reenviar esse header.
 - Documentado que `cloud_run_function_logs` exige o argumento `function_name` e que `function`/`service` retornaram `function_name vazio`.
 - Incluídos exemplos de `tools/call` para logs de Cloud Function com janela curta (`hours=1`, `limit=120`) e para consulta read-only de schema BigQuery via `bigquery_query` em `INFORMATION_SCHEMA`.
+
+## 2026-06-20 15:20 UTC — Diagnóstico da ausência de treinos neurais
+- Investigada a tela "Redes neurais — Treinos" reportada pelo usuário, que exibiu a mensagem de ausência de treinos registrados apesar de a tela de dados de treino já possuir alocação.
+- Confirmado via MCP obrigatório em `http://mcpserversisacao.shop/mcp`, usando JSON-RPC `initialize` e `tools/call` com `bigquery_query`, que existem 8.144 linhas em `ingestaokraken.cotacao_intraday.neural_eod_training_dataset`, em 1 snapshot, com `reference_date` de 2026-03-30 a 2026-06-17.
+- Confirmado na mesma consulta que `ingestaokraken.cotacao_intraday.neural_model_registry` existe, mas possui 0 linhas e 0 versões de modelo; por isso o endpoint `GET http://34.194.252.70/api/ops/neural/training-runs` retorna `[]` e o frontend mostra "Ainda não há treinos neurais registrados".
+- Revisado o código: o backend lista treinos exclusivamente a partir da tabela `neural_model_registry`, enquanto o repositório possui apenas o helper local `sisacao8.neural_training.train_baseline_mlp`; ainda falta uma rotina produtiva/orquestrada que carregue o dataset do BigQuery, execute o treino TensorFlow, salve o artefato em storage acessível e insira a linha do modelo no registry.
+- Conclusão operacional: dados de treino já foram materializados, mas falta executar/publicar o job de treino e registrar o artefato resultante no `neural_model_registry` com status inicial compatível com governança (`candidate`, depois promoção controlada para `shadow`/`approved`).
+
+## 2026-06-20 15:55 UTC — Implementação do job produtivo neural_training
+- Implementada a Cloud Function HTTP `functions/neural_training`, que lê `cotacao_intraday.neural_eod_training_dataset`, executa o baseline `train_baseline_mlp`, publica o artefato do modelo e registra a execução em `cotacao_intraday.neural_model_registry`.
+- A função aceita `dataset_snapshot`, `model_version`, hiperparâmetros básicos (`epochs`, `batch_size`, `hidden_units`, `dropout_rate`, `learning_rate`, `random_seed`) e `status`; por padrão registra o modelo como `candidate` para manter a promoção controlada.
+- Adicionado upload de `model.keras` e `manifest.json` para `gs://<NEURAL_MODEL_ARTIFACT_BUCKET>/<NEURAL_MODEL_ARTIFACT_PREFIX>/<model_version>` quando o bucket estiver configurado, mantendo fallback local apenas para testes/execuções manuais.
+- Atualizado o workflow `.github/workflows/deploy.yml` para publicar `neural_training` com 2Gi de memória, timeout de 3600s e variáveis BigQuery/artefato, além de suportar timeout por função.
+- Atualizada a documentação da Fase 3 e o README de Functions para descrever a rotina que fecha a lacuna entre dados de treino e registros exibidos na tela "Treinos".
+- Adicionados testes unitários em `tests/test_neural_training_function.py` cobrindo leitura do dataset, publicação do artefato e inserção no registry.
+- Checks executados: `python -m pytest tests/test_neural_training_function.py tests/test_neural_training.py tests/test_neural_training_dataset_function.py`, `python -m flake8 functions/neural_training/main.py tests/test_neural_training_function.py`, `python -m black --check functions/neural_training/main.py tests/test_neural_training_function.py` e `python -m isort --check-only functions/neural_training/main.py tests/test_neural_training_function.py`.
+- Checks globais adicionais executados antes do PR: `python -m flake8` e `python -m pytest` passaram com 116 testes; `python -m black --check .` e `python -m isort --check-only .` falharam por arquivos preexistentes fora do escopo desta alteração que já não estavam formatados/ordenados.
