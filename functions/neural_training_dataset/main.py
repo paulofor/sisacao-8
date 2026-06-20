@@ -6,6 +6,7 @@ import datetime as dt
 import json
 import logging
 import math
+import numbers
 import os
 from typing import Any, Dict, Mapping
 from uuid import uuid4
@@ -31,6 +32,7 @@ TRAINING_DATASET_TABLE_ID = os.environ.get(
 BQ_LOCATION = os.environ.get("BQ_LOCATION", "us-east1").replace("region-", "")
 DEFAULT_LOOKBACK_DAYS = int(os.environ.get("NEURAL_TRAINING_LOOKBACK_DAYS", "1825"))
 DEFAULT_MIN_HISTORY_DAYS = int(os.environ.get("NEURAL_TRAINING_MIN_HISTORY_DAYS", "20"))
+INTEGER_FIELDS = {"days_to_event_buy", "days_to_event_sell"}
 
 _BQ_CLIENT: bigquery.Client | None = None
 
@@ -212,9 +214,10 @@ def _load_holidays(
     client: bigquery.Client, start: dt.date, end: dt.date
 ) -> set[dt.date]:
     query = f"""
-        SELECT data AS holiday_date
+        SELECT data_feriado AS holiday_date
         FROM `{_table_ref(HOLIDAYS_TABLE_ID)}`
-        WHERE data BETWEEN @start_date AND @end_date
+        WHERE data_feriado BETWEEN @start_date AND @end_date
+          AND ativo IS TRUE
     """
     job_config = bigquery.QueryJobConfig(
         query_parameters=[
@@ -279,11 +282,13 @@ def _load_dataset(client: bigquery.Client, dataset: pd.DataFrame) -> int:
 
 
 def _json_safe_record(record: Mapping[str, Any]) -> dict[str, Any]:
-    return {key: _json_safe_value(value) for key, value in record.items()}
+    return {key: _json_safe_value(value, key) for key, value in record.items()}
 
 
-def _json_safe_value(value: Any) -> Any:
+def _json_safe_value(value: Any, key: str | None = None) -> Any:
     if value is None:
+        return None
+    if pd.isna(value):
         return None
     if isinstance(value, pd.Timestamp):
         return value.date().isoformat()
@@ -291,6 +296,13 @@ def _json_safe_value(value: Any) -> Any:
         return value.isoformat()
     if isinstance(value, dt.date):
         return value.isoformat()
+    if isinstance(value, numbers.Real) and not isinstance(value, bool):
+        numeric_value = float(value)
+        if not math.isfinite(numeric_value):
+            return None
+        if key in INTEGER_FIELDS:
+            return int(numeric_value)
+        return value
     if isinstance(value, float) and math.isnan(value):
         return None
     if isinstance(value, dict):

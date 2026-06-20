@@ -96,6 +96,31 @@ curl -sS -D - -X POST 'http://mcpserversisacao.shop/mcp' \
   --data '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}'
 ```
 
+### Dicas operacionais validadas para usar o MCP
+
+- O endpoint pode retornar `503`/timeout enquanto o upstream do MCP Java não está saudável. Nesses casos, **não trocar para HTTPS**: aguarde alguns instantes, repita `initialize` por HTTP e capture um novo `mcp-session-id`.
+- Depois do `initialize`, não basta chamar ferramentas sem sessão: todas as chamadas `tools/list` e `tools/call` precisam reenviar o header `mcp-session-id`.
+- Para consultar logs da Cloud Function Gen2 via MCP, use `tools/call` com a ferramenta `cloud_run_function_logs` e o argumento **`function_name`**. Os argumentos `function` ou `service` não foram aceitos pelo MCP e retornaram `function_name vazio`.
+- Para reduzir timeouts ao consultar logs, prefira janelas curtas e limite moderado, por exemplo:
+
+```bash
+curl -sS -X POST 'http://mcpserversisacao.shop/mcp' \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -H 'mcp-session-id: <MCP_SESSION_ID>' \
+  --data '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"cloud_run_function_logs","arguments":{"function_name":"neural_training_dataset","hours":1,"limit":120}}}'
+```
+
+- Para validar schemas no BigQuery via MCP, use `tools/call` com `bigquery_query` e consultas read-only em `INFORMATION_SCHEMA`, por exemplo:
+
+```bash
+curl -sS -X POST 'http://mcpserversisacao.shop/mcp' \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -H 'mcp-session-id: <MCP_SESSION_ID>' \
+  --data '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"bigquery_query","arguments":{"query":"SELECT column_name, data_type FROM `ingestaokraken.cotacao_intraday.INFORMATION_SCHEMA.COLUMNS` WHERE table_name='\''feriados_b3'\'' ORDER BY ordinal_position","limit":50}}}'
+```
+
 1. **Backend Java + BigQuery**: Um serviço REST (Spring Boot ou Quarkus) fornecerá APIs para consultar sinais, parâmetros e execuções de treinamento diretamente das tabelas no BigQuery, aplicando camadas de serviço/repositório para encapsular o acesso aos dados.
 2. **Frontend web moderno**: Uma aplicação single-page (React ou Vue) consumirá as APIs expostas pelo backend para construir dashboards ricos com controles de sinais, acompanhamento de jobs de treinamento e ajustes de parâmetros.
 3. **Integração desacoplada**: Comunicação exclusiva via HTTP/JSON (ou WebSockets quando necessário), com autenticação unificada (OAuth2/OpenID) e versionamento de endpoints para facilitar evoluções independentes entre frontend e backend.
