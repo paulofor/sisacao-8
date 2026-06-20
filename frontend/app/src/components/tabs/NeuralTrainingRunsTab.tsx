@@ -2,6 +2,7 @@ import {
   Alert,
   Box,
   Chip,
+  LinearProgress,
   Paper,
   Skeleton,
   Stack,
@@ -12,7 +13,6 @@ import {
   TableHead,
   TableRow,
   Typography,
-  LinearProgress,
 } from '@mui/material'
 import dayjs from 'dayjs'
 import type { FC } from 'react'
@@ -24,7 +24,6 @@ interface NeuralTrainingRunsTabProps {
   runsError?: Error | null
   runsLoading: boolean
 }
-
 
 interface NeuralSplitMetrics {
   rowsCount: number | null
@@ -73,6 +72,9 @@ const splitMetrics = (
 
 const latestTestMetrics = (runs: NeuralTrainingRun[]) =>
   latestRun(runs) ? splitMetrics(latestRun(runs), 'test') : null
+
+const latestTrainMetrics = (runs: NeuralTrainingRun[]) =>
+  latestRun(runs) ? splitMetrics(latestRun(runs), 'train') : null
 
 const formatNumber = (value: number | null | undefined) =>
   typeof value === 'number' && Number.isFinite(value)
@@ -163,6 +165,7 @@ const NeuralTrainingRunsTab: FC<NeuralTrainingRunsTabProps> = ({
   const approvedCount = runs.filter(
     (run) => run.status?.toLowerCase() === 'approved',
   ).length
+  const latestTrain = latestTrainMetrics(runs)
   const latestTest = latestTestMetrics(runs)
 
   return (
@@ -218,7 +221,35 @@ const NeuralTrainingRunsTab: FC<NeuralTrainingRunsTabProps> = ({
           >
             <Stack spacing={1.5}>
               <Typography variant="h6" fontWeight={800}>
-                Performance da rede mais recente no split de teste
+                Indicadores da rede mais recente
+              </Typography>
+              <Typography variant="subtitle2" color="text.secondary">
+                Split de treino disponível no registro atual
+              </Typography>
+              <Stack direction="row" flexWrap="wrap" gap={2}>
+                <SummaryCard title="Acurácia treino" value={formatPct(latestTrain?.accuracy)} />
+                <SummaryCard
+                  title="Precisão direcional treino"
+                  value={formatPct(latestTrain?.directionalPrecision)}
+                />
+                <SummaryCard
+                  title="Cobertura treino"
+                  value={formatPct(latestTrain?.coverage)}
+                />
+                <SummaryCard
+                  title="Amostras treino"
+                  value={formatNumber(latestTrain?.rowsCount)}
+                />
+              </Stack>
+              {typeof latestTrain?.accuracy === 'number' ? (
+                <LinearProgress
+                  variant="determinate"
+                  value={Math.max(0, Math.min(100, latestTrain.accuracy * 100))}
+                  sx={{ height: 10, borderRadius: 999 }}
+                />
+              ) : null}
+              <Typography variant="subtitle2" color="text.secondary">
+                Split de teste para aprovação futura
               </Typography>
               <Stack direction="row" flexWrap="wrap" gap={2}>
                 <SummaryCard title="Acurácia teste" value={formatPct(latestTest?.accuracy)} />
@@ -255,7 +286,9 @@ const NeuralTrainingRunsTab: FC<NeuralTrainingRunsTabProps> = ({
                   <TableCell>Status</TableCell>
                   <TableCell>Treinado em</TableCell>
                   <TableCell align="right">Validação</TableCell>
+                  <TableCell align="right">Treino</TableCell>
                   <TableCell align="right">Teste</TableCell>
+                  <TableCell align="right">Linhas treino</TableCell>
                   <TableCell align="right">Linhas teste</TableCell>
                   <TableCell align="right">Precisão dir.</TableCell>
                   <TableCell align="right">Cobertura</TableCell>
@@ -285,10 +318,24 @@ const NeuralTrainingRunsTab: FC<NeuralTrainingRunsTabProps> = ({
                     </TableCell>
                     <TableCell>{formatDateTime(run.trainedAt)}</TableCell>
                     <TableCell align="right">{formatPct(run.validationAccuracy)}</TableCell>
+                    <TableCell align="right">{formatPct(splitMetrics(run, 'train').accuracy)}</TableCell>
                     <TableCell align="right">{formatPct(run.testAccuracy)}</TableCell>
+                    <TableCell align="right">{formatNumber(splitMetrics(run, 'train').rowsCount)}</TableCell>
                     <TableCell align="right">{formatNumber(splitMetrics(run, 'test').rowsCount)}</TableCell>
-                    <TableCell align="right">{formatPct(run.directionalPrecision)}</TableCell>
-                    <TableCell align="right">{formatPct(run.coverage)}</TableCell>
+                    <TableCell align="right">
+                      {formatPct(
+                        run.directionalPrecision ??
+                          splitMetrics(run, 'test').directionalPrecision ??
+                          splitMetrics(run, 'train').directionalPrecision,
+                      )}
+                    </TableCell>
+                    <TableCell align="right">
+                      {formatPct(
+                        run.coverage ??
+                          splitMetrics(run, 'test').coverage ??
+                          splitMetrics(run, 'train').coverage,
+                      )}
+                    </TableCell>
                     <TableCell>
                       <Stack spacing={0.25}>
                         <Typography variant="caption">

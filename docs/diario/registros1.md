@@ -679,3 +679,16 @@
 - Ajustado o backend para retornar `metrics_json` e `confusion_matrix_json` do `neural_model_registry` via endpoint `/ops/neural/training-runs`.
 - Ajustado o frontend para interpretar `metrics_json`, exibir painel de performance da rede mais recente no split de teste e adicionar a coluna de linhas testadas por treino.
 - Validações executadas: `npm --prefix frontend/app run lint`, `npm --prefix frontend/app run build` e `cd backend/sisacao-backend && ./mvnw -q test`.
+
+## 2026-06-20 18:50 UTC-3 — Confirmação do estado dos treinos neurais exibidos
+- Respondida a dúvida do usuário sobre a tela "Redes neurais — Treinos" exibida em `http://34.194.252.70`.
+- Validado com `curl -sS http://34.194.252.70/api/ops/neural/training-runs | python -m json.tool` que existem 2 registros de treino para `neural_eod_mlp`: `neural_eod_mlp_v1_20260620_003` e `neural_eod_mlp_v1_20260620_002`, ambos com `status=candidate`.
+- Confirmado que o treino mais recente (`_003`) possui artefato persistido em `gs://sisacao8-neural-artifacts/neural-eod-models/neural_eod_mlp_v1_20260620_003`, enquanto o anterior (`_002`) usou caminho temporário local `/tmp/neural-eod-models/neural_eod_mlp_v1_20260620_002`.
+- Confirmado que `metricsJson` contém somente métricas do split `train` nos dois registros (`accuracy=0.4795995466565924`, `directional_precision=0.48405466970387245`, `coverage=0.33169625991688706`, `rows_count=5294`) e que `validationAccuracy`, `testAccuracy`, `directionalPrecision` e `coverage` consolidados continuam `null`.
+- Conclusão operacional: as redes foram treinadas no sentido de haver execução registrada e, no caso `_003`, artefato salvo no GCS; porém ainda não foram avaliadas em validação/teste, então permanecem apenas como candidatas e não devem ser tratadas como aprovadas para uso produtivo.
+
+## 2026-06-20 19:05 UTC-3 — Exibição dos indicadores de treino na tela de redes neurais
+- Atendida a solicitação para colocar na tela "Redes neurais — Treinos" os indicadores que já existem em `metricsJson` para o split `train`.
+- Ajustado `frontend/app/src/components/tabs/NeuralTrainingRunsTab.tsx` para calcular e exibir acurácia de treino, precisão direcional de treino, cobertura de treino e amostras de treino no painel da rede mais recente.
+- Adicionadas colunas de acurácia de treino e linhas de treino na tabela de treinos; as colunas de precisão direcional e cobertura agora usam fallback para métricas de `test` e, se inexistentes, para métricas de `train`, evitando exibir `—` quando o indicador já está disponível no JSON auditável.
+- Validações executadas: `npm --prefix frontend/app run lint` e `npm --prefix frontend/app run build`.
