@@ -616,3 +616,9 @@
 - Corrigida a query de feriados para usar `data_feriado AS holiday_date`, filtrar por `data_feriado` e considerar somente feriados ativos.
 - Corrigida a sanitização dos registros para converter campos inteiros nullable (`days_to_event_buy` e `days_to_event_sell`) de floats vindos do pandas para inteiros JSON antes do `load_table_from_json`, preservando `None` quando o evento não existe.
 - Adicionados testes unitários para validar o schema publicado de `feriados_b3` e a conversão dos campos inteiros nullable.
+
+## 2026-06-20 03:35 UTC — Documentação do procedimento MCP no AGENTS
+- Atualizado `AGENTS.md` com as descobertas operacionais usadas para acessar o MCP Server durante a investigação da Cloud Function `neural_training_dataset`.
+- Registrado que o MCP deve permanecer em HTTP, que timeouts/503 exigem repetir o `initialize` e capturar novo `mcp-session-id`, e que todas as chamadas seguintes devem reenviar esse header.
+- Documentado que `cloud_run_function_logs` exige o argumento `function_name` e que `function`/`service` retornaram `function_name vazio`.
+- Incluídos exemplos de `tools/call` para logs de Cloud Function com janela curta (`hours=1`, `limit=120`) e para consulta read-only de schema BigQuery via `bigquery_query` em `INFORMATION_SCHEMA`.
