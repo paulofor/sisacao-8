@@ -210,4 +210,26 @@ class BigQueryOpsClientTest {
         assertThat(queries.get(0).getQuery()).contains("entry, exit_price AS exit, exit_reason AS outcome, return_pct AS pnlPct");
         assertThat(queries.get(1).getQuery()).contains("entry, exit, outcome, pnl_pct AS pnlPct");
     }
+
+    @Test
+    void shouldReturnEmptyNeuralEvolutionLeaderboardWhenViewIsMissing() throws Exception {
+        BigQuery bigQuery = mock(BigQuery.class);
+        org.mockito.Mockito.doThrow(new com.google.cloud.bigquery.BigQueryException(404, "Not found: Table ingestaokraken:cotacao_intraday.vw_neural_evolution_leaderboard"))
+                .when(bigQuery)
+                .query(any(QueryJobConfiguration.class));
+
+        OpsBigQueryProperties properties = new OpsBigQueryProperties();
+        properties.setProjectId("ingestaokraken");
+        properties.setQuantDataset("cotacao_intraday");
+        properties.setNeuralEvolutionLeaderboardView("vw_neural_evolution_leaderboard");
+
+        BigQueryOpsClient client = new BigQueryOpsClient(bigQuery, properties);
+
+        assertThat(client.fetchNeuralEvolutionLeaderboard()).isEmpty();
+
+        ArgumentCaptor<QueryJobConfiguration> queryCaptor = ArgumentCaptor.forClass(QueryJobConfiguration.class);
+        verify(bigQuery).query(queryCaptor.capture());
+        assertThat(queryCaptor.getValue().getQuery()).contains("vw_neural_evolution_leaderboard");
+    }
+
 }

@@ -770,3 +770,10 @@
 - Aplicado também o gate de promoção/paper existente sem evidência de paper trading; o resultado foi `approved=false`, `status=blocked_for_promotion` e falhas em `oos_profit_factor`, `oos_win_rate`, `paper_profit_factor`, `paper_win_rate`, `paper_days`, `paper_trades`, `fill_rate` e `explicit_approval`, confirmando que não há promoção automática para paper/capital.
 - Checks executados: `python -m pytest tests/test_neural_promotion.py` e `python -m flake8 sisacao8/neural_promotion.py tests/test_neural_promotion.py`.
 - Checks globais adicionais executados antes do PR: `python -m flake8`, `python -m pytest`, `cd backend/sisacao-backend && ./mvnw -q test`, `npm --prefix frontend/app run lint`, `npm --prefix frontend/app run build`, `python -m black --check sisacao8/neural_promotion.py tests/test_neural_promotion.py` e `python -m isort --check-only sisacao8/neural_promotion.py tests/test_neural_promotion.py`.
+
+## 2026-06-21 — Correção do erro no leaderboard de evolução neural
+
+- Investigação: reproduzi o erro operacional com `curl -i -sS http://34.194.252.70/api/ops/neural/evolution/leaderboard`, confirmando HTTP 502 com mensagem `Falha ao consultar BigQuery`.
+- Confirmação da causa provável: consultei o MCP via JSON-RPC por HTTP em `http://mcpserversisacao.shop/mcp` com `initialize` e `tools/call`/`bigquery_query` para verificar `INFORMATION_SCHEMA`. As consultas confirmaram que a view/tabelas de evolução neural (`vw_neural_evolution_leaderboard`, `neural_evolution_*`, `neural_candidate_*`) ainda não estão materializadas no BigQuery, causando 404 na consulta do backend.
+- Correção aplicada: o backend agora trata especificamente `BigQueryException` 404 na busca do leaderboard de evolução neural e retorna lista vazia, preservando erros não-404 como falhas reais de acesso ao BigQuery. Foi adicionado teste unitário para garantir o comportamento quando a view opcional ainda não existe.
+- Validação: executei `cd backend/sisacao-backend && ./mvnw test -Dtest=BigQueryOpsClientTest` e `cd backend/sisacao-backend && ./mvnw test`, ambos com sucesso.
