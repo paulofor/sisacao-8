@@ -32,6 +32,7 @@ done
 | `18_neural_model_registry.sql` | Tabela de registro dos artefatos, métricas e status dos modelos neurais EOD da Fase 3. |
 | `19_neural_eod_paper_trading.sql` | Critérios, avaliações e views do paper trading neural EOD da Fase 6. |
 | `20_neural_eod_controlled_promotion.sql` | Critérios, decisões e views de promoção controlada neural EOD da Fase 7. |
+| `21_neural_evolution.sql` | Tabelas, auditorias, gates de shadow e view de leaderboard para evolução neural EOD. |
 | `views_ops.sql` | Views da Ops API (`vw_ops_*`) com overview, pipeline, DQ, sinais e incidentes. |
 
 Os scripts podem ser reaplicados sem efeitos colaterais graças ao uso de

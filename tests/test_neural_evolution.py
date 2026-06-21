@@ -1,0 +1,150 @@
+from sisacao8.neural_evolution import (
+    EvolutionBudget,
+    candidate_hash,
+    estimate_parameter_count,
+    generate_deterministic_candidates,
+    score_candidate,
+)
+
+
+def test_generate_deterministic_candidates_is_reproducible_and_within_budget():
+    budget = EvolutionBudget(max_trials=5, random_seed=42, max_layers=3)
+
+    first = generate_deterministic_candidates(
+        evolution_run_id="run-1",
+        dataset_snapshot="snapshot-1",
+        budget=budget,
+        model_version_prefix="evo_test",
+    )
+    second = generate_deterministic_candidates(
+        evolution_run_id="run-1",
+        dataset_snapshot="snapshot-1",
+        budget=budget,
+        model_version_prefix="evo_test",
+    )
+
+    assert [candidate.dedupe_hash for candidate in first] == [
+        candidate.dedupe_hash for candidate in second
+    ]
+    assert len(first) == 5
+    assert len({candidate.dedupe_hash for candidate in first}) == 5
+    assert first[0].training_request["dataset_snapshot"] == "snapshot-1"
+    assert all(
+        len(candidate.architecture["hidden_units"]) <= budget.max_layers
+        for candidate in first
+    )
+
+
+def test_candidate_hash_changes_with_hyperparameters():
+    architecture = {"type": "mlp", "hidden_units": [64, 32]}
+
+    first = candidate_hash(architecture, {"learning_rate": 0.001})
+    second = candidate_hash(architecture, {"learning_rate": 0.0005})
+
+    assert first != second
+
+
+def test_estimate_parameter_count_for_dense_mlp():
+    assert estimate_parameter_count((32,), feature_count=18, classes=3) == 707
+
+
+def test_score_candidate_rejects_missing_or_weak_oos_metrics():
+    score = score_candidate({"train": {"accuracy": 0.8}})
+
+    assert score.decision == "reject"
+    assert "test_missing" in score.decision_reasons
+
+
+def test_score_candidate_keeps_candidate_with_oos_evidence():
+    score = score_candidate(
+        {
+            "train": {"accuracy": 0.50},
+            "validation": {"directional_precision": 0.42},
+            "test": {
+                "accuracy": 0.44,
+                "coverage": 0.35,
+                "directional_precision": 0.43,
+            },
+        },
+        hidden_units=(64, 32),
+    )
+
+    assert score.decision in {"keep_candidate", "shadow_candidate"}
+    assert score.score_total > 0.0
+    assert score.decision_reasons == ()
+
+
+def test_select_top_mutate_and_repeat_finalists():
+    from sisacao8.neural_evolution import (
+        mutate_top_candidates,
+        penalized_score,
+        repeat_finalists_with_seeds,
+        select_top_candidates,
+    )
+
+    candidates = generate_deterministic_candidates(
+        evolution_run_id="run-1",
+        dataset_snapshot="snapshot-1",
+        budget=EvolutionBudget(max_trials=5, random_seed=42),
+        model_version_prefix="evo_test",
+    )
+    scored = [
+        (
+            candidate,
+            score_candidate(
+                {
+                    "train": {"accuracy": 0.40},
+                    "validation": {"directional_precision": 0.40 + index / 100},
+                    "test": {
+                        "accuracy": 0.42,
+                        "coverage": 0.30,
+                        "directional_precision": 0.42 + index / 100,
+                    },
+                }
+            ),
+        )
+        for index, candidate in enumerate(candidates)
+    ]
+
+    top = select_top_candidates(scored, top_fraction=0.20)
+    mutations = mutate_top_candidates(
+        top,
+        evolution_run_id="run-2",
+        dataset_snapshot="snapshot-1",
+        budget=EvolutionBudget(max_trials=3),
+        model_version_prefix="mutation_test",
+    )
+    repeated = repeat_finalists_with_seeds(
+        top,
+        evolution_run_id="run-2",
+        dataset_snapshot="snapshot-1",
+        seeds=(101, 102),
+        model_version_prefix="seed_test",
+    )
+    penalized = penalized_score(
+        {
+            "train": {"accuracy": 0.40},
+            "validation": {"directional_precision": 0.42},
+            "test": {
+                "accuracy": 0.42,
+                "coverage": 0.35,
+                "directional_precision": 0.43,
+            },
+        },
+        hidden_units=(256, 128, 64),
+        runtime_minutes=120,
+    )
+
+    assert len(top) == 1
+    assert len(mutations) == 3
+    assert {candidate.candidate_source for candidate in mutations} == {"mutation"}
+    assert all(candidate.training_request["early_stopping"] for candidate in mutations)
+    assert {candidate.training_request["class_weight"] for candidate in mutations} <= {
+        "balanced",
+        "directional",
+    }
+    assert [candidate.training_request["random_seed"] for candidate in repeated] == [
+        101,
+        102,
+    ]
+    assert penalized.score_cost_penalty > 0.0

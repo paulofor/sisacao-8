@@ -13,6 +13,7 @@ import com.sisacao.backend.ops.OpsBacktestTrade;
 import com.sisacao.backend.ops.OpsIncident;
 import com.sisacao.backend.ops.NeuralTrainingDataAllocation;
 import com.sisacao.backend.ops.NeuralTrainingRun;
+import com.sisacao.backend.ops.NeuralEvolutionLeaderboardEntry;
 import com.sisacao.backend.ops.OpsOverview;
 import com.sisacao.backend.ops.PipelineJobStatus;
 import com.sisacao.backend.ops.QuantDataInventorySummary;
@@ -109,6 +110,26 @@ public class BigQueryOpsClient {
         List<NeuralTrainingDataAllocation> rows = new ArrayList<>();
         for (FieldValueList row : result.iterateAll()) {
             rows.add(toNeuralTrainingDataAllocation(row));
+        }
+        return Collections.unmodifiableList(rows);
+    }
+
+    public List<NeuralEvolutionLeaderboardEntry> fetchNeuralEvolutionLeaderboard() {
+        String sql = "SELECT "
+                + "candidate_id, evolution_run_id, strategy, evolution_status, model_id, model_version, "
+                + "candidate_source, dataset_snapshot, feature_version, label_version, "
+                + "TO_JSON_STRING(architecture_json) AS architecture_json, "
+                + "TO_JSON_STRING(hyperparameters_json) AS hyperparameters_json, "
+                + "score_total, score_directional_precision, score_coverage, score_generalization, "
+                + "score_stability, score_cost_penalty, decision, "
+                + "TO_JSON_STRING(decision_reasons_json) AS decision_reasons_json, "
+                + "rank_in_run, created_at "
+                + "FROM " + qualifiedQuantView(properties.getNeuralEvolutionLeaderboardView())
+                + " ORDER BY score_total DESC, score_directional_precision DESC LIMIT 100";
+        TableResult result = runQuery(sql, Map.of());
+        List<NeuralEvolutionLeaderboardEntry> rows = new ArrayList<>();
+        for (FieldValueList row : result.iterateAll()) {
+            rows.add(toNeuralEvolutionLeaderboardEntry(row));
         }
         return Collections.unmodifiableList(rows);
     }
@@ -495,6 +516,32 @@ public class BigQueryOpsClient {
                 getLong(row, "suspicious_candle_count", "suspiciousCandleCount"),
                 getLong(row, "target_hit_count", "targetHitCount"),
                 getLong(row, "stop_hit_count", "stopHitCount"));
+    }
+
+    private NeuralEvolutionLeaderboardEntry toNeuralEvolutionLeaderboardEntry(FieldValueList row) {
+        return new NeuralEvolutionLeaderboardEntry(
+                getString(row, "candidate_id", "candidateId"),
+                getString(row, "evolution_run_id", "evolutionRunId"),
+                getString(row, "strategy"),
+                getString(row, "evolution_status", "evolutionStatus"),
+                getString(row, "model_id", "modelId"),
+                getString(row, "model_version", "modelVersion"),
+                getString(row, "candidate_source", "candidateSource"),
+                getString(row, "dataset_snapshot", "datasetSnapshot"),
+                getString(row, "feature_version", "featureVersion"),
+                getString(row, "label_version", "labelVersion"),
+                getString(row, "architecture_json", "architectureJson"),
+                getString(row, "hyperparameters_json", "hyperparametersJson"),
+                getDouble(row, "score_total", "scoreTotal"),
+                getDouble(row, "score_directional_precision", "scoreDirectionalPrecision"),
+                getDouble(row, "score_coverage", "scoreCoverage"),
+                getDouble(row, "score_generalization", "scoreGeneralization"),
+                getDouble(row, "score_stability", "scoreStability"),
+                getDouble(row, "score_cost_penalty", "scoreCostPenalty"),
+                getString(row, "decision"),
+                getString(row, "decision_reasons_json", "decisionReasonsJson"),
+                getLong(row, "rank_in_run", "rankInRun"),
+                getTimestamp(row, "created_at", "createdAt"));
     }
 
     private NeuralTrainingRun toNeuralTrainingRun(FieldValueList row) {

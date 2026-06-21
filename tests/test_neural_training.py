@@ -7,8 +7,8 @@ import pandas as pd
 
 from sisacao8.neural_dataset import build_training_dataset
 from sisacao8.neural_training import (
-    BaselineMlpConfig,
     FEATURE_COLUMNS,
+    BaselineMlpConfig,
     FeatureScaler,
     build_artifact_manifest,
     encode_labels,
@@ -88,3 +88,19 @@ def test_build_artifact_manifest_records_versions_metrics_and_dataset_hash() -> 
     assert manifest["feature_columns"] == FEATURE_COLUMNS
     assert manifest["dataset_snapshot"]
     assert manifest["metrics"] == {"test": {"accuracy": 0.5}}
+
+
+def test_class_weight_balances_and_boosts_directional_classes() -> None:
+    from sisacao8.neural_training import _class_weight
+
+    y_train = encode_labels(pd.Series(["neutral", "neutral", "neutral", "up", "down"]))
+
+    balanced = _class_weight(y_train, "balanced")
+    directional = _class_weight(y_train, "directional")
+
+    assert balanced is not None
+    assert directional is not None
+    neutral_index = 1
+    up_index = 2
+    assert balanced[up_index] > balanced[neutral_index]
+    assert directional[up_index] > balanced[up_index]

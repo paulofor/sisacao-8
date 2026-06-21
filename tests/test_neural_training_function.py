@@ -119,7 +119,11 @@ def test_neural_training_trains_uploads_and_registers(monkeypatch, tmp_path):
             "label_version": config.label_version,
             "feature_columns": list(module.FEATURE_COLUMNS),
             "label_classes": list(module.LABEL_CLASSES),
-            "hyperparameters": {"epochs": config.epochs},
+            "hyperparameters": {
+                "epochs": config.epochs,
+                "early_stopping": config.early_stopping,
+                "class_weight": config.class_weight,
+            },
             "dataset_snapshot": "content_hash",
             "dataset_rows": len(dataset),
             "metrics": {
@@ -143,6 +147,9 @@ def test_neural_training_trains_uploads_and_registers(monkeypatch, tmp_path):
                 "model_version": "neural_eod_mlp_test",
                 "epochs": 1,
                 "batch_size": 2,
+                "early_stopping": True,
+                "early_stopping_patience": 3,
+                "class_weight": "balanced",
             }
         )
     )
@@ -160,6 +167,8 @@ def test_neural_training_trains_uploads_and_registers(monkeypatch, tmp_path):
     row = fake_client.loaded_rows[0]
     assert row["model_version"] == "neural_eod_mlp_test"
     assert row["status"] == "candidate"
+    assert row["hyperparameters_json"]["early_stopping"] is True
+    assert row["hyperparameters_json"]["class_weight"] == "balanced"
     assert row["training_dataset_snapshot"] == "snapshot_2026"
     assert row["artifact_uri"] == response["artifact_uri"]
     assert row["test_accuracy"] == 0.6

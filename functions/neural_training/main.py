@@ -197,6 +197,14 @@ def _training_config(payload: Mapping[str, Any]) -> BaselineMlpConfig:
         ),
         test_split_name=str(payload.get("test_split_name") or defaults.test_split_name),
         random_seed=_int_value(payload.get("random_seed"), defaults.random_seed),
+        early_stopping=_bool_value(
+            payload.get("early_stopping"), defaults.early_stopping
+        ),
+        early_stopping_patience=_int_value(
+            payload.get("early_stopping_patience"),
+            defaults.early_stopping_patience,
+        ),
+        class_weight=str(payload.get("class_weight") or defaults.class_weight),
     )
 
 
@@ -209,6 +217,18 @@ def _hidden_units(value: Any, default: tuple[int, ...]) -> tuple[int, ...]:
     if isinstance(value, (list, tuple)):
         return tuple(int(part) for part in value)
     raise ValueError("hidden_units must be a comma-separated string or list")
+
+
+def _bool_value(value: Any, default: bool) -> bool:
+    if value is None or value == "":
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return default
 
 
 def _int_value(value: Any, default: int) -> int:

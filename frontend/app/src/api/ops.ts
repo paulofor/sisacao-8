@@ -113,6 +113,32 @@ export interface NeuralTrainingDataAllocation {
   stopHitCount: number
 }
 
+
+export interface NeuralEvolutionLeaderboardEntry {
+  candidateId: string
+  evolutionRunId: string
+  strategy: string | null
+  evolutionStatus: string | null
+  modelId: string
+  modelVersion: string
+  candidateSource: string | null
+  datasetSnapshot: string | null
+  featureVersion: string | null
+  labelVersion: string | null
+  architectureJson: string | null
+  hyperparametersJson: string | null
+  scoreTotal: number | null
+  scoreDirectionalPrecision: number | null
+  scoreCoverage: number | null
+  scoreGeneralization: number | null
+  scoreStability: number | null
+  scoreCostPenalty: number | null
+  decision: string | null
+  decisionReasonsJson: string | null
+  rankInRun: number | null
+  createdAt: string | null
+}
+
 export interface NeuralTrainingRun {
   modelId: string
   modelVersion: string
@@ -413,6 +439,43 @@ export const fetchNeuralTrainingDataAllocation = async (): Promise<NeuralTrainin
       ),
       targetHitCount: toInteger(record.targetHitCount ?? record.target_hit_count),
       stopHitCount: toInteger(record.stopHitCount ?? record.stop_hit_count),
+    }
+  })
+}
+
+
+export const fetchNeuralEvolutionLeaderboard = async (): Promise<NeuralEvolutionLeaderboardEntry[]> => {
+  const response = await apiClient.get<unknown>('/ops/neural/evolution/leaderboard')
+  const items = Array.isArray(response.data) ? response.data : []
+
+  return items.map((item) => {
+    const record = item as Record<string, unknown>
+
+    return {
+      candidateId: asString(record.candidateId ?? record.candidate_id, '—'),
+      evolutionRunId: asString(record.evolutionRunId ?? record.evolution_run_id, '—'),
+      strategy: asNullableString(record.strategy),
+      evolutionStatus: asNullableString(record.evolutionStatus ?? record.evolution_status),
+      modelId: asString(record.modelId ?? record.model_id, '—'),
+      modelVersion: asString(record.modelVersion ?? record.model_version, '—'),
+      candidateSource: asNullableString(record.candidateSource ?? record.candidate_source),
+      datasetSnapshot: asNullableString(record.datasetSnapshot ?? record.dataset_snapshot),
+      featureVersion: asNullableString(record.featureVersion ?? record.feature_version),
+      labelVersion: asNullableString(record.labelVersion ?? record.label_version),
+      architectureJson: asNullableString(record.architectureJson ?? record.architecture_json),
+      hyperparametersJson: asNullableString(record.hyperparametersJson ?? record.hyperparameters_json),
+      scoreTotal: toNumber(record.scoreTotal ?? record.score_total),
+      scoreDirectionalPrecision: toNumber(
+        record.scoreDirectionalPrecision ?? record.score_directional_precision,
+      ),
+      scoreCoverage: toNumber(record.scoreCoverage ?? record.score_coverage),
+      scoreGeneralization: toNumber(record.scoreGeneralization ?? record.score_generalization),
+      scoreStability: toNumber(record.scoreStability ?? record.score_stability),
+      scoreCostPenalty: toNumber(record.scoreCostPenalty ?? record.score_cost_penalty),
+      decision: asNullableString(record.decision),
+      decisionReasonsJson: asNullableString(record.decisionReasonsJson ?? record.decision_reasons_json),
+      rankInRun: toNumber(record.rankInRun ?? record.rank_in_run),
+      createdAt: toIsoDateTime(record.createdAt ?? record.created_at),
     }
   })
 }
