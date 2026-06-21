@@ -38,19 +38,52 @@ jobs:
         working-directory: backend/sisacao-backend
         run: ./mvnw clean package -DskipTests
 
-      - name: Upload artifact to Lightsail
-        uses: appleboy/scp-action@v0.1.7
+      - name: Prepare remote artifact directory
+        uses: appleboy/ssh-action@v1.0.3
         with:
           host: 34.194.252.70
           username: deploy
           key: ${{ secrets.KEY }}
           port: 22
-          source: backend/sisacao-backend/target/sisacao-backend-0.0.1-SNAPSHOT.jar
-          target: /home/deploy/sisacao/app/
-          overwrite: true
-          strip_components: 3
-          timeout: 120s
-          # removido: disable_strict_host_key_checking (input inexistente)
+          script: |
+            set -euo pipefail
+            mkdir -p /home/deploy/sisacao/app/
+          timeout: 60s
+          command_timeout: 30m
+
+      - name: Upload artifact to Lightsail
+        env:
+          LIGHTSAIL_HOST: 34.194.252.70
+          LIGHTSAIL_USER: deploy
+          LIGHTSAIL_PORT: '22'
+          LIGHTSAIL_SSH_KEY: ${{ secrets.KEY }}
+          BACKEND_JAR: backend/sisacao-backend/target/sisacao-backend-0.0.1-SNAPSHOT.jar
+        run: |
+          set -euo pipefail
+
+          if [ ! -s "${BACKEND_JAR}" ]; then
+            echo "Backend artifact not found or empty: ${BACKEND_JAR}" >&2
+            exit 1
+          fi
+
+          key_file="$(mktemp)"
+          cleanup() {
+            rm -f "${key_file}"
+          }
+          trap cleanup EXIT
+
+          printf '%s\n' "${LIGHTSAIL_SSH_KEY}" > "${key_file}"
+          chmod 600 "${key_file}"
+
+          scp \
+            -P "${LIGHTSAIL_PORT}" \
+            -i "${key_file}" \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=accept-new \
+            -o ServerAliveInterval=15 \
+            -o ServerAliveCountMax=4 \
+            "${BACKEND_JAR}" \
+            "${LIGHTSAIL_USER}@${LIGHTSAIL_HOST}:/home/deploy/sisacao/app/"
 
       - name: Restart service remotely
         uses: appleboy/ssh-action@v1.0.3
