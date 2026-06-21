@@ -803,3 +803,9 @@
 - Adicionados testes `AiAdvisorServiceTest` e `AiAdvisorControllerTest` cobrindo delegação para provider configurado, validação dos guardrails, limite de candidatos, contrato JSON do endpoint e mapeamento de erros.
 - Check executado inicialmente: `cd backend/sisacao-backend && ./mvnw -q -Dtest=AiAdvisorServiceTest,AiAdvisorControllerTest test`.
 - Check completo executado após a implementação: `cd backend/sisacao-backend && ./mvnw -q test`.
+## 2026-06-21 — Correção do erro no leaderboard de evolução neural
+
+- Investigação: reproduzi o erro operacional com `curl -i -sS http://34.194.252.70/api/ops/neural/evolution/leaderboard`, confirmando HTTP 502 com mensagem `Falha ao consultar BigQuery`.
+- Confirmação da causa provável: consultei o MCP via JSON-RPC por HTTP em `http://mcpserversisacao.shop/mcp` com `initialize` e `tools/call`/`bigquery_query` para verificar `INFORMATION_SCHEMA`. As consultas confirmaram que a view/tabelas de evolução neural (`vw_neural_evolution_leaderboard`, `neural_evolution_*`, `neural_candidate_*`) ainda não estão materializadas no BigQuery, causando 404 na consulta do backend.
+- Correção aplicada: o backend agora trata especificamente `BigQueryException` 404 na busca do leaderboard de evolução neural e retorna lista vazia, preservando erros não-404 como falhas reais de acesso ao BigQuery. Foi adicionado teste unitário para garantir o comportamento quando a view opcional ainda não existe.
+- Validação: executei `cd backend/sisacao-backend && ./mvnw test -Dtest=BigQueryOpsClientTest` e `cd backend/sisacao-backend && ./mvnw test`, ambos com sucesso.
