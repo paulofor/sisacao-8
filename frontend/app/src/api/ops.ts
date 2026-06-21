@@ -160,6 +160,34 @@ export interface NeuralTrainingRun {
   notes: string | null
 }
 
+export interface AiAdvisorRequest {
+  advisorRunId: string
+  task: string
+  context: Record<string, unknown>
+  constraints: Record<string, unknown>
+  expectedResponseSchema: Record<string, unknown>
+  guardrails: string[]
+}
+
+export interface AiAdvisorCandidate {
+  candidateId: string
+  architecture: Record<string, unknown>
+  hyperparameters: Record<string, unknown>
+  metadata: Record<string, unknown>
+}
+
+export interface AiAdvisorResponse {
+  advisorRunId: string
+  provider: string
+  model: string
+  status: string
+  rationale: string
+  candidates: AiAdvisorCandidate[]
+  rejectionReasons: string[]
+  rawResponse: Record<string, unknown>
+  createdAt: string | null
+}
+
 const asString = (value: unknown, fallback = ''): string => {
   if (typeof value === 'string') {
     return value
@@ -520,6 +548,46 @@ export const fetchNeuralTrainingRuns = async (): Promise<NeuralTrainingRun[]> =>
       notes: asNullableString(record.notes),
     }
   })
+}
+
+const asRecord = (value: unknown): Record<string, unknown> => {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, unknown>
+  }
+  return {}
+}
+
+export const requestAiAdvisorRecommendations = async (
+  request: AiAdvisorRequest,
+): Promise<AiAdvisorResponse> => {
+  const response = await apiClient.post<unknown>('/ai/advisor/recommendations', request)
+  const record = asRecord(response.data)
+  const candidates = Array.isArray(record.candidates) ? record.candidates : []
+  const rejectionReasons = Array.isArray(record.rejectionReasons)
+    ? record.rejectionReasons
+    : Array.isArray(record.rejection_reasons)
+      ? record.rejection_reasons
+      : []
+
+  return {
+    advisorRunId: asString(record.advisorRunId ?? record.advisor_run_id, '—'),
+    provider: asString(record.provider, '—'),
+    model: asString(record.model, '—'),
+    status: asString(record.status, '—'),
+    rationale: asString(record.rationale),
+    candidates: candidates.map((item, index) => {
+      const candidate = asRecord(item)
+      return {
+        candidateId: asString(candidate.candidateId ?? candidate.candidate_id, `candidate-${index + 1}`),
+        architecture: asRecord(candidate.architecture),
+        hyperparameters: asRecord(candidate.hyperparameters),
+        metadata: asRecord(candidate.metadata),
+      }
+    }),
+    rejectionReasons: rejectionReasons.map((reason) => asString(reason)).filter(Boolean),
+    rawResponse: asRecord(record.rawResponse ?? record.raw_response),
+    createdAt: toIsoDateTime(record.createdAt ?? record.created_at),
+  }
 }
 
 

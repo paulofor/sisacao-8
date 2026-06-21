@@ -839,3 +839,9 @@
 - Causa provável confirmada por inspeção do workflow: a falha ocorreu especificamente no container do `drone-scp`, enquanto o workflow já usa `appleboy/ssh-action` para validar conexão e reiniciar o serviço com a mesma chave. Para reduzir incompatibilidade do wrapper SCP e melhorar diagnóstico, o upload deixou de depender do `drone-scp`.
 - Correção aplicada: adicionado passo SSH para criar `/home/deploy/sisacao/app/` antes do upload e substituído `appleboy/scp-action` por `scp` nativo do runner, gravando `secrets.KEY` em arquivo temporário com permissão `600`, usando `IdentitiesOnly=yes`, `StrictHostKeyChecking=accept-new` e validação explícita de existência do JAR antes da cópia.
 - Comandos usados: `find .. -name AGENTS.md -print`, `git status --short`, `cat AGENTS.md`, `find .github/workflows -maxdepth 1 -type f -print -exec sed -n '1,220p' {} \;`, `sed -n '1,220p' .github/workflows/deploy-lightsail.yml` e edição local do workflow/diário.
+
+## 2026-06-21 — Tela Advisor IA Gemini no frontend
+
+- Adicionada tela **Advisor IA Gemini** no grupo de redes neurais do painel operacional para acionar o módulo publicado em `/ai/advisor/recommendations`.
+- A tela permite informar o objetivo da rodada, limitar candidatos, enviar contexto resumido do leaderboard neural e acompanhar provider, modelo, status, justificativa, rejeições e candidatos retornados.
+- Comandos usados para confirmar e validar: `rg --files`, `rg -n "gemini|ia|ai|neural"`, leitura dos contratos Java do módulo `aiadvisor` e `npm run build` e `npm run lint` no frontend.
