@@ -32,11 +32,11 @@ jobs:
         uses: appleboy/scp-action@v0.1.7
         with:
           host: 34.194.252.70
-          username: deploy
+          username: ubuntu
           key: ${{ secrets.KEY }}
           port: 22
           source: backend/sisacao-backend/target/sisacao-backend-0.0.1-SNAPSHOT.jar
-          target: /home/deploy/sisacao/app/
+          target: /home/ubuntu/sisacao/app/
           overwrite: true
           strip_components: 3
           timeout: 120s
@@ -45,7 +45,7 @@ jobs:
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: 34.194.252.70
-          username: deploy
+          username: ubuntu
           key: ${{ secrets.KEY }}
           port: 22
           script: |
@@ -53,36 +53,47 @@ jobs:
 
             GEMINI_SOURCE_KEY_FILE=/home/ubuntu/keys/gemini_api_key
             GEMINI_RUNTIME_KEY_FILE=/opt/sisacao/app/secrets/gemini_api_key
-            if ! sudo test -r "${GEMINI_SOURCE_KEY_FILE}"; then
-              echo "Gemini API key file not readable: ${GEMINI_SOURCE_KEY_FILE}" >&2
+
+            # GitHub Actions/ssh-action runs non-interactively. Fail fast with a
+            # clear diagnostic instead of letting sudo ask for a TTY/password.
+            if ! sudo -n true 2>/tmp/sisacao_sudo_check.err; then
+              echo "Passwordless sudo is required for user 'ubuntu' in this non-interactive deploy." >&2
+              echo "Configure NOPASSWD for the deploy commands or run the server preparation manually." >&2
+              cat /tmp/sisacao_sudo_check.err >&2 || true
               exit 1
             fi
 
-            sudo install -d /opt/sisacao/app/
-            sudo install -d -m 750 /opt/sisacao/app/secrets
-            sudo install -m 640 "${GEMINI_SOURCE_KEY_FILE}" "${GEMINI_RUNTIME_KEY_FILE}"
-            if getent group sisacao >/dev/null; then
-              sudo chgrp sisacao "${GEMINI_RUNTIME_KEY_FILE}" /opt/sisacao/app/secrets
+            if ! sudo -n test -r "${GEMINI_SOURCE_KEY_FILE}"; then
+              echo "Gemini API key file not readable via sudo: ${GEMINI_SOURCE_KEY_FILE}" >&2
+              echo "Confirm the file exists on the Lightsail host and is readable by root." >&2
+              exit 1
             fi
-            sudo mv /home/deploy/sisacao/app/sisacao-backend-0.0.1-SNAPSHOT.jar /opt/sisacao/app/sisacao-backend.jar
-            sudo touch /opt/sisacao/app/.env
-            sudo sed -i '/^AI_ADVISOR_ENABLED=/d;/^AI_ADVISOR_PROVIDER=/d;/^GEMINI_API_KEY_FILE=/d;/^GEMINI_MODEL=/d' /opt/sisacao/app/.env
+
+            sudo -n install -d /opt/sisacao/app/
+            sudo -n install -d -m 750 /opt/sisacao/app/secrets
+            sudo -n install -m 640 "${GEMINI_SOURCE_KEY_FILE}" "${GEMINI_RUNTIME_KEY_FILE}"
+            if getent group sisacao >/dev/null; then
+              sudo -n chgrp sisacao "${GEMINI_RUNTIME_KEY_FILE}" /opt/sisacao/app/secrets
+            fi
+            sudo -n mv /home/ubuntu/sisacao/app/sisacao-backend-0.0.1-SNAPSHOT.jar /opt/sisacao/app/sisacao-backend.jar
+            sudo -n touch /opt/sisacao/app/.env
+            sudo -n sed -i '/^AI_ADVISOR_ENABLED=/d;/^AI_ADVISOR_PROVIDER=/d;/^GEMINI_API_KEY_FILE=/d;/^GEMINI_MODEL=/d' /opt/sisacao/app/.env
             {
               echo 'AI_ADVISOR_ENABLED=true'
               echo 'AI_ADVISOR_PROVIDER=gemini'
               echo "GEMINI_API_KEY_FILE=${GEMINI_RUNTIME_KEY_FILE}"
               echo 'GEMINI_MODEL=gemini-1.5-flash'
-            } | sudo tee -a /opt/sisacao/app/.env >/dev/null
-            sudo chown root:root /opt/sisacao/app/.env
-            sudo chmod 644 /opt/sisacao/app/.env
-            sudo systemctl daemon-reload
+            } | sudo -n tee -a /opt/sisacao/app/.env >/dev/null
+            sudo -n chown root:root /opt/sisacao/app/.env
+            sudo -n chmod 644 /opt/sisacao/app/.env
+            sudo -n systemctl daemon-reload
 
-            if ! sudo systemctl restart sisacao-backend.service; then
+            if ! sudo -n systemctl restart sisacao-backend.service; then
               echo "==== Últimos logs do serviço ===="
-              sudo journalctl -u sisacao-backend.service -n 200 --no-pager
+              sudo -n journalctl -u sisacao-backend.service -n 200 --no-pager
               exit 1
             fi
 
-            sudo systemctl status sisacao-backend.service --no-pager || true
+            sudo -n systemctl status sisacao-backend.service --no-pager || true
           timeout: 60s
           command_timeout: 30m
