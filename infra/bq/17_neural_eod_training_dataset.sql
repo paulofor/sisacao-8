@@ -70,6 +70,8 @@ SELECT
   SAFE_DIVIDE(COUNTIF(label_class = 'neutral'), COUNT(*)) AS neutral_ratio,
   COUNTIF(has_missing_ohlcv) AS missing_ohlcv_count,
   COUNTIF(has_zero_volume) AS zero_volume_count,
-  COUNTIF(is_suspicious_candle) AS suspicious_candle_count
+  COUNTIF(is_suspicious_candle) AS suspicious_candle_count,
+  COUNTIF(buy_net_return >= 0.07 OR sell_net_return >= 0.07) AS target_hit_count,
+  COUNTIF(buy_net_return <= -0.07 OR sell_net_return <= -0.07) AS stop_hit_count
 FROM `ingestaokraken.cotacao_intraday.neural_eod_training_dataset`
 GROUP BY feature_version, label_version, dataset_split;

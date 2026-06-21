@@ -109,6 +109,8 @@ export interface NeuralTrainingDataAllocation {
   missingOhlcvCount: number
   zeroVolumeCount: number
   suspiciousCandleCount: number
+  targetHitCount: number
+  stopHitCount: number
 }
 
 export interface NeuralTrainingRun {
@@ -409,6 +411,8 @@ export const fetchNeuralTrainingDataAllocation = async (): Promise<NeuralTrainin
       suspiciousCandleCount: toInteger(
         record.suspiciousCandleCount ?? record.suspicious_candle_count,
       ),
+      targetHitCount: toInteger(record.targetHitCount ?? record.target_hit_count),
+      stopHitCount: toInteger(record.stopHitCount ?? record.stop_hit_count),
     }
   })
 }

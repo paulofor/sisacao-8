@@ -18,5 +18,7 @@ public record NeuralTrainingDataAllocation(
         Double neutralRatio,
         Long missingOhlcvCount,
         Long zeroVolumeCount,
-        Long suspiciousCandleCount) {
+        Long suspiciousCandleCount,
+        Long targetHitCount,
+        Long stopHitCount) {
 }
