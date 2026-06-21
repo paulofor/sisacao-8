@@ -101,3 +101,105 @@ def test_latest_controlled_promotion_requires_audit_columns():
         latest_controlled_promotion(
             [{"promotion_status": "approved_for_controlled_promotion"}]
         )
+
+
+def test_evaluate_neural_shadow_candidate_allows_only_shadow_status():
+    from sisacao8.neural_promotion import evaluate_neural_shadow_candidate
+
+    decision = evaluate_neural_shadow_candidate(
+        {
+            "train": {"accuracy": 0.46},
+            "validation": {
+                "accuracy": 0.39,
+                "directional_precision": 0.36,
+                "coverage": 0.37,
+            },
+            "test": {
+                "rows_count": 750,
+                "accuracy": 0.424,
+                "directional_precision": 0.348,
+                "coverage": 0.364,
+            },
+        },
+        evaluated_at=dt.datetime(2026, 6, 21, 1, 30, tzinfo=dt.timezone.utc),
+    )
+
+    assert decision.approved is True
+    assert decision.status == "shadow_candidate"
+    assert decision.failed_criteria == ()
+    assert decision.metrics["test_rows"] == 750
+
+
+def test_evaluate_neural_shadow_candidate_blocks_weak_oos_and_alerts():
+    from sisacao8.neural_promotion import evaluate_neural_shadow_candidate
+
+    decision = evaluate_neural_shadow_candidate(
+        {
+            "train": {"accuracy": 0.75},
+            "validation": {
+                "accuracy": 0.55,
+                "directional_precision": 0.50,
+                "coverage": 0.50,
+            },
+            "test": {
+                "rows_count": 200,
+                "accuracy": 0.31,
+                "directional_precision": 0.20,
+                "coverage": 0.12,
+            },
+            "label_distribution_train": {"up": 0.30, "neutral": 0.40, "down": 0.30},
+            "label_distribution_test": {"up": 0.55, "neutral": 0.25, "down": 0.20},
+        }
+    )
+
+    assert decision.approved is False
+    assert decision.status == "blocked_for_shadow"
+    assert set(decision.failed_criteria) >= {
+        "test_rows",
+        "test_accuracy",
+        "test_directional_precision",
+        "test_coverage",
+        "train_test_accuracy_gap",
+        "validation_test_precision_gap",
+        "label_drift_pct",
+    }
+    assert set(decision.alerts) == {
+        "overfit_watch",
+        "coverage_drop_watch",
+        "label_drift_watch",
+    }
+
+
+def test_build_shadow_gate_audit_record():
+    from sisacao8.neural_promotion import (
+        build_shadow_gate_audit_record,
+        evaluate_neural_shadow_candidate,
+    )
+
+    evaluated_at = dt.datetime(2026, 6, 21, 1, 30, tzinfo=dt.timezone.utc)
+    decision = evaluate_neural_shadow_candidate(
+        {
+            "train": {"accuracy": 0.46},
+            "validation": {"directional_precision": 0.36, "coverage": 0.37},
+            "test": {
+                "rows_count": 750,
+                "accuracy": 0.424,
+                "directional_precision": 0.348,
+                "coverage": 0.364,
+            },
+        },
+        evaluated_at=evaluated_at,
+    )
+
+    record = build_shadow_gate_audit_record(
+        model_id="neural_eod_mlp",
+        model_version="v-shadow",
+        decision=decision,
+        requested_by="codex",
+        notes="fase 4",
+    )
+
+    assert record["decision_date"] == dt.date(2026, 6, 21)
+    assert record["decision_status"] == "shadow_candidate"
+    assert record["requested_by"] == "codex"
+    assert record["notes"] == "fase 4"

@@ -43,6 +43,10 @@ public class OpsService {
         return bigQueryOpsClient.fetchNeuralTrainingRuns();
     }
 
+    public List<NeuralEvolutionLeaderboardEntry> getNeuralEvolutionLeaderboard() {
+        return bigQueryOpsClient.fetchNeuralEvolutionLeaderboard();
+    }
+
     public QuantDataInventorySummary getQuantDataInventorySummary() {
         return bigQueryOpsClient.fetchQuantDataInventorySummary();
     }

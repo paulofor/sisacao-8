@@ -63,6 +63,9 @@ class BaselineMlpConfig:
     validation_split_name: str = "validation"
     test_split_name: str = "test"
     random_seed: int = 42
+    early_stopping: bool = True
+    early_stopping_patience: int = 8
+    class_weight: str = "none"
 
     def __post_init__(self) -> None:
         if not self.hidden_units:
@@ -77,6 +80,10 @@ class BaselineMlpConfig:
             raise ValueError("epochs must be positive")
         if self.batch_size <= 0:
             raise ValueError("batch_size must be positive")
+        if self.early_stopping_patience <= 0:
+            raise ValueError("early_stopping_patience must be positive")
+        if self.class_weight not in {"none", "balanced", "directional"}:
+            raise ValueError("class_weight must be none, balanced, or directional")
 
 
 @dataclass(frozen=True)
@@ -165,6 +172,7 @@ def train_baseline_mlp(
             x_by_split[config.validation_split_name],
             y_by_split[config.validation_split_name],
         )
+    callbacks = _training_callbacks(config, validation_data is not None)
     history = model.fit(
         x_by_split["train"],
         y_by_split["train"],
@@ -172,6 +180,8 @@ def train_baseline_mlp(
         epochs=config.epochs,
         batch_size=config.batch_size,
         verbose=0,
+        callbacks=callbacks,
+        class_weight=_class_weight(y_by_split["train"], config.class_weight),
     )
     metrics = evaluate_probabilities_by_split(
         y_by_split,
@@ -272,6 +282,39 @@ def build_artifact_manifest(
         "artifact_path": str(model_path),
         "created_at": dt.datetime.now(dt.timezone.utc).isoformat(),
     }
+
+
+def _training_callbacks(config: BaselineMlpConfig, has_validation: bool) -> list[Any]:
+    if not config.early_stopping or not has_validation:
+        return []
+
+    import tensorflow as tf
+
+    return [
+        tf.keras.callbacks.EarlyStopping(
+            monitor="val_loss",
+            patience=config.early_stopping_patience,
+            restore_best_weights=True,
+        )
+    ]
+
+
+def _class_weight(y_train: np.ndarray, mode: str) -> dict[int, float] | None:
+    if mode == "none":
+        return None
+    counts = np.bincount(y_train, minlength=len(LABEL_CLASSES)).astype(float)
+    total = float(counts.sum())
+    weights = {
+        class_index: _safe_divide(total, len(LABEL_CLASSES) * count)
+        for class_index, count in enumerate(counts)
+        if count > 0
+    }
+    if mode == "directional":
+        neutral_index = LABEL_CLASSES.index("neutral")
+        for class_index in weights:
+            if class_index != neutral_index:
+                weights[class_index] *= 1.25
+    return weights
 
 
 def _build_model(input_size: int, config: BaselineMlpConfig) -> Any:

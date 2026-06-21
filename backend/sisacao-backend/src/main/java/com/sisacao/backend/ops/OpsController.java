@@ -46,6 +46,11 @@ public class OpsController {
         return opsService.getNeuralTrainingRuns();
     }
 
+    @GetMapping("/neural/evolution/leaderboard")
+    public List<NeuralEvolutionLeaderboardEntry> getNeuralEvolutionLeaderboard() {
+        return opsService.getNeuralEvolutionLeaderboard();
+    }
+
     @GetMapping("/quant/inventory-summary")
     public QuantDataInventorySummary getQuantDataInventorySummary() {
         return opsService.getQuantDataInventorySummary();
