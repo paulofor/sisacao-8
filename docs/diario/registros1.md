@@ -771,6 +771,38 @@
 - Checks executados: `python -m pytest tests/test_neural_promotion.py` e `python -m flake8 sisacao8/neural_promotion.py tests/test_neural_promotion.py`.
 - Checks globais adicionais executados antes do PR: `python -m flake8`, `python -m pytest`, `cd backend/sisacao-backend && ./mvnw -q test`, `npm --prefix frontend/app run lint`, `npm --prefix frontend/app run build`, `python -m black --check sisacao8/neural_promotion.py tests/test_neural_promotion.py` e `python -m isort --check-only sisacao8/neural_promotion.py tests/test_neural_promotion.py`.
 
+## 2026-06-21 15:36 UTC — Diagnóstico prioridade 1 dos candidatos neurais EOD atuais
+- Executada a prioridade 1 solicitada: diagnóstico dos candidatos neurais EOD atuais, buscando hiperparâmetros, métricas por split, precisão direcional, cobertura, overfit e estabilidade dos modelos `neural_eod_mlp_evo2_*` exibidos no painel operacional.
+- Acesso ao MCP realizado obrigatoriamente via JSON-RPC HTTP em `http://mcpserversisacao.shop/mcp`: `initialize` retornou sessão `mcp-session-id`, `tools/list` confirmou a ferramenta `bigquery_query` e a consulta BigQuery foi executada por `tools/call` mantendo HTTP, sem uso de HTTPS.
+- Primeira chamada BigQuery ampla retornou erro transitório do backend MCP/gcloud (`Credentials object has no attribute private_key_id`); a hipótese de falha estrutural foi testada com consulta mínima `SELECT COUNT(*)`, que retornou `rows_count=19`, e a consulta ampla foi repetida com sucesso, confirmando instabilidade transitória e não erro SQL definitivo.
+- Consulta principal retornou 6 candidatos Fase 2 no `neural_model_registry`: 3 mutações (`neural_eod_mlp_evo2_mut_20260621_01` a `_03`) e 3 repetições multi-seed (`neural_eod_mlp_evo2_seed_20260621_01_20260701` a `_20260703`), todos no snapshot `neural_eod_training_dataset_2026-06-18_phase0_20260621`.
+- Todos os candidatos consultados usam a mesma arquitetura MLP profunda `hidden_units=[256,128,64]` e `batch_size=512`; as repetições multi-seed usam `learning_rate=0.0003`, `dropout_rate=0.35`, `epochs=80` e variam apenas `random_seed` (`20260701`, `20260702`, `20260703`).
+- Tabela resumida do diagnóstico:
+  - `neural_eod_mlp_evo2_seed_20260621_01_20260701`: `val_acc=0.3747`, `test_acc=0.4240`, `directional_precision_test=0.3480`, `coverage=0.3640`, `overfit=0.0153`, `stability=0.9561`; único candidato da amostra acima do corte local de precisão direcional `>0.34`.
+  - `neural_eod_mlp_evo2_seed_20260621_01_20260702`: `val_acc=0.3507`, `test_acc=0.3813`, `directional_precision_test=0.2862`, `coverage=0.3960`, `overfit=0.0681`, `stability=0.9966`; abaixo do corte de precisão direcional.
+  - `neural_eod_mlp_evo2_seed_20260621_01_20260703`: `val_acc=0.3533`, `test_acc=0.4227`, `directional_precision_test=0.2732`, `coverage=0.2733`, `overfit=0.0221`, `stability=0.9952`; abaixo do corte de precisão direcional e com menor cobertura.
+  - `neural_eod_mlp_evo2_mut_20260621_03`: `val_acc=0.3600`, `test_acc=0.4333`, `directional_precision_test=0.3321`, `coverage=0.3693`, `overfit=0.0225`, `stability=0.9400`; melhor acurácia de teste, porém ainda abaixo do corte direcional.
+  - `neural_eod_mlp_evo2_mut_20260621_02`: `val_acc=0.3573`, `test_acc=0.4227`, `directional_precision_test=0.3275`, `coverage=0.3787`, `overfit=0.0235`, `stability=0.9399`; abaixo do corte direcional.
+  - `neural_eod_mlp_evo2_mut_20260621_01`: `val_acc=0.3680`, `test_acc=0.4187`, `directional_precision_test=0.3203`, `coverage=0.3747`, `overfit=0.0210`, `stability=0.9677`; abaixo do corte direcional.
+- Conclusão operacional: o candidato `neural_eod_mlp_evo2_seed_20260621_01_20260701` segue como melhor evidência entre os atuais por combinar maior precisão direcional de teste acima do corte local e baixo overfit; contudo a estabilidade multi-seed é frágil, pois as seeds `20260702` e `20260703` caíram para precisão direcional de `0.2862` e `0.2732`, indicando que a melhoria ainda depende da seed e não deve ser promovida automaticamente.
+- Recomendação para a próxima rodada: não expandir somente a mesma arquitetura `[256,128,64]`; priorizar novas mutações com arquiteturas menores/menos variância, repetir o melhor candidato com mais seeds, e testar ajustes de `class_weight`/labels antes de qualquer promoção além de shadow controlado.
+- Comandos/ferramentas usados para confirmar: `curl` JSON-RPC HTTP para `initialize`, `tools/list`, `bigquery_access_check` e `bigquery_query`; `python` para montar payload JSON seguro e resumir métricas; `curl` contra endpoints públicos do backend confirmou indisponibilidade momentânea de `/api/ops/*` com HTTP 502, por isso a fonte final do diagnóstico foi BigQuery via MCP.
+
+## 2026-06-21 15:45 UTC — Esclarecimento sobre advisor Gemini na evolução neural
+- Verificada a existência do módulo `sisacao8.neural_ai_advisor` para responder se há parte do sistema que acessa Gemini para orientar evolução de modelos.
+- Conclusão: existe implementação de advisor Gemini opcional/consultivo (`call_gemini_structured_advisor`) para sugerir configurações candidatas via JSON estruturado, mas o diário operacional anterior registra que não havia `GEMINI_API_KEY` no ambiente e que a fase foi executada em `dry_run_no_gemini_api_key`, sem chamada externa real ao Gemini.
+- Confirmados os guardrails: o Gemini não promove modelos, não executa código retornado, respeita orçamento/espaço de busca, e as sugestões passam por validação local e auditoria em `neural_ai_advisor_audits`.
+- Comandos usados: `rg -n "Gemini|gemini|advisor|GEMINI_API_KEY|call_gemini|responseSchema|neural_ai_advisor" sisacao8 tests docs infra functions -S --glob '!node_modules' --glob '!.git'` e `nl -ba` nos arquivos relevantes para citar linhas.
+
+## 2026-06-21 17:45 UTC — Módulo Java genérico para advisor de IA
+- Criado módulo Spring Boot/Maven genérico `com.sisacao.backend.aiadvisor`, sem acoplamento a Gemini, OpenAI ou qualquer provedor específico.
+- Adicionados contratos provider-agnostic: `AiAdvisorProvider`, `AiAdvisorRequest`, `AiAdvisorResponse`, `AiAdvisorCandidate`, `AiAdvisorService`, `AiAdvisorController`, `AiAdvisorProperties` e `NoopAiAdvisorProvider`.
+- O módulo nasce desabilitado por padrão via `sisacao.ai-advisor.enabled=false`, com provider configurável por `sisacao.ai-advisor.provider`, permitindo plugar Gemini, OpenAI ou outro provedor futuramente sem alterar o contrato da API.
+- Guardrails mínimos validados no serviço: `advisorRunId`, `task`, `expectedResponseSchema` e `do_not_promote_models`; respostas acima de `maxCandidates` são rejeitadas para preservar orçamento e controle operacional.
+- Exposto endpoint genérico condicional `POST /ai/advisor/recommendations` apenas quando o módulo for habilitado, retornando recomendações em formato provider-agnostic e mapeando erros de validação para HTTP 400.
+- Adicionados testes `AiAdvisorServiceTest` e `AiAdvisorControllerTest` cobrindo delegação para provider configurado, validação dos guardrails, limite de candidatos, contrato JSON do endpoint e mapeamento de erros.
+- Check executado inicialmente: `cd backend/sisacao-backend && ./mvnw -q -Dtest=AiAdvisorServiceTest,AiAdvisorControllerTest test`.
+- Check completo executado após a implementação: `cd backend/sisacao-backend && ./mvnw -q test`.
 ## 2026-06-21 — Correção do erro no leaderboard de evolução neural
 
 - Investigação: reproduzi o erro operacional com `curl -i -sS http://34.194.252.70/api/ops/neural/evolution/leaderboard`, confirmando HTTP 502 com mensagem `Falha ao consultar BigQuery`.
