@@ -809,3 +809,14 @@
 - Confirmação da causa provável: consultei o MCP via JSON-RPC por HTTP em `http://mcpserversisacao.shop/mcp` com `initialize` e `tools/call`/`bigquery_query` para verificar `INFORMATION_SCHEMA`. As consultas confirmaram que a view/tabelas de evolução neural (`vw_neural_evolution_leaderboard`, `neural_evolution_*`, `neural_candidate_*`) ainda não estão materializadas no BigQuery, causando 404 na consulta do backend.
 - Correção aplicada: o backend agora trata especificamente `BigQueryException` 404 na busca do leaderboard de evolução neural e retorna lista vazia, preservando erros não-404 como falhas reais de acesso ao BigQuery. Foi adicionado teste unitário para garantir o comportamento quando a view opcional ainda não existe.
 - Validação: executei `cd backend/sisacao-backend && ./mvnw test -Dtest=BigQueryOpsClientTest` e `cd backend/sisacao-backend && ./mvnw test`, ambos com sucesso.
+
+## 2026-06-21 18:05 UTC — Esclarecimento do host de publicação do backend
+- Respondida a dúvida operacional sobre o host usado para publicar o backend.
+- Confirmei nos documentos versionados e no workflow de deploy que o backend Spring Boot é publicado no Amazon Lightsail/VPS no host `34.194.252.70`, usando SSH com usuário `deploy` e serviço `sisacao-backend.service`.
+- Comandos usados: `rg -n "backend|host|34\\.194|VPS|publicad|deploy|server" -S AGENTS.md docs .github functions` e `nl -ba` em `AGENTS.md` e `.github/workflows/deploy-lightsail.yml` para confirmar as linhas citadas.
+
+## 2026-06-21 18:25 UTC — Workflow de deploy do módulo Gemini advisor
+- Identificado, a partir da evidência visual fornecida, que a API key do Gemini está no host `34.194.252.70` em `/home/ubuntu/keys/gemini_api_key`.
+- Implementado provider Java `gemini` para o módulo `com.sisacao.backend.aiadvisor`, lendo a credencial por `GEMINI_API_KEY_FILE` ou `GEMINI_API_KEY` e chamando a API Gemini com saída JSON estruturada.
+- Criado workflow `.github/workflows/deploy-ai-advisor-lightsail.yml` para compilar o backend, enviar o JAR ao mesmo host Lightsail e validar a chave fonte em `/home/ubuntu/keys/gemini_api_key`, copiá-la para `/opt/sisacao/app/secrets/gemini_api_key` e habilitar `AI_ADVISOR_ENABLED=true`, `AI_ADVISOR_PROVIDER=gemini` e `GEMINI_API_KEY_FILE=/opt/sisacao/app/secrets/gemini_api_key` no `.env` do serviço antes de reiniciar `sisacao-backend.service`.
+- Comandos usados: `rg -n "aiadvisor|Gemini|gemini|GEMINI|ai-advisor|advisor" backend .github docs -S --glob '!**/target/**'`, `sed -n` nos arquivos Java/properties e criação/validação local com Maven.
