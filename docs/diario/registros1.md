@@ -708,3 +708,10 @@
 - Ajustada a aba de dados de treino para exibir cards consolidados de "Alvos atingidos" e "Stops atingidos" e colunas "Alvo"/"Stop" no detalhamento por split.
 - Adicionado teste de controller garantindo que a API serializa `targetHitCount` e `stopHitCount` na resposta da alocação neural.
 - Validações executadas: `npm --prefix frontend/app run lint`, `npm --prefix frontend/app run build` e `cd backend/sisacao-backend && ./mvnw -q test`.
+
+## 2026-06-21 00:15 UTC — Planejamento do fluxo automático de evolução neural
+- Atendida a solicitação para planejar um fluxo automático inteligente de evolução de parâmetros e estruturas de rede neural EOD.
+- Criado `docs/planejamento/evolucao-neural-automatica.md` com arquitetura proposta, módulos novos, tabelas BigQuery de auditoria, espaço inicial de busca, score de seleção, fases operacionais e guardrails de governança.
+- Incluída opção de módulo `neural_ai_advisor` com Gemini apenas como avaliador/sugeridor consultivo, usando JSON estruturado, validação por schema, deduplicação, limites de orçamento e impedimento explícito de promoção automática.
+- Consultadas referências oficiais do Gemini sobre function calling e structured output para embasar a proposta de advisor com saída estruturada e segura.
+- Conclusão de planejamento: começar pela Fase 1 determinística (random/grid/mutation + leaderboard), pois ela cria histórico auditável antes de ativar um advisor IA.
