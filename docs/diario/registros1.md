@@ -827,3 +827,9 @@
 - Correção aplicada no workflow: adicionado preflight explícito `sudo -n true` com mensagem de diagnóstico, validação da chave com `sudo -n test -r` e conversão dos comandos privilegiados do passo para `sudo -n`, evitando prompt de senha/TTY e produzindo erro acionável quando faltar NOPASSWD ou quando a chave não existir/não for legível por root.
 - Ação operacional ainda necessária no host se o erro persistir: configurar NOPASSWD para o usuário `deploy` nos comandos necessários ou preparar manualmente o arquivo runtime em `/opt/sisacao/app/secrets/gemini_api_key` e permissões do serviço.
 - Comandos usados: `find .github/workflows -maxdepth 2 -type f -print -exec sed -n '1,220p' {} \;`, `sed -n '1,240p' .github/workflows/deploy-ai-advisor-lightsail.yml` e edição local do workflow/diário.
+
+## 2026-06-21 21:10 UTC — Ajuste do usuário remoto para chave Gemini no Lightsail
+- Recebida validação manual no host `ip-172-26-8-107` mostrando que, como usuário `ubuntu`, `sudo test -r /home/ubuntu/keys/gemini_api_key && echo OK` retorna `OK`; portanto o arquivo existe no servidor Lightsail e é legível via sudo pelo usuário `ubuntu`.
+- Corrigida a hipótese operacional anterior: o workflow não procurava a chave no ambiente do GitHub, mas conectava como `deploy` enquanto a chave estava sob `/home/ubuntu/keys`, o que tornava a leitura dependente de `sudo`/permissões do usuário errado.
+- Correção aplicada: o workflow de deploy do AI Advisor agora usa SSH/SCP com `username: ubuntu`, envia o artefato para `/home/ubuntu/sisacao/app/` e move esse JAR para `/opt/sisacao/app/sisacao-backend.jar`, mantendo a cópia da chave Gemini a partir de `/home/ubuntu/keys/gemini_api_key`.
+- Comandos usados: inspeção com `nl -ba .github/workflows/deploy-ai-advisor-lightsail.yml | sed -n '36,100p'`, edição do workflow e registro no diário.
