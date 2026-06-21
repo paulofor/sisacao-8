@@ -1,5 +1,6 @@
 import RefreshIcon from '@mui/icons-material/Refresh'
 import AssessmentIcon from '@mui/icons-material/Assessment'
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
 import BarChartIcon from '@mui/icons-material/BarChart'
 import ChecklistIcon from '@mui/icons-material/Checklist'
 import DashboardIcon from '@mui/icons-material/Dashboard'
@@ -29,6 +30,7 @@ import { useMemo, useState } from 'react'
 
 import type { DataCollectionMessage, DataCollectionMessageSeverity } from './api/dataCollections'
 import BacktestTab from './components/tabs/BacktestTab'
+import AiAdvisorTab from './components/tabs/AiAdvisorTab'
 import ColetasTab from './components/tabs/ColetasTab'
 import IncidentesTab from './components/tabs/IncidentesTab'
 import OperacaoTab from './components/tabs/OperacaoTab'
@@ -100,6 +102,7 @@ type TabValue =
   | 'neural-training-data'
   | 'neural-training-runs'
   | 'neural-evolution'
+  | 'ai-advisor'
 
 type MenuItem = {
   label: string
@@ -124,6 +127,7 @@ const menuGroups: Array<{ title: string; items: MenuItem[] }> = [
       { label: 'Dados de treino', value: 'neural-training-data', icon: ScienceIcon },
       { label: 'Treinos', value: 'neural-training-runs', icon: ModelTrainingIcon },
       { label: 'Evolução', value: 'neural-evolution', icon: TimelineIcon },
+      { label: 'Advisor IA Gemini', value: 'ai-advisor', icon: AutoAwesomeIcon },
     ],
   },
   {
@@ -203,6 +207,7 @@ function App() {
     'neural-training-data': [neuralTrainingDataAllocationQuery] as QueryResult[],
     'neural-training-runs': [neuralTrainingRunsQuery] as QueryResult[],
     'neural-evolution': [neuralEvolutionLeaderboardQuery] as QueryResult[],
+    'ai-advisor': [neuralEvolutionLeaderboardQuery] as QueryResult[],
     sinais: [opsSignalsNextQuery] as QueryResult[],
     incidentes: [opsIncidentsOpenQuery] as QueryResult[],
     backtest: [opsBacktestTradesQuery] as QueryResult[],
@@ -387,6 +392,10 @@ function App() {
             leaderboardError={neuralEvolutionLeaderboardQuery.error}
             leaderboardLoading={neuralEvolutionLeaderboardQuery.isLoading && (neuralEvolutionLeaderboardQuery.data ?? []).length === 0}
           />
+        ) : null}
+
+        {activeTab === 'ai-advisor' ? (
+          <AiAdvisorTab leaderboard={neuralEvolutionLeaderboardQuery.data ?? []} />
         ) : null}
 
         {activeTab === 'sinais' ? (
