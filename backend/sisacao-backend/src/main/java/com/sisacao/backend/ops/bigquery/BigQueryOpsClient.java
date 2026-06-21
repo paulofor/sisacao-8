@@ -126,7 +126,15 @@ public class BigQueryOpsClient {
                 + "rank_in_run, created_at "
                 + "FROM " + qualifiedQuantView(properties.getNeuralEvolutionLeaderboardView())
                 + " ORDER BY score_total DESC, score_directional_precision DESC LIMIT 100";
-        TableResult result = runQuery(sql, Map.of());
+        TableResult result;
+        try {
+            result = runQuery(sql, Map.of());
+        } catch (OpsDataAccessException ex) {
+            if (isNotFound(ex)) {
+                return List.of();
+            }
+            throw ex;
+        }
         List<NeuralEvolutionLeaderboardEntry> rows = new ArrayList<>();
         for (FieldValueList row : result.iterateAll()) {
             rows.add(toNeuralEvolutionLeaderboardEntry(row));
@@ -426,6 +434,11 @@ public class BigQueryOpsClient {
                         .thenComparing(SignalHistoryEntry::rank, Comparator.nullsLast(Integer::compareTo)))
                 .collect(Collectors.toList());
         return Collections.unmodifiableList(filteredHistory);
+    }
+
+    private boolean isNotFound(OpsDataAccessException exception) {
+        return exception.getCause() instanceof BigQueryException bigQueryException
+                && bigQueryException.getCode() == 404;
     }
 
     private TableResult runQuery(String sql, Map<String, QueryParameterValue> params) {
