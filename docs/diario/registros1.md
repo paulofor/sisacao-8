@@ -921,3 +921,9 @@
 - Como alternativa parcial, `cloud_run_function_logs` para `neural_evolution_orchestrator` retornou duas chamadas HTTP 200 nas últimas 6 horas, incluindo a execução real de `2026-06-22 12:08:07`, mas logs da função não provam a existência do job Scheduler.
 - Correção aplicada no MCP Java: adicionada a tool `cloud_scheduler_job`, que executa `gcloud scheduler jobs describe <job>` no runtime autenticado do MCP, para permitir consultar `neural-evolution-weekly` via JSON-RPC após deploy da nova versão do MCP.
 - Comandos usados: `curl` HTTP JSON-RPC para `initialize`, `tools/list`, tentativas de `tools/call` com nomes de Scheduler, `tools/call` com `cloud_run_function_logs`, inspeção de `mcp-server-java/AGENTS.md`, `McpController.java`, `McpControllerTest.java` e `README.md`.
+
+## 2026-06-22 13:35 UTC — Visualização intuitiva dos estágios das redes neurais
+- Ajustada a experiência das telas de redes neurais para separar visualmente o total de redes candidatas registradas do subconjunto avaliado pela rodada atual de evolução.
+- Na tela de Treinos, adicionados cards de estágio para `Total de redes`, `Em treino agora`, `Candidatas` e `Aprovadas`, além de um bloco explicativo com chips para os estados `Em treino`, `Candidata`, `Aprovada` e `Rejeitada`.
+- Na tela de Evolução, adicionado um mapa/funil visual com `Redes candidatas`, `Aguardando avaliação`, `Avaliadas agora`, `Mantidas` e `Rejeitadas`, reduzindo a confusão entre as 21 redes no registro e as 2 avaliadas na rodada `neural_evolution_20260622_120807_955b4e69`.
+- Comandos usados: `curl` para consultar `http://34.194.252.70/api/ops/neural/training-runs` e `http://34.194.252.70/api/ops/neural/evolution/leaderboard`, script Python com `urllib.request` para contar status/decisões, inspeção de `App.tsx`, `NeuralTrainingRunsTab.tsx`, `NeuralEvolutionTab.tsx` e `ops.ts`, e `npm run build` no frontend.
