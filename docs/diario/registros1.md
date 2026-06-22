@@ -857,3 +857,8 @@
 - Investigado o erro reportado no `gcloud scheduler jobs create http neural-evolution-weekly`: o comando usava `--oidc-service-account-email=agendamentos-sisacao@ingestaokraken.iam.gserviceaccount.com`, mas o Terraform do repositório define por padrão `sa-scheduler-invoker` para invocação do Scheduler, tornando provável a falha `NOT_FOUND` por service account inexistente.
 - Atualizado `docs/neural_evolution_orchestrator_scheduler.md` para explicar o diagnóstico do `NOT_FOUND`, incluir comandos de validação/criação da service account `sa-scheduler-invoker`, conceder `roles/run.invoker`, oferecer um caminho rápido sem OIDC compatível com o deploy atual `--allow-unauthenticated` e corrigir os exemplos OIDC para a service account padrão do repositório.
 - Ferramentas/comandos usados para confirmar a causa provável: `rg -n "agendamentos-sisacao|sa-scheduler-invoker|neural-evolution|scheduler jobs create" docs infra .github -S`, leitura de `infra/iam/main.tf`, `infra/iam/variables.tf` e do runbook do Scheduler.
+
+## 2026-06-22 UTC — Ajuste de deadline do Scheduler da evolução neural
+- Analisada a saída do `gcloud scheduler jobs create http neural-evolution-weekly`, que confirmou o job `ENABLED` para `2026-06-29T09:00:00Z` (06:00 em `America/Sao_Paulo`), mas revelou `attemptDeadline: 180s`.
+- Atualizado o runbook para incluir `--attempt-deadline=1800s` nos comandos de criação/atualização e um comando específico para corrigir jobs já criados com o deadline padrão curto.
+- Registrada a orientação de reduzir `max_trials` ou evoluir para enfileiramento assíncrono se a rodada exceder 30 minutos.

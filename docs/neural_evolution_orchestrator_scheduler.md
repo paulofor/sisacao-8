@@ -104,6 +104,21 @@ curl -sS -X POST 'https://us-east1-ingestaokraken.cloudfunctions.net/neural_evol
   --data '{"dry_run":true,"budget":{"max_trials":2,"random_seed":20260621}}'
 ```
 
+## Deadline do Scheduler
+
+O Cloud Scheduler cria jobs HTTP com `attemptDeadline` padrão de 180 segundos. Esse valor é curto para a evolução neural, porque a função pode chamar `neural_training` várias vezes na mesma rodada. Configure `--attempt-deadline=1800s` para permitir até 30 minutos por tentativa, que é o limite prático recomendado para este agendamento HTTP.
+
+Se o job já foi criado e a saída mostrou `attemptDeadline: 180s`, atualize-o:
+
+```bash
+gcloud scheduler jobs update http neural-evolution-weekly \
+  --project=ingestaokraken \
+  --location=us-east1 \
+  --attempt-deadline=1800s
+```
+
+Para rodadas maiores que 30 minutos, reduza `max_trials` ou evolua o orquestrador para enfileirar treinos de forma assíncrona em vez de manter uma única requisição HTTP aberta.
+
 ## Configuração rápida do Cloud Scheduler sem OIDC
 
 Use esta forma quando a função estiver publicada com invocação pública (`--allow-unauthenticated`), que é o comportamento atual do workflow de deploy.
@@ -116,6 +131,7 @@ gcloud scheduler jobs create http neural-evolution-weekly \
   --time-zone='America/Sao_Paulo' \
   --uri='https://us-east1-ingestaokraken.cloudfunctions.net/neural_evolution_orchestrator' \
   --http-method=POST \
+  --attempt-deadline=1800s \
   --headers='Content-Type=application/json' \
   --message-body='{"strategy":"deterministic_phase1","budget":{"max_trials":10,"max_runtime_minutes":240,"max_parameter_count":150000,"max_layers":4,"random_seed":20260621}}'
 ```
@@ -132,6 +148,7 @@ gcloud scheduler jobs create http neural-evolution-weekly \
   --time-zone='America/Sao_Paulo' \
   --uri='https://us-east1-ingestaokraken.cloudfunctions.net/neural_evolution_orchestrator' \
   --http-method=POST \
+  --attempt-deadline=1800s \
   --headers='Content-Type=application/json' \
   --message-body='{"strategy":"deterministic_phase1","budget":{"max_trials":10,"max_runtime_minutes":240,"max_parameter_count":150000,"max_layers":4,"random_seed":20260621}}' \
   --oidc-service-account-email='sa-scheduler-invoker@ingestaokraken.iam.gserviceaccount.com' \
@@ -148,6 +165,7 @@ gcloud scheduler jobs update http neural-evolution-weekly \
   --time-zone='America/Sao_Paulo' \
   --uri='https://us-east1-ingestaokraken.cloudfunctions.net/neural_evolution_orchestrator' \
   --http-method=POST \
+  --attempt-deadline=1800s \
   --headers='Content-Type=application/json' \
   --message-body='{"strategy":"deterministic_phase1","budget":{"max_trials":10,"max_runtime_minutes":240,"max_parameter_count":150000,"max_layers":4,"random_seed":20260621}}' \
   --oidc-service-account-email='sa-scheduler-invoker@ingestaokraken.iam.gserviceaccount.com' \
