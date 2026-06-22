@@ -846,6 +846,22 @@
 - A tela permite informar o objetivo da rodada, limitar candidatos, enviar contexto resumido do leaderboard neural e acompanhar provider, modelo, status, justificativa, rejeições e candidatos retornados.
 - Comandos usados para confirmar e validar: `rg --files`, `rg -n "gemini|ia|ai|neural"`, leitura dos contratos Java do módulo `aiadvisor` e `npm run build` e `npm run lint` no frontend.
 
+## 2026-06-22 UTC — Implementação do orquestrador de evolução neural
+- Implementada a Cloud Function HTTP `functions/neural_evolution_orchestrator`, responsável por gerar candidatos determinísticos, persistir rodada/configurações no BigQuery, chamar `neural_training`, buscar métricas no `neural_model_registry`, calcular score/decisão e gravar `neural_candidate_evaluations` para alimentar o leaderboard.
+- Adicionada a função ao workflow `.github/workflows/deploy.yml` com variáveis BigQuery, URL de `neural_training`, memória de 512Mi e timeout de 3600s.
+- Criado o runbook `docs/neural_evolution_orchestrator_scheduler.md` com payloads de teste, exemplo `dry_run` e comandos `gcloud scheduler jobs create/update http` com OIDC.
+- Adicionados testes unitários para fluxo principal, `dry_run` e parsing de métricas do registry.
+- Ferramentas/comandos usados para confirmar a causa e a correção: buscas com `rg`, inspeção de `functions/`, leitura dos DDLs BigQuery e execução de testes/lint locais antes do commit.
+
+## 2026-06-22 UTC — Correção do runbook do Scheduler da evolução neural
+- Investigado o erro reportado no `gcloud scheduler jobs create http neural-evolution-weekly`: o comando usava `--oidc-service-account-email=agendamentos-sisacao@ingestaokraken.iam.gserviceaccount.com`, mas o Terraform do repositório define por padrão `sa-scheduler-invoker` para invocação do Scheduler, tornando provável a falha `NOT_FOUND` por service account inexistente.
+- Atualizado `docs/neural_evolution_orchestrator_scheduler.md` para explicar o diagnóstico do `NOT_FOUND`, incluir comandos de validação/criação da service account `sa-scheduler-invoker`, conceder `roles/run.invoker`, oferecer um caminho rápido sem OIDC compatível com o deploy atual `--allow-unauthenticated` e corrigir os exemplos OIDC para a service account padrão do repositório.
+- Ferramentas/comandos usados para confirmar a causa provável: `rg -n "agendamentos-sisacao|sa-scheduler-invoker|neural-evolution|scheduler jobs create" docs infra .github -S`, leitura de `infra/iam/main.tf`, `infra/iam/variables.tf` e do runbook do Scheduler.
+
+## 2026-06-22 UTC — Ajuste de deadline do Scheduler da evolução neural
+- Analisada a saída do `gcloud scheduler jobs create http neural-evolution-weekly`, que confirmou o job `ENABLED` para `2026-06-29T09:00:00Z` (06:00 em `America/Sao_Paulo`), mas revelou `attemptDeadline: 180s`.
+- Atualizado o runbook para incluir `--attempt-deadline=1800s` nos comandos de criação/atualização e um comando específico para corrigir jobs já criados com o deadline padrão curto.
+- Registrada a orientação de reduzir `max_trials` ou evoluir para enfileiramento assíncrono se a rodada exceder 30 minutos.
 ## 2026-06-21 21:35 UTC — Contagem atual de redes neurais testadas
 - Respondida a dúvida operacional "quantas redes estão sendo testadas atualmente?" consultando o endpoint publicado `GET http://34.194.252.70/api/ops/neural/training-runs`.
 - Resultado observado: o endpoint retornou 19 registros em `neural_model_registry`, todos com `status=candidate`; portanto, atualmente há 19 redes/artefatos candidatos testados/registrados para acompanhamento, sem modelos aprovados no retorno consultado.
