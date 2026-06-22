@@ -881,3 +881,43 @@
 - Critério de comparação: não escolher apenas por `test_accuracy`; priorizar precisão direcional de teste, cobertura, estabilidade validação/teste, gap treino/teste, backtest ajustado a risco e penalização por complexidade/custo, mantendo avaliação fora da amostra obrigatória.
 - Governança: novos candidatos devem ser registrados como `candidate`, passar pelo gate de shadow (`min_test_accuracy=0.38`, `min_directional_precision=0.34`, `min_coverage=0.20`, `min_test_rows=500`, limites de overfit/drift) e nunca ir para paper/capital sem evidência adicional, paper trading mínimo e aprovação explícita.
 - Comandos usados: `rg -n "evolução neural|neural_evolution|promotion|shadow|class_weight|early_stopping" docs sisacao8 functions tests infra backend frontend -S --glob '!**/target/**' --glob '!**/node_modules/**'`, `sed -n`/`nl -ba` em `docs/planejamento/evolucao-neural-automatica.md`, `sisacao8/neural_evolution.py` e `sisacao8/neural_promotion.py`.
+
+## 2026-06-22 12:05 UTC — Diagnóstico da tela de evolução neural vazia
+- Investigada a tela “Redes neurais — Evolução determinística” publicada em `http://34.194.252.70/` após o alerta de que nada aparecia na evolução.
+- Confirmação via backend publicado: `GET http://34.194.252.70/api/ops/neural/evolution/leaderboard` retornou `[]`, portanto o frontend estava exibindo corretamente o estado vazio recebido da API.
+- Confirmação via MCP JSON-RPC HTTP em `http://mcpserversisacao.shop/mcp` e BigQuery: `vw_neural_evolution_leaderboard`, `neural_evolution_runs`, `neural_candidate_configs` e `neural_candidate_evaluations` estão com 0 linhas; já `neural_model_registry` tem 19 linhas e `neural_eod_training_dataset` tem 16136 linhas.
+- Conclusão operacional: ainda falta executar uma rodada real do `neural_evolution_orchestrator` sem `dry_run` para gravar runs/configurações/avaliações. Um `dry_run` manual com `max_trials=2` confirmou que a função gera candidatos, mas não materializa dados no leaderboard.
+- Correção aplicada no frontend: o estado vazio da aba Evolução agora explica que a tela depende da execução do orquestrador sem `dry_run` e da gravação em `neural_candidate_evaluations`, evitando confundir modelos já existentes no registry com candidatos avaliados no leaderboard.
+- Comandos usados: `curl -sS http://34.194.252.70/api/ops/neural/evolution/leaderboard`, `curl` JSON-RPC HTTP para `initialize`, `tools/list`, `bigquery_query` e `cloud_run_function_logs` no MCP, `curl -X POST https://us-east1-ingestaokraken.cloudfunctions.net/neural_evolution_orchestrator` com `dry_run=true`, além de inspeção de `NeuralEvolutionTab.tsx`, `BigQueryOpsClient.java` e `functions/neural_evolution_orchestrator/main.py`.
+
+
+## 2026-06-22 12:25 UTC — Esclarecimento sobre automação da evolução neural
+- Esclarecido que a execução sem `dry_run` não deve depender de comandos manuais recorrentes: o caminho operacional correto é o Cloud Scheduler `neural-evolution-weekly`, com disparos manuais apenas para antecipar a primeira rodada, testar payloads ou recuperar uma execução perdida.
+- Atualizado o runbook do orquestrador para incluir uma seção explícita de operação recorrente e comando de `gcloud scheduler jobs run` para antecipação pontual.
+- Ajustado o estado vazio da tela de Evolução para informar que o preenchimento ocorre automaticamente quando o Scheduler disparar uma rodada real do `neural_evolution_orchestrator`, evitando sugerir que o operador precise sempre rodar `curl` manual.
+- Comandos usados: `git status --short`, tentativa de `gcloud scheduler jobs describe neural-evolution-weekly` (indisponível no ambiente por ausência de `gcloud`), `find infra -maxdepth 3 -type f`, `rg -n "scheduler|neural-evolution|cloudfunctions|functions" infra .github docs -S` e edição dos arquivos de frontend, runbook e diário.
+
+
+## 2026-06-22 12:45 UTC — Validação da primeira rodada real de evolução neural
+- Recebido resultado da execução real do `neural_evolution_orchestrator` sem `dry_run`, com `candidate_count=2`, `trained_count=2`, `evaluated_count=2`, `failed_count=0` e rodada `neural_evolution_20260622_120807_955b4e69`.
+- Confirmado pelo endpoint publicado `GET http://34.194.252.70/api/ops/neural/evolution/leaderboard` que a tela passou a ter 2 candidatos avaliados, ambos com decisão `reject`.
+- Investigada a causa dos `reject`: os registros de treino dos modelos `neural_eod_mlp_evo1_20260622_01` e `neural_eod_mlp_evo1_20260622_02` traziam métricas apenas do split `train`, sem métricas de `validation`/`test`, gerando motivos como `test_missing`, `coverage_test_below_minimum` e `directional_precision_test_below_baseline`.
+- Correção aplicada no orquestrador: quando o payload não fixa `dataset_snapshot`, a seleção automática passa a exigir snapshots completos com linhas nos splits `train`, `validation` e `test`, evitando escolher snapshots parciais que produzem avaliações sem teste fora da amostra.
+- Comandos usados: `curl -sS http://34.194.252.70/api/ops/neural/evolution/leaderboard`, `curl -sS http://34.194.252.70/api/ops/neural/training-runs`, tentativa de consulta BigQuery via MCP JSON-RPC HTTP, `rg -n "def _latest_dataset_snapshot|dataset_snapshot" functions/neural_evolution_orchestrator/main.py tests/test_neural_evolution_orchestrator_function.py -S` e inspeção de `functions/neural_training/main.py` e `sisacao8/neural_evolution.py`.
+
+
+## 2026-06-22 13:05 UTC — Verificação do Scheduler da evolução neural
+- Tentada verificação direta do Cloud Scheduler `neural-evolution-weekly` a partir do container, mas o ambiente não possui `gcloud` instalado e não tem metadados/ADC disponíveis para chamar a API do Cloud Scheduler diretamente.
+- Confirmado no histórico operacional do diário que a saída anterior de `gcloud scheduler jobs create http neural-evolution-weekly` já havia indicado o job `ENABLED` para `2026-06-29T09:00:00Z` (06:00 em `America/Sao_Paulo`), com necessidade de ajustar `attemptDeadline` de 180s para 1800s.
+- Consultado o MCP via JSON-RPC HTTP; as ferramentas disponíveis no servidor remoto incluem BigQuery/logs, mas não expõem listagem/describe do Cloud Scheduler, então a confirmação live do job precisa ser feita por `gcloud scheduler jobs describe/list` em ambiente com SDK autenticado ou pelo Console GCP.
+- Atualizado o runbook com comandos explícitos para verificar a existência/estado do job `neural-evolution-weekly` e listar jobs relacionados ao endpoint `neural_evolution_orchestrator`.
+- Comandos usados: `git status --short`, `command -v gcloud`, `env | rg -n "GOOGLE|GCP|GCLOUD|CLOUDSDK"`, `find ~/.config -maxdepth 4 -type f`, `curl` para inicializar o MCP por HTTP JSON-RPC e chamar `runtime_config`, `curl` para metadados GCP e `nl -ba` nos trechos do diário/runbook.
+
+
+## 2026-06-22 13:20 UTC — Tentativa e habilitação de verificação do Scheduler via MCP
+- Atendido o pedido para tentar verificar o Cloud Scheduler via MCP Server usando JSON-RPC HTTP em `http://mcpserversisacao.shop/mcp`.
+- O `tools/list` do MCP publicado confirmou que a versão atual ainda expõe apenas `ping`, `runtime_config`, `bigquery_access_check`, `bigquery_query`, `mcp_server_logs`, `cloud_run_function_logs` e `backend_actuator_logs_url`, sem ferramenta de Cloud Scheduler.
+- Tentadas chamadas exploratórias para `cloud_scheduler_jobs`, `cloud_scheduler_job`, `scheduler_jobs` e `gcp_scheduler_jobs`; todas retornaram `Tool not found`, confirmando que a verificação live do Scheduler ainda não estava implementada no MCP publicado.
+- Como alternativa parcial, `cloud_run_function_logs` para `neural_evolution_orchestrator` retornou duas chamadas HTTP 200 nas últimas 6 horas, incluindo a execução real de `2026-06-22 12:08:07`, mas logs da função não provam a existência do job Scheduler.
+- Correção aplicada no MCP Java: adicionada a tool `cloud_scheduler_job`, que executa `gcloud scheduler jobs describe <job>` no runtime autenticado do MCP, para permitir consultar `neural-evolution-weekly` via JSON-RPC após deploy da nova versão do MCP.
+- Comandos usados: `curl` HTTP JSON-RPC para `initialize`, `tools/list`, tentativas de `tools/call` com nomes de Scheduler, `tools/call` com `cloud_run_function_logs`, inspeção de `mcp-server-java/AGENTS.md`, `McpController.java`, `McpControllerTest.java` e `README.md`.

@@ -80,7 +80,14 @@ const NeuralEvolutionTab: FC<NeuralEvolutionTabProps> = ({
       {leaderboardError ? <Alert severity="error">Erro ao carregar o leaderboard neural.</Alert> : null}
       {!leaderboardLoading && !leaderboardError && leaderboard.length === 0 ? (
         <Alert severity="info">
-          Ainda não há candidatos avaliados na evolução neural determinística.
+          Ainda não há candidatos avaliados na evolução neural determinística. Esta tela
+          será preenchida automaticamente quando o Cloud Scheduler disparar uma rodada
+          real do orquestrador <strong>neural_evolution_orchestrator</strong> sem
+          <strong> dry_run</strong> e com treinamento/avaliação concluídos. O disparo manual
+          é apenas um adiantamento operacional. A tela lê o leaderboard
+          <strong> vw_neural_evolution_leaderboard</strong>; modelos existentes no registro
+          de treinos não entram aqui até serem gravados em
+          <strong> neural_candidate_evaluations</strong>.
         </Alert>
       ) : null}
 

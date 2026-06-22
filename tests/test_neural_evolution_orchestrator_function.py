@@ -88,6 +88,9 @@ def test_orchestrator_generates_trains_scores_and_persists(monkeypatch):
     assert response["candidate_count"] == 2
     assert response["trained_count"] == 2
     assert response["evaluated_count"] == 2
+    latest_snapshot_query = fake_client.queries[0][0]
+    assert "COUNTIF(dataset_split = 'validation') > 0" in latest_snapshot_query
+    assert "COUNTIF(dataset_split = 'test') > 0" in latest_snapshot_query
     loaded_tables = [table for table, _rows in fake_client.loaded]
     assert "ingestaokraken.cotacao_intraday.neural_evolution_runs" in loaded_tables
     assert "ingestaokraken.cotacao_intraday.neural_candidate_configs" in loaded_tables

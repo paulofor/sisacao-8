@@ -120,6 +120,7 @@ public class McpController {
                         tool("bigquery_query", "Executa query read-only no BigQuery com limite de linhas."),
                         tool("mcp_server_logs", "Retorna logs do próprio MCP Server Java no Cloud Run."),
                         tool("cloud_run_function_logs", "Retorna logs básicos (placeholder de migração Java)."),
+                        tool("cloud_scheduler_job", "Consulta um job do Cloud Scheduler via gcloud."),
                         tool("backend_actuator_logs_url", "Retorna a URL pública de logs do backend para consumo via RPC-JSON.")))));
     }
 
@@ -150,6 +151,7 @@ public class McpController {
             case "bigquery_query" -> toolResult(id, bigqueryQuery(arguments));
             case "mcp_server_logs" -> toolResult(id, mcpServerLogs(arguments));
             case "cloud_run_function_logs" -> toolResult(id, cloudRunFunctionLogs(arguments));
+            case "cloud_scheduler_job" -> toolResult(id, cloudSchedulerJob(arguments));
             case "backend_actuator_logs_url" -> toolResult(id, Map.of(
                     "status", "ok",
                     "url", BACKEND_ACTUATOR_LOG_URL,
@@ -305,6 +307,80 @@ public class McpController {
             if (functionNameOpt.length > 0) {
                 errorResponse.put("function_name", functionNameOpt[0]);
             }
+            return errorResponse;
+        }
+    }
+
+
+    private Map<String, Object> cloudSchedulerJob(Map<String, Object> arguments) {
+        String jobName = String.valueOf(arguments.getOrDefault("job_name", "")).trim();
+        if (jobName.isBlank()) {
+            return Map.of("status", "error", "message", "job_name vazio", "project", FIXED_PROJECT_ID);
+        }
+
+        String location = String.valueOf(arguments.getOrDefault("location", FIXED_REGION)).trim();
+        if (location.isBlank()) {
+            location = FIXED_REGION;
+        }
+        String format = String.valueOf(arguments.getOrDefault(
+                "format",
+                "yaml(name,state,schedule,timeZone,attemptDeadline,httpTarget.uri,httpTarget.httpMethod,httpTarget.body,nextRunTime,lastAttemptTime)"))
+                .trim();
+        if (format.isBlank()) {
+            format = "json";
+        }
+
+        List<String> command = List.of(
+                "gcloud", "scheduler", "jobs", "describe", jobName,
+                "--project", FIXED_PROJECT_ID,
+                "--location", location,
+                "--format", format);
+        return gcloudTextCommand(command, "cloud_scheduler_job", Map.of(
+                "job_name", jobName,
+                "location", location));
+    }
+
+    private Map<String, Object> gcloudTextCommand(
+            List<String> command,
+            String toolName,
+            Map<String, Object> metadata) {
+        String joinedCommand = String.join(" ", command);
+        LOGGER.info("Executando comando gcloud para {} | command={}", toolName, joinedCommand);
+
+        try {
+            Process process = new ProcessBuilder(command).start();
+            String stdout = new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))
+                    .lines()
+                    .reduce("", (a, b) -> a.isEmpty() ? b : a + "\n" + b);
+            String stderr = new BufferedReader(new InputStreamReader(process.getErrorStream(), StandardCharsets.UTF_8))
+                    .lines()
+                    .reduce("", (a, b) -> a.isEmpty() ? b : a + "\n" + b);
+            int exitCode = process.waitFor();
+
+            Map<String, Object> response = new LinkedHashMap<>();
+            response.put("status", exitCode == 0 ? "ok" : "error");
+            response.put("project", FIXED_PROJECT_ID);
+            response.put("region", FIXED_REGION);
+            response.put("tool", toolName);
+            response.put("command", joinedCommand);
+            response.put("source", "gcloud_cli");
+            response.putAll(metadata);
+            if (exitCode == 0) {
+                response.put("output", stdout);
+            } else {
+                response.put("message", stderr.isBlank() ? "Falha ao executar gcloud." : stderr);
+            }
+            return response;
+        } catch (Exception exc) {
+            Map<String, Object> errorResponse = new LinkedHashMap<>();
+            errorResponse.put("status", "error");
+            errorResponse.put("project", FIXED_PROJECT_ID);
+            errorResponse.put("region", FIXED_REGION);
+            errorResponse.put("tool", toolName);
+            errorResponse.put("command", joinedCommand);
+            errorResponse.put("source", "gcloud_cli");
+            errorResponse.putAll(metadata);
+            errorResponse.put("message", exc.getMessage());
             return errorResponse;
         }
     }
