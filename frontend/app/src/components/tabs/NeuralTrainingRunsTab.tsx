@@ -165,6 +165,9 @@ const NeuralTrainingRunsTab: FC<NeuralTrainingRunsTabProps> = ({
   const approvedCount = runs.filter(
     (run) => run.status?.toLowerCase() === 'approved',
   ).length
+  const candidateCount = runs.filter((run) => run.status?.toLowerCase() === 'candidate').length
+  const activeTrainingCount = runs.filter((run) => ['running', 'training', 'in_progress'].includes(run.status?.toLowerCase() ?? '')).length
+  const rejectedCount = runs.filter((run) => ['rejected', 'reject'].includes(run.status?.toLowerCase() ?? '')).length
   const latestTrain = latestTrainMetrics(runs)
   const latestTest = latestTestMetrics(runs)
 
@@ -194,10 +197,53 @@ const NeuralTrainingRunsTab: FC<NeuralTrainingRunsTabProps> = ({
         <>
           <Stack direction="row" flexWrap="wrap" gap={2}>
             <SummaryCard
-              title="Treinos registrados"
+              title="Total de redes"
               value={formatNumber(runs.length)}
-              helper={`${formatNumber(approvedCount)} aprovados para uso controlado`}
+              helper="artefatos treinados/registrados"
             />
+            <SummaryCard
+              title="Em treino agora"
+              value={formatNumber(activeTrainingCount)}
+              helper="status running/training/in_progress"
+            />
+            <SummaryCard
+              title="Candidatas"
+              value={formatNumber(candidateCount)}
+              helper="prontas para avaliação/evolução"
+            />
+            <SummaryCard
+              title="Aprovadas"
+              value={formatNumber(approvedCount)}
+              helper={`${formatNumber(rejectedCount)} rejeitadas no registro`}
+            />
+          </Stack>
+
+          <Paper elevation={0} sx={{ p: 2.5, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+            <Stack spacing={1.5}>
+              <Typography variant="h6" fontWeight={800}>Como ler o estágio de cada rede</Typography>
+              <Stack direction="row" flexWrap="wrap" gap={1.5}>
+                {[
+                  { label: 'Em treino', value: activeTrainingCount, color: 'info' as const, helper: 'ainda executando' },
+                  { label: 'Candidata', value: candidateCount, color: 'warning' as const, helper: 'treinada, aguardando governança' },
+                  { label: 'Aprovada', value: approvedCount, color: 'success' as const, helper: 'liberada para uso controlado' },
+                  { label: 'Rejeitada', value: rejectedCount, color: 'error' as const, helper: 'não deve ser promovida' },
+                ].map((stage) => (
+                  <Paper key={stage.label} elevation={0} sx={{ p: 2, minWidth: 190, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+                    <Stack spacing={0.75}>
+                      <Chip size="small" color={stage.color} label={stage.label} sx={{ alignSelf: 'flex-start' }} />
+                      <Typography variant="h5" fontWeight={900}>{formatNumber(stage.value)}</Typography>
+                      <Typography variant="caption" color="text.secondary">{stage.helper}</Typography>
+                    </Stack>
+                  </Paper>
+                ))}
+              </Stack>
+              <Typography variant="caption" color="text.secondary">
+                A tabela abaixo continua detalhando modelo, versão, métricas e artefato; os cards acima explicam a quantidade por estágio.
+              </Typography>
+            </Stack>
+          </Paper>
+
+          <Stack direction="row" flexWrap="wrap" gap={2}>
             <SummaryCard
               title="Último treino"
               value={formatDateTime(latest?.trainedAt)}

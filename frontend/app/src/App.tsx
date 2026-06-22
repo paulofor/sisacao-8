@@ -391,6 +391,7 @@ function App() {
             leaderboard={neuralEvolutionLeaderboardQuery.data ?? []}
             leaderboardError={neuralEvolutionLeaderboardQuery.error}
             leaderboardLoading={neuralEvolutionLeaderboardQuery.isLoading && (neuralEvolutionLeaderboardQuery.data ?? []).length === 0}
+            trainingRuns={neuralTrainingRunsQuery.data ?? []}
           />
         ) : null}
 

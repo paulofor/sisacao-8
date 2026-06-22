@@ -1,5 +1,6 @@
 import {
   Alert,
+  Box,
   Chip,
   Paper,
   Skeleton,
@@ -15,12 +16,13 @@ import {
 import dayjs from 'dayjs'
 import type { FC } from 'react'
 
-import type { NeuralEvolutionLeaderboardEntry } from '../../api/ops'
+import type { NeuralEvolutionLeaderboardEntry, NeuralTrainingRun } from '../../api/ops'
 
 interface NeuralEvolutionTabProps {
   leaderboard: NeuralEvolutionLeaderboardEntry[]
   leaderboardError?: Error | null
   leaderboardLoading: boolean
+  trainingRuns?: NeuralTrainingRun[]
 }
 
 const formatPct = (value: number | null | undefined) =>
@@ -60,9 +62,13 @@ const NeuralEvolutionTab: FC<NeuralEvolutionTabProps> = ({
   leaderboard,
   leaderboardError,
   leaderboardLoading,
+  trainingRuns = [],
 }) => {
   const latestRun = leaderboard[0]?.evolutionRunId ?? '—'
   const kept = leaderboard.filter((entry) => entry.decision !== 'reject').length
+  const rejected = leaderboard.filter((entry) => entry.decision === 'reject').length
+  const evaluatedVersions = new Set(leaderboard.map((entry) => entry.modelVersion))
+  const waitingEvaluation = Math.max(0, trainingRuns.length - evaluatedVersions.size)
 
   return (
     <Stack spacing={3}>
@@ -93,15 +99,46 @@ const NeuralEvolutionTab: FC<NeuralEvolutionTabProps> = ({
 
       {leaderboard.length > 0 ? (
         <>
+          <Paper elevation={0} sx={{ p: 2.5, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+            <Stack spacing={2}>
+              <Stack spacing={0.5}>
+                <Typography variant="h6" fontWeight={800}>Mapa visual da evolução</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Diferencia o estoque total de redes candidatas do subconjunto efetivamente avaliado nesta rodada.
+                </Typography>
+              </Stack>
+              <Stack direction="row" flexWrap="wrap" gap={1.5} alignItems="stretch">
+                {[
+                  { label: 'Redes candidatas', value: trainingRuns.length || leaderboard.length, helper: 'registradas em Treinos' },
+                  { label: 'Aguardando avaliação', value: waitingEvaluation, helper: 'não entraram nesta rodada' },
+                  { label: 'Avaliadas agora', value: leaderboard.length, helper: latestRun },
+                  { label: 'Mantidas', value: kept, helper: 'seguem no funil' },
+                  { label: 'Rejeitadas', value: rejected, helper: 'bloqueadas pela governança' },
+                ].map((stage, index) => (
+                  <Box key={stage.label} sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                    <Paper
+                      elevation={0}
+                      sx={{
+                        p: 2,
+                        minWidth: 170,
+                        border: '1px solid',
+                        borderColor: index === 4 && rejected > 0 ? 'error.light' : 'divider',
+                        borderRadius: 2,
+                        bgcolor: index === 3 && kept > 0 ? 'rgba(46, 125, 50, 0.08)' : index === 4 && rejected > 0 ? 'rgba(211, 47, 47, 0.08)' : 'background.paper',
+                      }}
+                    >
+                      <Typography variant="overline" color="text.secondary">{stage.label}</Typography>
+                      <Typography variant="h4" fontWeight={900}>{stage.value}</Typography>
+                      <Typography variant="caption" color="text.secondary">{stage.helper}</Typography>
+                    </Paper>
+                    {index < 4 ? <Typography color="text.disabled" fontWeight={800}>→</Typography> : null}
+                  </Box>
+                ))}
+              </Stack>
+            </Stack>
+          </Paper>
+
           <Stack direction="row" flexWrap="wrap" gap={2}>
-            <Paper elevation={0} sx={{ p: 2.5, border: '1px solid', borderColor: 'divider', borderRadius: 2, minWidth: 220 }}>
-              <Typography variant="overline" color="text.secondary">Candidatos avaliados</Typography>
-              <Typography variant="h5" fontWeight={800}>{leaderboard.length}</Typography>
-            </Paper>
-            <Paper elevation={0} sx={{ p: 2.5, border: '1px solid', borderColor: 'divider', borderRadius: 2, minWidth: 220 }}>
-              <Typography variant="overline" color="text.secondary">Mantidos</Typography>
-              <Typography variant="h5" fontWeight={800}>{kept}</Typography>
-            </Paper>
             <Paper elevation={0} sx={{ p: 2.5, border: '1px solid', borderColor: 'divider', borderRadius: 2, minWidth: 220 }}>
               <Typography variant="overline" color="text.secondary">Melhor score</Typography>
               <Typography variant="h5" fontWeight={800}>{formatScore(leaderboard[0]?.scoreTotal)}</Typography>
