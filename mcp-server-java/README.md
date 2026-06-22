@@ -25,6 +25,8 @@ Tools disponíveis (paridade de nomes com a versão Python):
 - `bigquery_query`
 - `cloud_run_function_logs`
 - `cloud_scheduler_job`
+- `cloud_scheduler_job_write`
+- `neural_evolution_daily_scheduler_apply`
 
 ## Build container
 
@@ -80,6 +82,62 @@ A tool `cloud_scheduler_job` executa `gcloud scheduler jobs describe` no runtime
     "arguments": {
       "job_name": "neural-evolution-weekly",
       "location": "us-east1"
+    }
+  }
+}
+```
+
+## Alterar Scheduler da evolução neural via MCP
+
+A tool genérica `cloud_scheduler_job_write` permite criar, atualizar, pausar, retomar,
+executar ou remover jobs do Cloud Scheduler via `gcloud`, mantendo o projeto fixo em
+`ingestaokraken`. Para `create`/`update`, envie `uri`, `schedule`, `time_zone`,
+`http_method`, `attempt_deadline`, `headers`, `message_body` e, se necessário, parâmetros
+OIDC. Exemplo:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "method": "tools/call",
+  "params": {
+    "name": "cloud_scheduler_job_write",
+    "arguments": {
+      "action": "create",
+      "job_name": "neural-evolution-daily",
+      "location": "us-east1",
+      "schedule": "0 6 * * *",
+      "time_zone": "America/Sao_Paulo",
+      "uri": "https://us-east1-ingestaokraken.cloudfunctions.net/neural_evolution_orchestrator",
+      "http_method": "POST",
+      "attempt_deadline": "1800s",
+      "headers": "Content-Type=application/json",
+      "message_body": "{\"strategy\":\"deterministic_phase1\",\"budget\":{\"max_trials\":3,\"max_runtime_minutes\":120,\"max_parameter_count\":150000,\"max_layers\":4,\"random_seed\":20260621}}"
+    }
+  }
+}
+```
+
+A tool `neural_evolution_daily_scheduler_apply` cria ou atualiza o job `neural-evolution-daily`
+com agenda diária e orçamento controlado, usando `gcloud scheduler jobs update http` e,
+se o job ainda não existir, `gcloud scheduler jobs create http`. Por padrão, ela também pausa
+o job semanal `neural-evolution-weekly` para evitar duas automações chamando a mesma função.
+
+Exemplo de chamada JSON-RPC após `initialize`:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "method": "tools/call",
+  "params": {
+    "name": "neural_evolution_daily_scheduler_apply",
+    "arguments": {
+      "location": "us-east1",
+      "schedule": "0 6 * * *",
+      "max_trials": 3,
+      "max_runtime_minutes": 120,
+      "pause_weekly": true
     }
   }
 }
