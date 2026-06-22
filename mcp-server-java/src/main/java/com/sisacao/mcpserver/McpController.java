@@ -419,7 +419,7 @@ public class McpController {
             command.add(httpMethod);
             command.add("--attempt-deadline");
             command.add(attemptDeadline);
-            command.add("--headers");
+            command.add("update".equals(action) ? "--update-headers" : "--headers");
             command.add(headers);
             if (!messageBody.isBlank()) {
                 command.add("--message-body");
@@ -494,7 +494,7 @@ public class McpController {
                 "--uri", NEURAL_EVOLUTION_FUNCTION_URL,
                 "--http-method", "POST",
                 "--attempt-deadline", "1800s",
-                "--headers", "Content-Type=application/json",
+                "--update-headers", "Content-Type=application/json",
                 "--message-body", messageBody));
         if (useOidc) {
             baseCommand.add("--oidc-service-account-email");
@@ -514,6 +514,7 @@ public class McpController {
         if (!"ok".equals(updateResult.get("status"))) {
             List<String> createCommand = new ArrayList<>(baseCommand);
             createCommand.set(3, "create");
+            createCommand.set(createCommand.indexOf("--update-headers"), "--headers");
             applyResult = gcloudTextCommand(
                     createCommand,
                     "neural_evolution_daily_scheduler_apply",
