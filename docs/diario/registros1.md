@@ -973,3 +973,25 @@
 - Mantida a tool específica `neural_evolution_daily_scheduler_apply` para o caso operacional da evolução neural, agora complementada pela tool genérica para futuras operações de Scheduler via JSON-RPC.
 - Atualizados `mcp-server-java/README.md`, `docs/neural_evolution_orchestrator_scheduler.md` e testes do MCP para listar e validar a nova tool de escrita.
 - Comandos usados: edição de `mcp-server-java/src/main/java/com/sisacao/mcpserver/McpController.java`, `mcp-server-java/src/test/java/com/sisacao/mcpserver/McpControllerTest.java`, `mcp-server-java/README.md`, `docs/neural_evolution_orchestrator_scheduler.md` e `docs/diario/registros1.md`.
+
+## 2026-06-22 — Tentativa de criação do Scheduler diário de evolução neural
+
+- Tentada criação/atualização do Cloud Scheduler `neural-evolution-daily` pelo MCP publicado via JSON-RPC HTTP em `http://mcpserversisacao.shop/mcp`, usando a tool `neural_evolution_daily_scheduler_apply` com `pause_weekly=true`.
+- O MCP confirmou que a tool de escrita já está publicada, mas a aplicação real não foi concluída porque a credencial remota `codex-openai@ingestaokraken.iam.gserviceaccount.com` não possui `cloudscheduler.jobs.create` para criar `neural-evolution-daily` nem `cloudscheduler.jobs.pause` para pausar `neural-evolution-weekly`.
+- Confirmado via `cloud_scheduler_job` que `neural-evolution-daily` ainda retorna `NOT_FOUND` e que `neural-evolution-weekly` permanece `ENABLED`, com `schedule: 0 6 * * 1`, `timeZone: America/Sao_Paulo`, `attemptDeadline: 1800s` e endpoint `neural_evolution_orchestrator`.
+- Corrigida a montagem dos comandos `gcloud scheduler jobs update http` no MCP Java para usar `--update-headers` em atualizações e manter `--headers` em criações, evitando o erro de CLI `unrecognized arguments: --headers` antes da validação de permissões.
+- Comandos usados: `curl`/Python `urllib.request` para `initialize`, `tools/list`, `tools/call`/`neural_evolution_daily_scheduler_apply` e `tools/call`/`cloud_scheduler_job` no MCP; inspeção/edição de `mcp-server-java/src/main/java/com/sisacao/mcpserver/McpController.java`; `git status --short`.
+
+## 2026-06-22 — Comandos locais para criar Scheduler diário de evolução neural
+
+- Orientado o uso de `gcloud` no terminal local autenticado para criar `neural-evolution-daily`, validar o job e pausar `neural-evolution-weekly` após a validação, já que a credencial remota do MCP não tem permissões de escrita no Cloud Scheduler.
+- Atualizado o runbook para usar `--update-headers` no exemplo de `gcloud scheduler jobs update http`, mantendo `--headers` apenas nos exemplos de `create http`, alinhado ao comportamento da CLI observado no MCP.
+- Comandos usados: `git status --short`, `nl -ba docs/neural_evolution_orchestrator_scheduler.md`, edição de `docs/neural_evolution_orchestrator_scheduler.md` e `docs/diario/registros1.md`.
+
+## 2026-06-22 — Verificação do Scheduler diário de evolução neural criado
+
+- Verificado via MCP JSON-RPC HTTP em `http://mcpserversisacao.shop/mcp` que o Cloud Scheduler `neural-evolution-daily` foi criado em `ingestaokraken/us-east1` e está `ENABLED`, com agenda `0 6 * * *`, timezone `America/Sao_Paulo`, `attemptDeadline: 1800s`, método `POST` e URI `https://us-east1-ingestaokraken.cloudfunctions.net/neural_evolution_orchestrator`.
+- Decodificado o payload do `neural-evolution-daily`, confirmando `strategy=deterministic_phase1`, `max_trials=3`, `max_runtime_minutes=120`, `max_parameter_count=150000`, `max_layers=4` e `random_seed=20260621`.
+- Confirmado que o `neural-evolution-weekly` ainda permanece `ENABLED` com agenda `0 6 * * 1`; foi tentado pausar pelo MCP, mas a credencial remota `codex-openai@ingestaokraken.iam.gserviceaccount.com` ainda não possui `cloudscheduler.jobs.pause`.
+- Conclusão operacional: o Scheduler diário foi criado corretamente, mas ainda é necessário pausar/remover o semanal por um terminal autenticado com permissão de escrita para evitar duas execuções na segunda-feira.
+- Comandos usados: `curl`/Python `urllib.request` para `initialize`, `tools/call`/`cloud_scheduler_job` em `neural-evolution-daily` e `neural-evolution-weekly`, tentativa de `tools/call`/`cloud_scheduler_job_write` com `action=pause`, e decodificação local do payload base64 com Python.

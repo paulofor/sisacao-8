@@ -228,7 +228,7 @@ gcloud scheduler jobs update http neural-evolution-daily \
   --uri='https://us-east1-ingestaokraken.cloudfunctions.net/neural_evolution_orchestrator' \
   --http-method=POST \
   --attempt-deadline=1800s \
-  --headers='Content-Type=application/json' \
+  --update-headers='Content-Type=application/json' \
   --message-body='{"strategy":"deterministic_phase1","budget":{"max_trials":3,"max_runtime_minutes":120,"max_parameter_count":150000,"max_layers":4,"random_seed":20260621}}' \
   --oidc-service-account-email='sa-scheduler-invoker@ingestaokraken.iam.gserviceaccount.com' \
   --oidc-token-audience='https://us-east1-ingestaokraken.cloudfunctions.net/neural_evolution_orchestrator'
