@@ -17,8 +17,46 @@ Este runbook descreve como acionar a Cloud Function HTTP `neural_evolution_orche
 - DDL `infra/bq/21_neural_evolution.sql` aplicado no BigQuery.
 - Cloud Function `neural_training` publicada e funcional.
 - Cloud Function `neural_evolution_orchestrator` publicada pelo workflow de deploy.
-- Service account do Scheduler com permissão de invocar Cloud Functions Gen2/Cloud Run.
-- Service account de runtime da função com permissão de ler/escrever BigQuery e invocar `neural_training` se ela estiver protegida.
+- Para agendamento sem autenticação OIDC: a função precisa estar com invocação pública, como no workflow atual que usa `--allow-unauthenticated`.
+- Para agendamento com OIDC: a service account usada no `--oidc-service-account-email` precisa existir antes da criação do job e possuir permissão `roles/run.invoker` na função/serviço Gen2.
+
+## Diagnóstico do erro `NOT_FOUND` no `gcloud scheduler jobs create http`
+
+Se o comando falhar com:
+
+```text
+ERROR: (gcloud.scheduler.jobs.create.http) NOT_FOUND: Requested entity was not found.
+```
+
+e o comando usa `--oidc-service-account-email`, a causa mais provável é que a service account informada não existe no projeto. O exemplo antigo usava `agendamentos-sisacao@ingestaokraken.iam.gserviceaccount.com`; neste repositório, o Terraform de IAM usa por padrão `sa-scheduler-invoker@ingestaokraken.iam.gserviceaccount.com`.
+
+Valide antes de criar o Scheduler:
+
+```bash
+gcloud iam service-accounts describe \
+  sa-scheduler-invoker@ingestaokraken.iam.gserviceaccount.com \
+  --project=ingestaokraken
+```
+
+Se não existir, crie a conta:
+
+```bash
+gcloud iam service-accounts create sa-scheduler-invoker \
+  --project=ingestaokraken \
+  --display-name='Sisacao scheduler invoker'
+```
+
+Conceda permissão de invocação na Cloud Function Gen2/Cloud Run service:
+
+```bash
+gcloud run services add-iam-policy-binding neural_evolution_orchestrator \
+  --project=ingestaokraken \
+  --region=us-east1 \
+  --member='serviceAccount:sa-scheduler-invoker@ingestaokraken.iam.gserviceaccount.com' \
+  --role='roles/run.invoker'
+```
+
+> Observação: se a função ainda não tiver sido publicada, o comando de IAM acima também pode falhar. Nesse caso, publique primeiro a função pelo workflow ou por `gcloud functions deploy`.
 
 ## Payload recomendado
 
@@ -66,9 +104,25 @@ curl -sS -X POST 'https://us-east1-ingestaokraken.cloudfunctions.net/neural_evol
   --data '{"dry_run":true,"budget":{"max_trials":2,"random_seed":20260621}}'
 ```
 
-## Configuração do Cloud Scheduler
+## Configuração rápida do Cloud Scheduler sem OIDC
 
-Exemplo semanal, segunda-feira às 06:00 no horário de São Paulo:
+Use esta forma quando a função estiver publicada com invocação pública (`--allow-unauthenticated`), que é o comportamento atual do workflow de deploy.
+
+```bash
+gcloud scheduler jobs create http neural-evolution-weekly \
+  --project=ingestaokraken \
+  --location=us-east1 \
+  --schedule='0 6 * * 1' \
+  --time-zone='America/Sao_Paulo' \
+  --uri='https://us-east1-ingestaokraken.cloudfunctions.net/neural_evolution_orchestrator' \
+  --http-method=POST \
+  --headers='Content-Type=application/json' \
+  --message-body='{"strategy":"deterministic_phase1","budget":{"max_trials":10,"max_runtime_minutes":240,"max_parameter_count":150000,"max_layers":4,"random_seed":20260621}}'
+```
+
+## Configuração do Cloud Scheduler com OIDC
+
+Use esta forma quando quiser manter o job autenticado. Antes, confirme/crie `sa-scheduler-invoker@ingestaokraken.iam.gserviceaccount.com` e conceda `roles/run.invoker`, conforme a seção de diagnóstico.
 
 ```bash
 gcloud scheduler jobs create http neural-evolution-weekly \
@@ -80,7 +134,7 @@ gcloud scheduler jobs create http neural-evolution-weekly \
   --http-method=POST \
   --headers='Content-Type=application/json' \
   --message-body='{"strategy":"deterministic_phase1","budget":{"max_trials":10,"max_runtime_minutes":240,"max_parameter_count":150000,"max_layers":4,"random_seed":20260621}}' \
-  --oidc-service-account-email='agendamentos-sisacao@ingestaokraken.iam.gserviceaccount.com' \
+  --oidc-service-account-email='sa-scheduler-invoker@ingestaokraken.iam.gserviceaccount.com' \
   --oidc-token-audience='https://us-east1-ingestaokraken.cloudfunctions.net/neural_evolution_orchestrator'
 ```
 
@@ -96,7 +150,7 @@ gcloud scheduler jobs update http neural-evolution-weekly \
   --http-method=POST \
   --headers='Content-Type=application/json' \
   --message-body='{"strategy":"deterministic_phase1","budget":{"max_trials":10,"max_runtime_minutes":240,"max_parameter_count":150000,"max_layers":4,"random_seed":20260621}}' \
-  --oidc-service-account-email='agendamentos-sisacao@ingestaokraken.iam.gserviceaccount.com' \
+  --oidc-service-account-email='sa-scheduler-invoker@ingestaokraken.iam.gserviceaccount.com' \
   --oidc-token-audience='https://us-east1-ingestaokraken.cloudfunctions.net/neural_evolution_orchestrator'
 ```
 

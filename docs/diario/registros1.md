@@ -852,3 +852,8 @@
 - Criado o runbook `docs/neural_evolution_orchestrator_scheduler.md` com payloads de teste, exemplo `dry_run` e comandos `gcloud scheduler jobs create/update http` com OIDC.
 - Adicionados testes unitários para fluxo principal, `dry_run` e parsing de métricas do registry.
 - Ferramentas/comandos usados para confirmar a causa e a correção: buscas com `rg`, inspeção de `functions/`, leitura dos DDLs BigQuery e execução de testes/lint locais antes do commit.
+
+## 2026-06-22 UTC — Correção do runbook do Scheduler da evolução neural
+- Investigado o erro reportado no `gcloud scheduler jobs create http neural-evolution-weekly`: o comando usava `--oidc-service-account-email=agendamentos-sisacao@ingestaokraken.iam.gserviceaccount.com`, mas o Terraform do repositório define por padrão `sa-scheduler-invoker` para invocação do Scheduler, tornando provável a falha `NOT_FOUND` por service account inexistente.
+- Atualizado `docs/neural_evolution_orchestrator_scheduler.md` para explicar o diagnóstico do `NOT_FOUND`, incluir comandos de validação/criação da service account `sa-scheduler-invoker`, conceder `roles/run.invoker`, oferecer um caminho rápido sem OIDC compatível com o deploy atual `--allow-unauthenticated` e corrigir os exemplos OIDC para a service account padrão do repositório.
+- Ferramentas/comandos usados para confirmar a causa provável: `rg -n "agendamentos-sisacao|sa-scheduler-invoker|neural-evolution|scheduler jobs create" docs infra .github -S`, leitura de `infra/iam/main.tf`, `infra/iam/variables.tf` e do runbook do Scheduler.
