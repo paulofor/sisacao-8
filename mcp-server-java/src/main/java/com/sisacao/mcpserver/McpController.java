@@ -39,7 +39,13 @@ public class McpController {
     private static final String FIXED_PROJECT_ID = "ingestaokraken";
     private static final String FIXED_REGION = "us-east1";
     private static final String BACKEND_ACTUATOR_LOG_URL = "http://34.194.252.70/api/actuator/logs/backend";
+    private static final String NEURAL_EVOLUTION_FUNCTION_URL =
+            "https://us-east1-ingestaokraken.cloudfunctions.net/neural_evolution_orchestrator";
+    private static final String SCHEDULER_INVOKER_SERVICE_ACCOUNT =
+            "sa-scheduler-invoker@ingestaokraken.iam.gserviceaccount.com";
     private static final Pattern READ_ONLY_SQL_PATTERN = Pattern.compile("^\\s*(select|with)\\b", Pattern.CASE_INSENSITIVE);
+    private static final Pattern SCHEDULER_JOB_NAME_PATTERN =
+            Pattern.compile("^[A-Za-z0-9][A-Za-z0-9_-]{0,499}$");
 
     private final Set<String> activeSessions = Collections.newSetFromMap(new ConcurrentHashMap<>());
     private final ObjectMapper objectMapper;
@@ -121,6 +127,10 @@ public class McpController {
                         tool("mcp_server_logs", "Retorna logs do próprio MCP Server Java no Cloud Run."),
                         tool("cloud_run_function_logs", "Retorna logs básicos (placeholder de migração Java)."),
                         tool("cloud_scheduler_job", "Consulta um job do Cloud Scheduler via gcloud."),
+                        tool("cloud_scheduler_job_write",
+                                "Cria, atualiza, pausa, retoma, executa ou remove jobs do Cloud Scheduler via gcloud."),
+                        tool("neural_evolution_daily_scheduler_apply",
+                                "Cria/atualiza o Scheduler diário da evolução neural e pode pausar o semanal."),
                         tool("backend_actuator_logs_url", "Retorna a URL pública de logs do backend para consumo via RPC-JSON.")))));
     }
 
@@ -152,6 +162,8 @@ public class McpController {
             case "mcp_server_logs" -> toolResult(id, mcpServerLogs(arguments));
             case "cloud_run_function_logs" -> toolResult(id, cloudRunFunctionLogs(arguments));
             case "cloud_scheduler_job" -> toolResult(id, cloudSchedulerJob(arguments));
+            case "cloud_scheduler_job_write" -> toolResult(id, cloudSchedulerJobWrite(arguments));
+            case "neural_evolution_daily_scheduler_apply" -> toolResult(id, neuralEvolutionDailySchedulerApply(arguments));
             case "backend_actuator_logs_url" -> toolResult(id, Map.of(
                     "status", "ok",
                     "url", BACKEND_ACTUATOR_LOG_URL,
@@ -314,8 +326,9 @@ public class McpController {
 
     private Map<String, Object> cloudSchedulerJob(Map<String, Object> arguments) {
         String jobName = String.valueOf(arguments.getOrDefault("job_name", "")).trim();
-        if (jobName.isBlank()) {
-            return Map.of("status", "error", "message", "job_name vazio", "project", FIXED_PROJECT_ID);
+        String jobNameError = validateSchedulerJobName(jobName);
+        if (jobNameError != null) {
+            return Map.of("status", "error", "message", jobNameError, "project", FIXED_PROJECT_ID);
         }
 
         String location = String.valueOf(arguments.getOrDefault("location", FIXED_REGION)).trim();
@@ -338,6 +351,222 @@ public class McpController {
         return gcloudTextCommand(command, "cloud_scheduler_job", Map.of(
                 "job_name", jobName,
                 "location", location));
+    }
+
+    private Map<String, Object> cloudSchedulerJobWrite(Map<String, Object> arguments) {
+        String action = String.valueOf(arguments.getOrDefault("action", "")).trim().toLowerCase();
+        if (!List.of("create", "update", "pause", "resume", "run", "delete").contains(action)) {
+            return Map.of(
+                    "status", "error",
+                    "project", FIXED_PROJECT_ID,
+                    "message", "action deve ser create, update, pause, resume, run ou delete");
+        }
+
+        String jobName = String.valueOf(arguments.getOrDefault("job_name", "")).trim();
+        String jobNameError = validateSchedulerJobName(jobName);
+        if (jobNameError != null) {
+            return Map.of("status", "error", "message", jobNameError, "project", FIXED_PROJECT_ID);
+        }
+
+        String location = String.valueOf(arguments.getOrDefault("location", FIXED_REGION)).trim();
+        if (location.isBlank()) {
+            location = FIXED_REGION;
+        }
+
+        List<String> command = new ArrayList<>(List.of("gcloud", "scheduler", "jobs", action));
+        if (List.of("create", "update").contains(action)) {
+            String uri = String.valueOf(arguments.getOrDefault("uri", arguments.getOrDefault("target_uri", ""))).trim();
+            String uriError = validateSchedulerTargetUri(uri);
+            if (uriError != null) {
+                return Map.of("status", "error", "message", uriError, "project", FIXED_PROJECT_ID);
+            }
+
+            String schedule = String.valueOf(arguments.getOrDefault("schedule", "0 6 * * *")).trim();
+            if (schedule.isBlank()) {
+                schedule = "0 6 * * *";
+            }
+            String timeZone = String.valueOf(arguments.getOrDefault("time_zone", "America/Sao_Paulo")).trim();
+            if (timeZone.isBlank()) {
+                timeZone = "America/Sao_Paulo";
+            }
+            String httpMethod = String.valueOf(arguments.getOrDefault("http_method", "POST")).trim().toUpperCase();
+            if (!List.of("GET", "POST", "PUT", "PATCH", "DELETE").contains(httpMethod)) {
+                return Map.of("status", "error", "message", "http_method inválido", "project", FIXED_PROJECT_ID);
+            }
+            String attemptDeadline = String.valueOf(arguments.getOrDefault("attempt_deadline", "1800s")).trim();
+            if (attemptDeadline.isBlank()) {
+                attemptDeadline = "1800s";
+            }
+            String headers = String.valueOf(arguments.getOrDefault("headers", "Content-Type=application/json")).trim();
+            if (headers.isBlank()) {
+                headers = "Content-Type=application/json";
+            }
+            String messageBody = String.valueOf(arguments.getOrDefault("message_body", "")).trim();
+
+            command.add("http");
+            command.add(jobName);
+            command.add("--project");
+            command.add(FIXED_PROJECT_ID);
+            command.add("--location");
+            command.add(location);
+            command.add("--schedule");
+            command.add(schedule);
+            command.add("--time-zone");
+            command.add(timeZone);
+            command.add("--uri");
+            command.add(uri);
+            command.add("--http-method");
+            command.add(httpMethod);
+            command.add("--attempt-deadline");
+            command.add(attemptDeadline);
+            command.add("--headers");
+            command.add(headers);
+            if (!messageBody.isBlank()) {
+                command.add("--message-body");
+                command.add(messageBody);
+            }
+
+            boolean useOidc = Boolean.parseBoolean(String.valueOf(arguments.getOrDefault("oidc", false)));
+            if (useOidc) {
+                String serviceAccount = String.valueOf(arguments.getOrDefault(
+                        "oidc_service_account_email",
+                        SCHEDULER_INVOKER_SERVICE_ACCOUNT)).trim();
+                if (!serviceAccount.endsWith("@ingestaokraken.iam.gserviceaccount.com")) {
+                    return Map.of(
+                            "status", "error",
+                            "message", "oidc_service_account_email deve pertencer ao projeto ingestaokraken",
+                            "project", FIXED_PROJECT_ID);
+                }
+                String audience = String.valueOf(arguments.getOrDefault("oidc_token_audience", uri)).trim();
+                command.add("--oidc-service-account-email");
+                command.add(serviceAccount);
+                command.add("--oidc-token-audience");
+                command.add(audience);
+            }
+        } else {
+            command.add(jobName);
+            command.add("--project");
+            command.add(FIXED_PROJECT_ID);
+            command.add("--location");
+            command.add(location);
+            if ("delete".equals(action)) {
+                command.add("--quiet");
+            }
+        }
+
+        return gcloudTextCommand(command, "cloud_scheduler_job_write", Map.of(
+                "job_name", jobName,
+                "operation", action,
+                "location", location));
+    }
+
+    private Map<String, Object> neuralEvolutionDailySchedulerApply(Map<String, Object> arguments) {
+        String location = String.valueOf(arguments.getOrDefault("location", FIXED_REGION)).trim();
+        if (location.isBlank()) {
+            location = FIXED_REGION;
+        }
+        String schedule = String.valueOf(arguments.getOrDefault("schedule", "0 6 * * *")).trim();
+        if (schedule.isBlank()) {
+            schedule = "0 6 * * *";
+        }
+        String timeZone = String.valueOf(arguments.getOrDefault("time_zone", "America/Sao_Paulo")).trim();
+        if (timeZone.isBlank()) {
+            timeZone = "America/Sao_Paulo";
+        }
+        int maxTrials = clampInt(arguments.get("max_trials"), 3, 1, 5);
+        int maxRuntimeMinutes = clampInt(arguments.get("max_runtime_minutes"), 120, 30, 240);
+        boolean pauseWeekly = Boolean.parseBoolean(String.valueOf(arguments.getOrDefault("pause_weekly", true)));
+        boolean useOidc = Boolean.parseBoolean(String.valueOf(arguments.getOrDefault("oidc", false)));
+
+        String messageBody = String.format(
+                "{\"strategy\":\"deterministic_phase1\",\"budget\":{\"max_trials\":%d,"
+                        + "\"max_runtime_minutes\":%d,\"max_parameter_count\":150000,"
+                        + "\"max_layers\":4,\"random_seed\":20260621}}",
+                maxTrials,
+                maxRuntimeMinutes);
+
+        List<String> baseCommand = new ArrayList<>(List.of(
+                "gcloud", "scheduler", "jobs", "update", "http", "neural-evolution-daily",
+                "--project", FIXED_PROJECT_ID,
+                "--location", location,
+                "--schedule", schedule,
+                "--time-zone", timeZone,
+                "--uri", NEURAL_EVOLUTION_FUNCTION_URL,
+                "--http-method", "POST",
+                "--attempt-deadline", "1800s",
+                "--headers", "Content-Type=application/json",
+                "--message-body", messageBody));
+        if (useOidc) {
+            baseCommand.add("--oidc-service-account-email");
+            baseCommand.add(SCHEDULER_INVOKER_SERVICE_ACCOUNT);
+            baseCommand.add("--oidc-token-audience");
+            baseCommand.add(NEURAL_EVOLUTION_FUNCTION_URL);
+        }
+
+        Map<String, Object> updateResult = gcloudTextCommand(
+                baseCommand,
+                "neural_evolution_daily_scheduler_apply",
+                Map.of("job_name", "neural-evolution-daily", "operation", "update", "location", location));
+
+        List<Map<String, Object>> operations = new ArrayList<>();
+        operations.add(updateResult);
+        Map<String, Object> applyResult = updateResult;
+        if (!"ok".equals(updateResult.get("status"))) {
+            List<String> createCommand = new ArrayList<>(baseCommand);
+            createCommand.set(3, "create");
+            applyResult = gcloudTextCommand(
+                    createCommand,
+                    "neural_evolution_daily_scheduler_apply",
+                    Map.of("job_name", "neural-evolution-daily", "operation", "create", "location", location));
+            operations.add(applyResult);
+        }
+
+        if (pauseWeekly) {
+            Map<String, Object> pauseResult = gcloudTextCommand(
+                    List.of(
+                            "gcloud", "scheduler", "jobs", "pause", "neural-evolution-weekly",
+                            "--project", FIXED_PROJECT_ID,
+                            "--location", location),
+                    "neural_evolution_daily_scheduler_apply",
+                    Map.of("job_name", "neural-evolution-weekly", "operation", "pause", "location", location));
+            operations.add(pauseResult);
+        }
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("status", "ok".equals(applyResult.get("status")) ? "ok" : "error");
+        response.put("project", FIXED_PROJECT_ID);
+        response.put("region", FIXED_REGION);
+        response.put("tool", "neural_evolution_daily_scheduler_apply");
+        response.put("job_name", "neural-evolution-daily");
+        response.put("schedule", schedule);
+        response.put("time_zone", timeZone);
+        response.put("max_trials", maxTrials);
+        response.put("max_runtime_minutes", maxRuntimeMinutes);
+        response.put("pause_weekly", pauseWeekly);
+        response.put("operations", operations);
+        return response;
+    }
+
+    private String validateSchedulerJobName(String jobName) {
+        if (jobName == null || jobName.isBlank()) {
+            return "job_name vazio";
+        }
+        if (!SCHEDULER_JOB_NAME_PATTERN.matcher(jobName).matches()) {
+            return "job_name inválido";
+        }
+        return null;
+    }
+
+    private String validateSchedulerTargetUri(String uri) {
+        if (uri == null || uri.isBlank()) {
+            return "uri vazio";
+        }
+        if (!uri.startsWith("https://us-east1-ingestaokraken.cloudfunctions.net/")
+                && !uri.startsWith("https://")
+                && !uri.startsWith("http://34.194.252.70/")) {
+            return "uri fora dos alvos HTTP permitidos";
+        }
+        return null;
     }
 
     private Map<String, Object> gcloudTextCommand(

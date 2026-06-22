@@ -110,7 +110,7 @@ curl -sS -X POST 'https://us-east1-ingestaokraken.cloudfunctions.net/neural_evol
 Para confirmar no GCP se o job existe e está habilitado, execute:
 
 ```bash
-gcloud scheduler jobs describe neural-evolution-weekly \
+gcloud scheduler jobs describe neural-evolution-daily \
   --project=ingestaokraken \
   --location=us-east1 \
   --format='yaml(name,state,schedule,timeZone,attemptDeadline,httpTarget.uri,httpTarget.httpMethod,httpTarget.body,nextRunTime,lastAttemptTime)'
@@ -125,7 +125,7 @@ gcloud scheduler jobs list \
   --filter='name:neural-evolution OR httpTarget.uri:neural_evolution_orchestrator'
 ```
 
-Estado esperado: `state: ENABLED`, `schedule: 0 6 * * 1`, `timeZone: America/Sao_Paulo`, URI apontando para `https://us-east1-ingestaokraken.cloudfunctions.net/neural_evolution_orchestrator` e `attemptDeadline` próximo de `1800s`.
+Estado esperado: `state: ENABLED`, `schedule: 0 6 * * *`, `timeZone: America/Sao_Paulo`, URI apontando para `https://us-east1-ingestaokraken.cloudfunctions.net/neural_evolution_orchestrator` e `attemptDeadline` próximo de `1800s`.
 
 ## Deadline do Scheduler
 
@@ -134,7 +134,7 @@ O Cloud Scheduler cria jobs HTTP com `attemptDeadline` padrão de 180 segundos. 
 Se o job já foi criado e a saída mostrou `attemptDeadline: 180s`, atualize-o:
 
 ```bash
-gcloud scheduler jobs update http neural-evolution-weekly \
+gcloud scheduler jobs update http neural-evolution-daily \
   --project=ingestaokraken \
   --location=us-east1 \
   --attempt-deadline=1800s
@@ -145,25 +145,57 @@ Para rodadas maiores que 30 minutos, reduza `max_trials` ou evolua o orquestrado
 
 ## Operação recorrente
 
-Não é necessário disparar comandos manuais toda semana. O comando manual serve apenas para antecipar a primeira rodada, testar o payload ou recuperar uma execução perdida. A operação recorrente deve ficar no Cloud Scheduler `neural-evolution-weekly`, configurado para chamar `neural_evolution_orchestrator` por HTTP com o mesmo payload produtivo e `attempt-deadline=1800s`.
+Para evolução contínua com controle, a cadência recomendada passa a ser diária (`neural-evolution-daily`) com orçamento menor por rodada. Essa configuração avalia redes pendentes com mais rapidez sem concentrar custo/runtime em uma única execução semanal.
 
-Se o job já existe, use `gcloud scheduler jobs run neural-evolution-weekly --project=ingestaokraken --location=us-east1` apenas quando quiser antecipar uma execução fora da agenda.
+Use `max_trials` entre 2 e 5 para controlar custo e duração; comece com `max_trials=3` e aumente apenas se as execuções ficarem abaixo do `attempt-deadline=1800s` e as métricas continuarem estáveis. Rodadas manuais continuam úteis para antecipar uma triagem pontual ou recuperar uma execução perdida.
+
+## Alteração via MCP Server
+
+Quando a versão do MCP que expõe a tool `neural_evolution_daily_scheduler_apply` estiver publicada, prefira alterar o Scheduler por JSON-RPC HTTP no endpoint `http://mcpserversisacao.shop/mcp`. A tool cria ou atualiza `neural-evolution-daily` com agenda diária, `max_trials=3`, `max_runtime_minutes=120` e pausa o job semanal após a aplicação:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "method": "tools/call",
+  "params": {
+    "name": "neural_evolution_daily_scheduler_apply",
+    "arguments": {
+      "location": "us-east1",
+      "schedule": "0 6 * * *",
+      "max_trials": 3,
+      "max_runtime_minutes": 120,
+      "pause_weekly": true
+    }
+  }
+}
+```
+
+Para operações administrativas genéricas no Cloud Scheduler, a versão atualizada do MCP também expõe `cloud_scheduler_job_write`, que aceita `action` (`create`, `update`, `pause`, `resume`, `run` ou `delete`) e executa o respectivo `gcloud scheduler jobs ...` no runtime autenticado do MCP.
+
+Se o job semanal `neural-evolution-weekly` já existir, não mantenha dois Schedulers ativos chamando a mesma função sem necessidade. Depois de criar e validar o `neural-evolution-daily`, pause ou remova o semanal:
+
+```bash
+gcloud scheduler jobs pause neural-evolution-weekly \
+  --project=ingestaokraken \
+  --location=us-east1
+```
 
 ## Configuração rápida do Cloud Scheduler sem OIDC
 
 Use esta forma quando a função estiver publicada com invocação pública (`--allow-unauthenticated`), que é o comportamento atual do workflow de deploy.
 
 ```bash
-gcloud scheduler jobs create http neural-evolution-weekly \
+gcloud scheduler jobs create http neural-evolution-daily \
   --project=ingestaokraken \
   --location=us-east1 \
-  --schedule='0 6 * * 1' \
+  --schedule='0 6 * * *' \
   --time-zone='America/Sao_Paulo' \
   --uri='https://us-east1-ingestaokraken.cloudfunctions.net/neural_evolution_orchestrator' \
   --http-method=POST \
   --attempt-deadline=1800s \
   --headers='Content-Type=application/json' \
-  --message-body='{"strategy":"deterministic_phase1","budget":{"max_trials":10,"max_runtime_minutes":240,"max_parameter_count":150000,"max_layers":4,"random_seed":20260621}}'
+  --message-body='{"strategy":"deterministic_phase1","budget":{"max_trials":3,"max_runtime_minutes":120,"max_parameter_count":150000,"max_layers":4,"random_seed":20260621}}'
 ```
 
 ## Configuração do Cloud Scheduler com OIDC
@@ -171,16 +203,16 @@ gcloud scheduler jobs create http neural-evolution-weekly \
 Use esta forma quando quiser manter o job autenticado. Antes, confirme/crie `sa-scheduler-invoker@ingestaokraken.iam.gserviceaccount.com` e conceda `roles/run.invoker`, conforme a seção de diagnóstico.
 
 ```bash
-gcloud scheduler jobs create http neural-evolution-weekly \
+gcloud scheduler jobs create http neural-evolution-daily \
   --project=ingestaokraken \
   --location=us-east1 \
-  --schedule='0 6 * * 1' \
+  --schedule='0 6 * * *' \
   --time-zone='America/Sao_Paulo' \
   --uri='https://us-east1-ingestaokraken.cloudfunctions.net/neural_evolution_orchestrator' \
   --http-method=POST \
   --attempt-deadline=1800s \
   --headers='Content-Type=application/json' \
-  --message-body='{"strategy":"deterministic_phase1","budget":{"max_trials":10,"max_runtime_minutes":240,"max_parameter_count":150000,"max_layers":4,"random_seed":20260621}}' \
+  --message-body='{"strategy":"deterministic_phase1","budget":{"max_trials":3,"max_runtime_minutes":120,"max_parameter_count":150000,"max_layers":4,"random_seed":20260621}}' \
   --oidc-service-account-email='sa-scheduler-invoker@ingestaokraken.iam.gserviceaccount.com' \
   --oidc-token-audience='https://us-east1-ingestaokraken.cloudfunctions.net/neural_evolution_orchestrator'
 ```
@@ -188,16 +220,16 @@ gcloud scheduler jobs create http neural-evolution-weekly \
 Para alterar um job existente:
 
 ```bash
-gcloud scheduler jobs update http neural-evolution-weekly \
+gcloud scheduler jobs update http neural-evolution-daily \
   --project=ingestaokraken \
   --location=us-east1 \
-  --schedule='0 6 * * 1' \
+  --schedule='0 6 * * *' \
   --time-zone='America/Sao_Paulo' \
   --uri='https://us-east1-ingestaokraken.cloudfunctions.net/neural_evolution_orchestrator' \
   --http-method=POST \
   --attempt-deadline=1800s \
   --headers='Content-Type=application/json' \
-  --message-body='{"strategy":"deterministic_phase1","budget":{"max_trials":10,"max_runtime_minutes":240,"max_parameter_count":150000,"max_layers":4,"random_seed":20260621}}' \
+  --message-body='{"strategy":"deterministic_phase1","budget":{"max_trials":3,"max_runtime_minutes":120,"max_parameter_count":150000,"max_layers":4,"random_seed":20260621}}' \
   --oidc-service-account-email='sa-scheduler-invoker@ingestaokraken.iam.gserviceaccount.com' \
   --oidc-token-audience='https://us-east1-ingestaokraken.cloudfunctions.net/neural_evolution_orchestrator'
 ```

@@ -927,3 +927,49 @@
 - Na tela de Treinos, adicionados cards de estágio para `Total de redes`, `Em treino agora`, `Candidatas` e `Aprovadas`, além de um bloco explicativo com chips para os estados `Em treino`, `Candidata`, `Aprovada` e `Rejeitada`.
 - Na tela de Evolução, adicionado um mapa/funil visual com `Redes candidatas`, `Aguardando avaliação`, `Avaliadas agora`, `Mantidas` e `Rejeitadas`, reduzindo a confusão entre as 21 redes no registro e as 2 avaliadas na rodada `neural_evolution_20260622_120807_955b4e69`.
 - Comandos usados: `curl` para consultar `http://34.194.252.70/api/ops/neural/training-runs` e `http://34.194.252.70/api/ops/neural/evolution/leaderboard`, script Python com `urllib.request` para contar status/decisões, inspeção de `App.tsx`, `NeuralTrainingRunsTab.tsx`, `NeuralEvolutionTab.tsx` e `ops.ts`, e `npm run build` no frontend.
+
+## 2026-06-22 — Esclarecimento sobre próximas avaliações da evolução neural
+
+- Investigada a dúvida operacional sobre quando as redes em `Aguardando avaliação` entram no funil da tela `Redes neurais — Evolução`.
+- Confirmado no runbook que a operação recorrente prevista é o Cloud Scheduler `neural-evolution-weekly`, com agenda `0 6 * * 1` em `America/Sao_Paulo`, chamando `neural_evolution_orchestrator` com `max_trials=10`; portanto as próximas redes são avaliadas nas próximas rodadas agendadas ou quando o job for executado manualmente para antecipação.
+- Confirmado pelo endpoint publicado `GET http://34.194.252.70/api/ops/neural/evolution/leaderboard` que a rodada atual materializada é `neural_evolution_20260622_120807_955b4e69`, com 2 candidatos avaliados e ambos rejeitados pela governança.
+- Comandos usados: `rg -n "Aguardando|avaliadas|avaliad|neural_evolution|Redes candidatas|Evolução" -S . --glob '!node_modules' --glob '!dist' --glob '!build'`, `nl -ba docs/neural_evolution_orchestrator_scheduler.md`, `nl -ba functions/neural_evolution_orchestrator/main.py`, `nl -ba frontend/app/src/components/tabs/NeuralEvolutionTab.tsx` e `curl -sS http://34.194.252.70/api/ops/neural/evolution/leaderboard | python -m json.tool | head -120`.
+
+## 2026-06-22 — Ajuste sobre frequência da avaliação neural
+
+- Esclarecido que a frequência semanal do `neural-evolution-weekly` é uma configuração conservadora inicial, não uma limitação técnica do `neural_evolution_orchestrator`.
+- Atualizado o runbook para explicar o motivo da cadência semanal: reduzir custo, runtime e risco de reavaliar muitos candidatos sobre o mesmo snapshot sem nova evidência fora da amostra.
+- Documentadas alternativas para acelerar a avaliação das redes pendentes: execução manual pontual do Scheduler existente ou criação/alteração de um job diário com orçamento menor (`max_trials` entre 2 e 5), mantendo controle operacional.
+- Comandos usados: inspeção do histórico com `git log --oneline -3`, verificação de estado com `git status --short` e atualização de `docs/neural_evolution_orchestrator_scheduler.md` e `docs/diario/registros1.md`.
+
+## 2026-06-22 — Mudança recomendada para avaliação neural diária controlada
+
+- Ajustada a recomendação operacional do runbook: para evolução contínua com controle, usar Scheduler diário `neural-evolution-daily` em vez de manter a cadência semanal como padrão.
+- O orçamento recomendado passou a ser menor por rodada, começando com `max_trials=3` e `max_runtime_minutes=120`, mantendo `attempt-deadline=1800s` para evitar concentração de custo/runtime em uma única execução semanal.
+- Mantida a orientação de usar rodadas manuais apenas para antecipação pontual ou recuperação de execução perdida, e adicionada a orientação para pausar/remover o Scheduler semanal depois que o diário for criado e validado.
+- Comandos usados: `rg -n "neural-evolution-weekly|neural-evolution-daily|max_trials|schedule='0 6 \\* \\* 1'|Operação recorrente" docs infra .github functions backend frontend -S --glob '!**/node_modules/**' --glob '!**/target/**'` e edição de `docs/neural_evolution_orchestrator_scheduler.md`/`docs/diario/registros1.md`.
+
+## 2026-06-22 — Alteração do Scheduler diário via MCP Server
+
+- Acessado o MCP Server publicado via JSON-RPC HTTP em `http://mcpserversisacao.shop/mcp`, executando `initialize`, capturando `mcp-session-id` e chamando `tools/list` conforme o procedimento obrigatório do projeto.
+- Confirmado via tool `cloud_scheduler_job` que `neural-evolution-daily` ainda não existe no Cloud Scheduler e que `neural-evolution-weekly` está `ENABLED`, com `schedule: 0 6 * * 1`, `attemptDeadline: 1800s` e payload com `max_trials=10`/`max_runtime_minutes=240`.
+- Identificada limitação da versão atualmente publicada do MCP: ela expõe apenas `cloud_scheduler_job` para consulta (`describe`) e ainda não possui tool de criação/atualização/pausa do Scheduler, impedindo aplicar a mudança real imediatamente só por MCP no ambiente remoto.
+- Implementada no MCP Java a tool `neural_evolution_daily_scheduler_apply`, que executa `gcloud scheduler jobs update http neural-evolution-daily`, faz fallback para `create http` se o job diário não existir e pausa `neural-evolution-weekly` quando `pause_weekly=true`.
+- Atualizados README do MCP, testes de listagem de tools e runbook da evolução neural para orientar a alteração via JSON-RPC HTTP assim que a nova versão do MCP for publicada.
+- Comandos usados: `curl` HTTP JSON-RPC para `initialize`, `tools/list` e `tools/call`/`cloud_scheduler_job` no MCP; inspeção com `rg -n "cloud_scheduler_job|Scheduler|scheduler" mcp-server-java backend functions docs -S --glob '!**/target/**'`; edição de `McpController.java`, `McpControllerTest.java`, `mcp-server-java/README.md`, `docs/neural_evolution_orchestrator_scheduler.md` e deste diário.
+
+## 2026-06-22 — Tentativa de criar Scheduler diário pelo MCP publicado
+
+- Tentada criação do Scheduler diário `neural-evolution-daily` pelo MCP Server publicado via JSON-RPC HTTP em `http://mcpserversisacao.shop/mcp`, seguindo o fluxo obrigatório de `initialize`, captura de `mcp-session-id`, `tools/list` e `tools/call`.
+- O `tools/list` confirmou que a versão publicada ainda expõe apenas `cloud_scheduler_job` para consulta do Cloud Scheduler, sem a nova tool `neural_evolution_daily_scheduler_apply`.
+- A chamada `tools/call` para `neural_evolution_daily_scheduler_apply` retornou erro JSON-RPC `-32601` com mensagem `Tool not found: neural_evolution_daily_scheduler_apply`, portanto não foi possível criar/alterar o Scheduler pelo MCP publicado nesta tentativa.
+- Conclusão operacional: consigo criar pelo MCP somente depois que a versão do MCP Java que adiciona `neural_evolution_daily_scheduler_apply` for publicada; até lá, o MCP remoto permite verificar o Scheduler, mas não modificá-lo.
+- Comandos usados: `curl` HTTP JSON-RPC para `initialize`, `tools/list` e tentativa de `tools/call` com `neural_evolution_daily_scheduler_apply`, sempre em `http://mcpserversisacao.shop/mcp` e com header `mcp-session-id`.
+
+## 2026-06-22 — Escrita genérica no Cloud Scheduler via MCP Java
+
+- Alterado o MCP Java para permitir escrita controlada no Cloud Scheduler por meio da nova tool `cloud_scheduler_job_write`.
+- A tool aceita as ações `create`, `update`, `pause`, `resume`, `run` e `delete`, mantendo o projeto fixo em `ingestaokraken` e validando `job_name`, método HTTP, URI alvo e service account OIDC antes de executar `gcloud scheduler jobs ...`.
+- Mantida a tool específica `neural_evolution_daily_scheduler_apply` para o caso operacional da evolução neural, agora complementada pela tool genérica para futuras operações de Scheduler via JSON-RPC.
+- Atualizados `mcp-server-java/README.md`, `docs/neural_evolution_orchestrator_scheduler.md` e testes do MCP para listar e validar a nova tool de escrita.
+- Comandos usados: edição de `mcp-server-java/src/main/java/com/sisacao/mcpserver/McpController.java`, `mcp-server-java/src/test/java/com/sisacao/mcpserver/McpControllerTest.java`, `mcp-server-java/README.md`, `docs/neural_evolution_orchestrator_scheduler.md` e `docs/diario/registros1.md`.
