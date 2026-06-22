@@ -4,7 +4,7 @@ Este runbook descreve como acionar a Cloud Function HTTP `neural_evolution_orche
 
 ## O que a função faz
 
-1. Lê o snapshot mais recente de `cotacao_intraday.neural_eod_training_dataset`, salvo quando `dataset_snapshot` é enviado no payload.
+1. Lê o snapshot completo mais recente de `cotacao_intraday.neural_eod_training_dataset`, com splits `train`, `validation` e `test`, salvo quando `dataset_snapshot` é enviado no payload.
 2. Gera candidatos determinísticos com orçamento limitado (`max_trials`, `max_runtime_minutes`, `max_parameter_count`, `max_layers`, `random_seed`).
 3. Grava a rodada em `neural_evolution_runs`.
 4. Grava as configurações em `neural_candidate_configs`.
@@ -104,6 +104,29 @@ curl -sS -X POST 'https://us-east1-ingestaokraken.cloudfunctions.net/neural_evol
   --data '{"dry_run":true,"budget":{"max_trials":2,"random_seed":20260621}}'
 ```
 
+
+## Verificar existência do Scheduler
+
+Para confirmar no GCP se o job existe e está habilitado, execute:
+
+```bash
+gcloud scheduler jobs describe neural-evolution-weekly \
+  --project=ingestaokraken \
+  --location=us-east1 \
+  --format='yaml(name,state,schedule,timeZone,attemptDeadline,httpTarget.uri,httpTarget.httpMethod,httpTarget.body,nextRunTime,lastAttemptTime)'
+```
+
+Para listar apenas jobs relacionados à evolução neural:
+
+```bash
+gcloud scheduler jobs list \
+  --project=ingestaokraken \
+  --location=us-east1 \
+  --filter='name:neural-evolution OR httpTarget.uri:neural_evolution_orchestrator'
+```
+
+Estado esperado: `state: ENABLED`, `schedule: 0 6 * * 1`, `timeZone: America/Sao_Paulo`, URI apontando para `https://us-east1-ingestaokraken.cloudfunctions.net/neural_evolution_orchestrator` e `attemptDeadline` próximo de `1800s`.
+
 ## Deadline do Scheduler
 
 O Cloud Scheduler cria jobs HTTP com `attemptDeadline` padrão de 180 segundos. Esse valor é curto para a evolução neural, porque a função pode chamar `neural_training` várias vezes na mesma rodada. Configure `--attempt-deadline=1800s` para permitir até 30 minutos por tentativa, que é o limite prático recomendado para este agendamento HTTP.
@@ -118,6 +141,13 @@ gcloud scheduler jobs update http neural-evolution-weekly \
 ```
 
 Para rodadas maiores que 30 minutos, reduza `max_trials` ou evolua o orquestrador para enfileirar treinos de forma assíncrona em vez de manter uma única requisição HTTP aberta.
+
+
+## Operação recorrente
+
+Não é necessário disparar comandos manuais toda semana. O comando manual serve apenas para antecipar a primeira rodada, testar o payload ou recuperar uma execução perdida. A operação recorrente deve ficar no Cloud Scheduler `neural-evolution-weekly`, configurado para chamar `neural_evolution_orchestrator` por HTTP com o mesmo payload produtivo e `attempt-deadline=1800s`.
+
+Se o job já existe, use `gcloud scheduler jobs run neural-evolution-weekly --project=ingestaokraken --location=us-east1` apenas quando quiser antecipar uma execução fora da agenda.
 
 ## Configuração rápida do Cloud Scheduler sem OIDC
 

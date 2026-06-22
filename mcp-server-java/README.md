@@ -24,6 +24,7 @@ Tools disponíveis (paridade de nomes com a versão Python):
 - `bigquery_access_check`
 - `bigquery_query`
 - `cloud_run_function_logs`
+- `cloud_scheduler_job`
 
 ## Build container
 
@@ -62,4 +63,24 @@ docker exec -it sisacao8-mcp-server-java sh -lc 'test -r "$GOOGLE_APPLICATION_CR
 ```bash
 cd mcp-server-java
 mvn test
+```
+
+
+## Consultar Cloud Scheduler via MCP
+
+A tool `cloud_scheduler_job` executa `gcloud scheduler jobs describe` no runtime autenticado do MCP. Exemplo de chamada JSON-RPC após `initialize`:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "method": "tools/call",
+  "params": {
+    "name": "cloud_scheduler_job",
+    "arguments": {
+      "job_name": "neural-evolution-weekly",
+      "location": "us-east1"
+    }
+  }
+}
 ```

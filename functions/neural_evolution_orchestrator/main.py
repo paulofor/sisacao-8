@@ -232,6 +232,9 @@ def _latest_dataset_snapshot(client: bigquery.Client) -> str:
         f"FROM `{_table_id(TRAINING_DATASET_TABLE)}` "
         "WHERE dataset_snapshot IS NOT NULL "
         "GROUP BY dataset_snapshot "
+        "HAVING COUNTIF(dataset_split = 'train') > 0 "
+        "AND COUNTIF(dataset_split = 'validation') > 0 "
+        "AND COUNTIF(dataset_split = 'test') > 0 "
         "ORDER BY MAX(reference_date) DESC, COUNT(*) DESC "
         "LIMIT 1"
     )
