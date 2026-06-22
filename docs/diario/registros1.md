@@ -845,3 +845,10 @@
 - Adicionada tela **Advisor IA Gemini** no grupo de redes neurais do painel operacional para acionar o módulo publicado em `/ai/advisor/recommendations`.
 - A tela permite informar o objetivo da rodada, limitar candidatos, enviar contexto resumido do leaderboard neural e acompanhar provider, modelo, status, justificativa, rejeições e candidatos retornados.
 - Comandos usados para confirmar e validar: `rg --files`, `rg -n "gemini|ia|ai|neural"`, leitura dos contratos Java do módulo `aiadvisor` e `npm run build` e `npm run lint` no frontend.
+
+## 2026-06-22 UTC — Implementação do orquestrador de evolução neural
+- Implementada a Cloud Function HTTP `functions/neural_evolution_orchestrator`, responsável por gerar candidatos determinísticos, persistir rodada/configurações no BigQuery, chamar `neural_training`, buscar métricas no `neural_model_registry`, calcular score/decisão e gravar `neural_candidate_evaluations` para alimentar o leaderboard.
+- Adicionada a função ao workflow `.github/workflows/deploy.yml` com variáveis BigQuery, URL de `neural_training`, memória de 512Mi e timeout de 3600s.
+- Criado o runbook `docs/neural_evolution_orchestrator_scheduler.md` com payloads de teste, exemplo `dry_run` e comandos `gcloud scheduler jobs create/update http` com OIDC.
+- Adicionados testes unitários para fluxo principal, `dry_run` e parsing de métricas do registry.
+- Ferramentas/comandos usados para confirmar a causa e a correção: buscas com `rg`, inspeção de `functions/`, leitura dos DDLs BigQuery e execução de testes/lint locais antes do commit.

@@ -1,0 +1,126 @@
+from __future__ import annotations
+
+import json
+
+import functions.neural_evolution_orchestrator.main as module
+
+
+class _FakeQueryJob:
+    def __init__(self, rows):
+        self._rows = rows
+
+    def result(self):
+        return list(self._rows)
+
+
+class _FakeLoadJob:
+    def result(self):
+        return None
+
+
+class _FakeClient:
+    def __init__(self):
+        self.loaded = []
+        self.queries = []
+        self.registry_by_version = {}
+
+    def query(self, query, job_config=None):
+        self.queries.append((query, job_config))
+        if "GROUP BY dataset_snapshot" in query:
+            return _FakeQueryJob([{"dataset_snapshot": "snapshot_2026"}])
+        if "ANY_VALUE(feature_version)" in query:
+            return _FakeQueryJob([{"value": "feature_eod_tabular_v1"}])
+        if "ANY_VALUE(label_version)" in query:
+            return _FakeQueryJob([{"value": "label_eod_barrier_v1"}])
+        if "SELECT dedupe_hash" in query:
+            return _FakeQueryJob([])
+        if "FROM `ingestaokraken.cotacao_intraday.neural_model_registry`" in query:
+            return _FakeQueryJob([next(iter(self.registry_by_version.values()))])
+        if query.strip().startswith("UPDATE"):
+            return _FakeQueryJob([])
+        raise AssertionError(query)
+
+    def load_table_from_json(self, rows, table_id, job_config=None):
+        self.loaded.append((table_id, list(rows)))
+        return _FakeLoadJob()
+
+
+class _Request:
+    def __init__(self, body):
+        self._body = body
+
+    def get_json(self, silent=True):
+        return self._body
+
+
+def test_orchestrator_generates_trains_scores_and_persists(monkeypatch):
+    fake_client = _FakeClient()
+    monkeypatch.setattr(module, "_BQ_CLIENT", fake_client)
+
+    def fake_invoke_training(payload):
+        fake_client.registry_by_version[payload["model_version"]] = {
+            "model_version": payload["model_version"],
+            "metrics_json": {
+                "train": {"accuracy": 0.50},
+                "validation": {"accuracy": 0.46, "directional_precision": 0.42},
+                "test": {
+                    "accuracy": 0.44,
+                    "coverage": 0.35,
+                    "directional_precision": 0.43,
+                },
+            },
+        }
+        return {"status": "ok", "model_version": payload["model_version"]}
+
+    monkeypatch.setattr(module, "_invoke_training", fake_invoke_training)
+
+    response, status = module.neural_evolution_orchestrator(
+        _Request(
+            {
+                "evolution_run_id": "run-test",
+                "model_version_prefix": "evo_test",
+                "budget": {"max_trials": 2, "random_seed": 42},
+            }
+        )
+    )
+
+    assert status == 200
+    assert response["candidate_count"] == 2
+    assert response["trained_count"] == 2
+    assert response["evaluated_count"] == 2
+    loaded_tables = [table for table, _rows in fake_client.loaded]
+    assert "ingestaokraken.cotacao_intraday.neural_evolution_runs" in loaded_tables
+    assert "ingestaokraken.cotacao_intraday.neural_candidate_configs" in loaded_tables
+    assert (
+        "ingestaokraken.cotacao_intraday.neural_candidate_evaluations" in loaded_tables
+    )
+    evaluation_rows = fake_client.loaded[-1][1]
+    assert evaluation_rows[0]["decision"] in {"keep_candidate", "shadow_candidate"}
+    assert evaluation_rows[0]["score_total"] > 0
+
+
+def test_orchestrator_dry_run_does_not_persist_or_call_training(monkeypatch):
+    fake_client = _FakeClient()
+    monkeypatch.setattr(module, "_BQ_CLIENT", fake_client)
+
+    def fail_training(payload):  # pragma: no cover - should not be called
+        raise AssertionError("training should not be called in dry_run")
+
+    monkeypatch.setattr(module, "_invoke_training", fail_training)
+
+    response, status = module.neural_evolution_orchestrator(
+        _Request({"dry_run": True, "budget": {"max_trials": 1, "random_seed": 42}})
+    )
+
+    assert status == 200
+    assert response["dry_run"] is True
+    assert response["candidate_count"] == 1
+    assert fake_client.loaded == []
+
+
+def test_metrics_from_registry_accepts_json_string():
+    metrics = {"test": {"coverage": 0.4}}
+
+    assert (
+        module._metrics_from_registry({"metrics_json": json.dumps(metrics)}) == metrics
+    )

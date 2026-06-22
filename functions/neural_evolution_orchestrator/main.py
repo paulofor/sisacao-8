@@ -1,0 +1,460 @@
+"""Cloud Function that orchestrates deterministic neural EOD evolution rounds."""
+
+from __future__ import annotations
+
+import datetime as dt
+import json
+import logging
+import os
+from typing import Any, Dict, Iterable, Mapping
+from urllib import error, request
+from uuid import uuid4
+
+from google.cloud import bigquery
+
+from sisacao8.neural_evolution import (
+    EvolutionBudget,
+    generate_deterministic_candidates,
+    penalized_score,
+)
+
+PROJECT_ID = os.environ.get("GCP_PROJECT", "ingestaokraken")
+BQ_DATASET = os.environ.get("BQ_INTRADAY_DATASET", "cotacao_intraday")
+BQ_LOCATION = os.environ.get("BQ_LOCATION", "us-east1")
+EVOLUTION_RUNS_TABLE = os.environ.get(
+    "BQ_NEURAL_EVOLUTION_RUNS_TABLE", "neural_evolution_runs"
+)
+CANDIDATE_CONFIGS_TABLE = os.environ.get(
+    "BQ_NEURAL_CANDIDATE_CONFIGS_TABLE", "neural_candidate_configs"
+)
+CANDIDATE_EVALUATIONS_TABLE = os.environ.get(
+    "BQ_NEURAL_CANDIDATE_EVALUATIONS_TABLE", "neural_candidate_evaluations"
+)
+MODEL_REGISTRY_TABLE = os.environ.get(
+    "BQ_NEURAL_MODEL_REGISTRY_TABLE", "neural_model_registry"
+)
+TRAINING_DATASET_TABLE = os.environ.get(
+    "BQ_NEURAL_TRAINING_DATASET_TABLE", "neural_eod_training_dataset"
+)
+NEURAL_TRAINING_URL = os.environ.get(
+    "NEURAL_TRAINING_URL",
+    "https://us-east1-ingestaokraken.cloudfunctions.net/neural_training",
+)
+DEFAULT_MODEL_VERSION_PREFIX = os.environ.get(
+    "NEURAL_EVOLUTION_MODEL_VERSION_PREFIX", "neural_eod_mlp_evo1"
+)
+DEFAULT_STRATEGY = os.environ.get("NEURAL_EVOLUTION_STRATEGY", "deterministic_phase1")
+DEFAULT_MAX_TRIALS = int(os.environ.get("NEURAL_EVOLUTION_MAX_TRIALS", "10"))
+DEFAULT_TRAINING_TIMEOUT_SECONDS = int(
+    os.environ.get("NEURAL_EVOLUTION_TRAINING_TIMEOUT_SECONDS", "3600")
+)
+
+_BQ_CLIENT: bigquery.Client | None = None
+
+
+def _get_bq_client() -> bigquery.Client:
+    global _BQ_CLIENT
+    if _BQ_CLIENT is None:
+        _BQ_CLIENT = bigquery.Client(project=PROJECT_ID, location=BQ_LOCATION)
+    return _BQ_CLIENT
+
+
+def neural_evolution_orchestrator(request_obj: Any) -> tuple[Dict[str, Any], int]:
+    """HTTP entrypoint for one deterministic neural evolution round."""
+
+    payload = _request_payload(request_obj)
+    client = _get_bq_client()
+    started_at = _utcnow()
+    dry_run = bool(payload.get("dry_run", False))
+    train_candidates = bool(payload.get("train_candidates", True)) and not dry_run
+
+    dataset_snapshot = str(
+        payload.get("dataset_snapshot") or _latest_dataset_snapshot(client)
+    )
+    feature_version = str(
+        payload.get("feature_version")
+        or _snapshot_value(client, dataset_snapshot, "feature_version")
+    )
+    label_version = str(
+        payload.get("label_version")
+        or _snapshot_value(client, dataset_snapshot, "label_version")
+    )
+    evolution_run_id = str(
+        payload.get("evolution_run_id")
+        or f"neural_evolution_{started_at.strftime('%Y%m%d_%H%M%S')}_{uuid4().hex[:8]}"
+    )
+    strategy = str(payload.get("strategy") or DEFAULT_STRATEGY)
+    model_version_prefix = str(
+        payload.get("model_version_prefix")
+        or f"{DEFAULT_MODEL_VERSION_PREFIX}_{started_at.strftime('%Y%m%d')}"
+    )
+    budget = _budget_from_payload(payload.get("budget"))
+    existing_hashes = _existing_hashes(client)
+
+    candidates = generate_deterministic_candidates(
+        evolution_run_id=evolution_run_id,
+        dataset_snapshot=dataset_snapshot,
+        budget=budget,
+        existing_hashes=existing_hashes,
+        model_version_prefix=model_version_prefix,
+    )
+    if not candidates:
+        raise ValueError("No neural evolution candidates were generated")
+
+    run_row = {
+        "evolution_run_id": evolution_run_id,
+        "started_at": started_at.isoformat(),
+        "finished_at": None,
+        "dataset_snapshot": dataset_snapshot,
+        "feature_version": feature_version,
+        "label_version": label_version,
+        "strategy": strategy,
+        "budget_json": _budget_json(budget),
+        "status": "dry_run" if dry_run else "running",
+        "summary_json": {"candidate_count": len(candidates), "trained_count": 0},
+    }
+    if not dry_run:
+        _append_rows(client, _table_id(EVOLUTION_RUNS_TABLE), [run_row])
+        _append_rows(
+            client,
+            _table_id(CANDIDATE_CONFIGS_TABLE),
+            [_candidate_config_row(candidate, started_at) for candidate in candidates],
+        )
+
+    if dry_run:
+        return {
+            "status": "ok",
+            "evolution_run_id": evolution_run_id,
+            "dataset_snapshot": dataset_snapshot,
+            "candidate_count": len(candidates),
+            "trained_count": 0,
+            "evaluated_count": 0,
+            "failed_count": 0,
+            "dry_run": True,
+            "candidates": [candidate.model_version for candidate in candidates],
+            "failures": [],
+        }, 200
+
+    training_results: list[dict[str, Any]] = []
+    evaluation_rows: list[dict[str, Any]] = []
+    failures: list[dict[str, Any]] = []
+
+    for candidate in candidates:
+        try:
+            if train_candidates:
+                training_results.append(_invoke_training(candidate.training_request))
+                registry_row = _fetch_registry_row(client, candidate.model_version)
+            else:
+                registry_row = _fetch_registry_row(client, candidate.model_version)
+            score = _score_registry_row(candidate.architecture, registry_row)
+            evaluation_rows.append(
+                _evaluation_row(
+                    candidate_id=candidate.candidate_id,
+                    model_version=candidate.model_version,
+                    dataset_snapshot=dataset_snapshot,
+                    metrics=_metrics_from_registry(registry_row),
+                    score=score,
+                )
+            )
+        except (
+            Exception
+        ) as exc:  # noqa: BLE001 - persist per-candidate failure and continue.
+            logging.exception("Candidate %s failed", candidate.model_version)
+            failures.append(
+                {"model_version": candidate.model_version, "error": str(exc)}
+            )
+
+    if evaluation_rows and not dry_run:
+        _append_rows(client, _table_id(CANDIDATE_EVALUATIONS_TABLE), evaluation_rows)
+
+    status = "completed" if not failures else "completed_with_errors"
+    if len(failures) == len(candidates):
+        status = "failed"
+    summary = {
+        "candidate_count": len(candidates),
+        "trained_count": len(training_results),
+        "evaluated_count": len(evaluation_rows),
+        "failed_count": len(failures),
+        "failures": failures,
+    }
+    if not dry_run:
+        _update_run_status(client, evolution_run_id, status, summary)
+
+    return {
+        "status": "ok" if status != "failed" else "error",
+        "evolution_run_id": evolution_run_id,
+        "dataset_snapshot": dataset_snapshot,
+        "candidate_count": len(candidates),
+        "trained_count": len(training_results),
+        "evaluated_count": len(evaluation_rows),
+        "failed_count": len(failures),
+        "dry_run": dry_run,
+        "candidates": [candidate.model_version for candidate in candidates],
+        "failures": failures,
+    }, (200 if status != "failed" else 500)
+
+
+def _request_payload(request_obj: Any) -> dict[str, Any]:
+    if request_obj is None:
+        return {}
+    body = (
+        request_obj.get_json(silent=True) if hasattr(request_obj, "get_json") else None
+    )
+    if isinstance(body, Mapping):
+        return dict(body)
+    return {}
+
+
+def _budget_from_payload(value: Any) -> EvolutionBudget:
+    data = value if isinstance(value, Mapping) else {}
+    return EvolutionBudget(
+        max_trials=int(data.get("max_trials", DEFAULT_MAX_TRIALS)),
+        max_runtime_minutes=int(data.get("max_runtime_minutes", 240)),
+        max_parameter_count=int(data.get("max_parameter_count", 150_000)),
+        max_layers=int(data.get("max_layers", 4)),
+        random_seed=int(data.get("random_seed", 20260621)),
+    )
+
+
+def _budget_json(budget: EvolutionBudget) -> dict[str, int]:
+    return {
+        "max_trials": budget.max_trials,
+        "max_runtime_minutes": budget.max_runtime_minutes,
+        "max_parameter_count": budget.max_parameter_count,
+        "max_layers": budget.max_layers,
+        "random_seed": budget.random_seed,
+    }
+
+
+def _latest_dataset_snapshot(client: bigquery.Client) -> str:
+    sql = (
+        "SELECT dataset_snapshot "
+        f"FROM `{_table_id(TRAINING_DATASET_TABLE)}` "
+        "WHERE dataset_snapshot IS NOT NULL "
+        "GROUP BY dataset_snapshot "
+        "ORDER BY MAX(reference_date) DESC, COUNT(*) DESC "
+        "LIMIT 1"
+    )
+    rows = list(client.query(sql).result())
+    if not rows:
+        raise ValueError("No neural training dataset snapshot found")
+    return str(_value(rows[0], "dataset_snapshot"))
+
+
+def _snapshot_value(client: bigquery.Client, dataset_snapshot: str, column: str) -> str:
+    sql = (
+        f"SELECT ANY_VALUE({column}) AS value "
+        f"FROM `{_table_id(TRAINING_DATASET_TABLE)}` "
+        "WHERE dataset_snapshot = @dataset_snapshot "
+        f"AND {column} IS NOT NULL"
+    )
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ScalarQueryParameter(
+                "dataset_snapshot", "STRING", dataset_snapshot
+            )
+        ]
+    )
+    rows = list(client.query(sql, job_config=job_config).result())
+    if not rows or _value(rows[0], "value") is None:
+        raise ValueError(f"No {column} found for snapshot {dataset_snapshot}")
+    return str(_value(rows[0], "value"))
+
+
+def _existing_hashes(client: bigquery.Client) -> set[str]:
+    sql = f"SELECT dedupe_hash FROM `{_table_id(CANDIDATE_CONFIGS_TABLE)}`"
+    try:
+        return {str(_value(row, "dedupe_hash")) for row in client.query(sql).result()}
+    except Exception:  # noqa: BLE001 - table may not exist before DDL is applied.
+        logging.warning(
+            "Could not read existing neural candidate hashes", exc_info=True
+        )
+        return set()
+
+
+def _candidate_config_row(candidate: Any, created_at: dt.datetime) -> dict[str, Any]:
+    return {
+        "candidate_id": candidate.candidate_id,
+        "evolution_run_id": candidate.evolution_run_id,
+        "model_id": candidate.model_id,
+        "model_version": candidate.model_version,
+        "candidate_source": candidate.candidate_source,
+        "architecture_json": candidate.architecture,
+        "hyperparameters_json": candidate.hyperparameters,
+        "training_request_json": candidate.training_request,
+        "schema_validation_status": candidate.schema_validation_status,
+        "dedupe_hash": candidate.dedupe_hash,
+        "created_at": created_at.isoformat(),
+    }
+
+
+def _invoke_training(payload: Mapping[str, Any]) -> dict[str, Any]:
+    body = json.dumps(payload).encode("utf-8")
+    http_request = request.Request(
+        NEURAL_TRAINING_URL,
+        data=body,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with request.urlopen(
+            http_request, timeout=DEFAULT_TRAINING_TIMEOUT_SECONDS
+        ) as resp:
+            text = resp.read().decode("utf-8")
+            return json.loads(text) if text else {"status": "ok"}
+    except error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"neural_training HTTP {exc.code}: {detail}") from exc
+
+
+def _fetch_registry_row(
+    client: bigquery.Client, model_version: str
+) -> Mapping[str, Any]:
+    sql = (
+        "SELECT model_id, model_version, status, feature_version, label_version, "
+        "training_dataset_snapshot, metrics_json, directional_precision, coverage, "
+        "validation_accuracy, test_accuracy, created_at "
+        f"FROM `{_table_id(MODEL_REGISTRY_TABLE)}` "
+        "WHERE model_version = @model_version "
+        "ORDER BY trained_at DESC, created_at DESC LIMIT 1"
+    )
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ScalarQueryParameter("model_version", "STRING", model_version)
+        ]
+    )
+    rows = list(client.query(sql, job_config=job_config).result())
+    if not rows:
+        raise ValueError(f"No neural_model_registry row found for {model_version}")
+    return _row_to_dict(rows[0])
+
+
+def _score_registry_row(
+    architecture: Mapping[str, Any], registry_row: Mapping[str, Any]
+):
+    metrics = _metrics_from_registry(registry_row)
+    hidden_units = tuple(int(item) for item in architecture.get("hidden_units", ()))
+    return penalized_score(metrics, hidden_units=hidden_units)
+
+
+def _metrics_from_registry(registry_row: Mapping[str, Any]) -> Mapping[str, Any]:
+    metrics = registry_row.get("metrics_json")
+    if isinstance(metrics, str):
+        return json.loads(metrics)
+    if isinstance(metrics, Mapping):
+        return metrics
+    return {
+        "validation": {
+            "accuracy": registry_row.get("validation_accuracy"),
+            "directional_precision": registry_row.get("directional_precision"),
+        },
+        "test": {
+            "accuracy": registry_row.get("test_accuracy"),
+            "coverage": registry_row.get("coverage"),
+            "directional_precision": registry_row.get("directional_precision"),
+        },
+    }
+
+
+def _evaluation_row(
+    *,
+    candidate_id: str,
+    model_version: str,
+    dataset_snapshot: str,
+    metrics: Mapping[str, Any],
+    score: Any,
+) -> dict[str, Any]:
+    return {
+        "candidate_id": candidate_id,
+        "model_version": model_version,
+        "dataset_snapshot": dataset_snapshot,
+        "metrics_json": dict(metrics),
+        "score_total": score.score_total,
+        "score_directional_precision": score.score_directional_precision,
+        "score_coverage": score.score_coverage,
+        "score_generalization": score.score_generalization,
+        "score_stability": score.score_stability,
+        "score_cost_penalty": score.score_cost_penalty,
+        "decision": score.decision,
+        "decision_reasons_json": list(score.decision_reasons),
+        "created_at": _utcnow().isoformat(),
+    }
+
+
+def _append_rows(
+    client: bigquery.Client, table_id: str, rows: Iterable[Mapping[str, Any]]
+) -> None:
+    materialized = [dict(row) for row in rows]
+    if not materialized:
+        return
+    job = client.load_table_from_json(
+        materialized,
+        table_id,
+        job_config=bigquery.LoadJobConfig(
+            write_disposition=bigquery.WriteDisposition.WRITE_APPEND
+        ),
+    )
+    job.result()
+
+
+def _update_run_status(
+    client: bigquery.Client,
+    evolution_run_id: str,
+    status: str,
+    summary: Mapping[str, Any],
+) -> None:
+    sql = (
+        f"UPDATE `{_table_id(EVOLUTION_RUNS_TABLE)}` "
+        "SET finished_at = CURRENT_TIMESTAMP(), status = @status, "
+        "summary_json = PARSE_JSON(@summary_json) "
+        "WHERE evolution_run_id = @evolution_run_id"
+    )
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ScalarQueryParameter("status", "STRING", status),
+            bigquery.ScalarQueryParameter(
+                "summary_json", "STRING", json.dumps(summary, sort_keys=True)
+            ),
+            bigquery.ScalarQueryParameter(
+                "evolution_run_id", "STRING", evolution_run_id
+            ),
+        ]
+    )
+    client.query(sql, job_config=job_config).result()
+
+
+def _table_id(table: str) -> str:
+    if "." in table:
+        if table.count(".") == 2:
+            return table
+        return f"{PROJECT_ID}.{table}"
+    return f"{PROJECT_ID}.{BQ_DATASET}.{table}"
+
+
+def _row_to_dict(row: Any) -> dict[str, Any]:
+    if isinstance(row, Mapping):
+        return dict(row)
+    keys = getattr(row, "keys", lambda: [])()
+    return {key: _value(row, key) for key in keys}
+
+
+def _value(row: Any, key: str) -> Any:
+    if isinstance(row, Mapping):
+        value = row.get(key)
+    else:
+        try:
+            value = row[key]
+        except (KeyError, TypeError):
+            value = row.get(key) if hasattr(row, "get") else None
+    if hasattr(value, "is_null") and value.is_null:
+        return None
+    if hasattr(value, "value"):
+        return value.value
+    return value
+
+
+def _utcnow() -> dt.datetime:
+    return dt.datetime.now(dt.timezone.utc)
+
+
+__all__ = ["neural_evolution_orchestrator"]
