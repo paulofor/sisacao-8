@@ -13,9 +13,14 @@ from uuid import uuid4
 from google.cloud import bigquery
 
 from sisacao8.neural_evolution import (
+    CandidateConfig,
+    EvaluationScore,
     EvolutionBudget,
     generate_deterministic_candidates,
+    mutate_top_candidates,
     penalized_score,
+    repeat_finalists_with_seeds,
+    select_top_candidates,
 )
 
 PROJECT_ID = os.environ.get("GCP_PROJECT", "ingestaokraken")
@@ -84,19 +89,19 @@ def neural_evolution_orchestrator(request_obj: Any) -> tuple[Dict[str, Any], int
         or f"neural_evolution_{started_at.strftime('%Y%m%d_%H%M%S')}_{uuid4().hex[:8]}"
     )
     strategy = str(payload.get("strategy") or DEFAULT_STRATEGY)
-    model_version_prefix = str(
-        payload.get("model_version_prefix")
-        or f"{DEFAULT_MODEL_VERSION_PREFIX}_{started_at.strftime('%Y%m%d')}"
-    )
+    model_version_prefix = _model_version_prefix(payload, strategy, started_at)
     budget = _budget_from_payload(payload.get("budget"))
     existing_hashes = _existing_hashes(client)
 
-    candidates = generate_deterministic_candidates(
+    candidates = _generate_candidates_for_strategy(
+        client=client,
+        strategy=strategy,
         evolution_run_id=evolution_run_id,
         dataset_snapshot=dataset_snapshot,
         budget=budget,
         existing_hashes=existing_hashes,
         model_version_prefix=model_version_prefix,
+        payload=payload,
     )
     if not candidates:
         raise ValueError("No neural evolution candidates were generated")
@@ -192,6 +197,145 @@ def neural_evolution_orchestrator(request_obj: Any) -> tuple[Dict[str, Any], int
         "candidates": [candidate.model_version for candidate in candidates],
         "failures": failures,
     }, (200 if status != "failed" else 500)
+
+
+def _model_version_prefix(
+    payload: Mapping[str, Any], strategy: str, started_at: dt.datetime
+) -> str:
+    if payload.get("model_version_prefix"):
+        return str(payload["model_version_prefix"])
+    date_suffix = started_at.strftime("%Y%m%d")
+    if _is_phase2_strategy(strategy):
+        return f"neural_eod_mlp_evo2_{date_suffix}"
+    return f"{DEFAULT_MODEL_VERSION_PREFIX}_{date_suffix}"
+
+
+def _generate_candidates_for_strategy(
+    *,
+    client: bigquery.Client,
+    strategy: str,
+    evolution_run_id: str,
+    dataset_snapshot: str,
+    budget: EvolutionBudget,
+    existing_hashes: Iterable[str],
+    model_version_prefix: str,
+    payload: Mapping[str, Any],
+) -> list[CandidateConfig]:
+    if _is_phase2_strategy(strategy):
+        return _generate_phase2_candidates(
+            client=client,
+            evolution_run_id=evolution_run_id,
+            dataset_snapshot=dataset_snapshot,
+            budget=budget,
+            existing_hashes=existing_hashes,
+            model_version_prefix=model_version_prefix,
+            payload=payload,
+        )
+
+    return generate_deterministic_candidates(
+        evolution_run_id=evolution_run_id,
+        dataset_snapshot=dataset_snapshot,
+        budget=budget,
+        existing_hashes=existing_hashes,
+        model_version_prefix=model_version_prefix,
+    )
+
+
+def _is_phase2_strategy(strategy: str) -> bool:
+    return strategy.lower() in {"deterministic_phase2", "phase2", "phase2_mutation"}
+
+
+def _generate_phase2_candidates(
+    *,
+    client: bigquery.Client,
+    evolution_run_id: str,
+    dataset_snapshot: str,
+    budget: EvolutionBudget,
+    existing_hashes: Iterable[str],
+    model_version_prefix: str,
+    payload: Mapping[str, Any],
+) -> list[CandidateConfig]:
+    phase2_options = (
+        payload.get("phase2") if isinstance(payload.get("phase2"), Mapping) else {}
+    )
+    top_fraction = float(phase2_options.get("top_fraction", 1.0))
+    parent_limit = int(phase2_options.get("parent_limit", 10))
+    include_seed_repeats = bool(phase2_options.get("include_seed_repeats", True))
+    scored_parents = _phase2_parent_candidates(client, limit=parent_limit)
+    top_candidates = select_top_candidates(scored_parents, top_fraction=top_fraction)
+    if not top_candidates:
+        raise ValueError("No kept neural candidates available for deterministic_phase2")
+
+    candidates = mutate_top_candidates(
+        top_candidates,
+        evolution_run_id=evolution_run_id,
+        dataset_snapshot=dataset_snapshot,
+        budget=budget,
+        existing_hashes=existing_hashes,
+        model_version_prefix=f"{model_version_prefix}_mutation",
+    )
+    if include_seed_repeats:
+        candidates.extend(
+            repeat_finalists_with_seeds(
+                top_candidates,
+                evolution_run_id=evolution_run_id,
+                dataset_snapshot=dataset_snapshot,
+                model_version_prefix=f"{model_version_prefix}_seed",
+            )
+        )
+    return candidates[: budget.max_trials]
+
+
+def _phase2_parent_candidates(
+    client: bigquery.Client, *, limit: int
+) -> list[tuple[CandidateConfig, EvaluationScore]]:
+    sql = (
+        "SELECT candidate_id, evolution_run_id, model_version, model_id, "
+        "candidate_source, architecture_json, hyperparameters_json, "
+        "score_total, score_directional_precision, score_coverage, "
+        "score_generalization, score_stability, score_cost_penalty, "
+        "decision, decision_reasons_json "
+        f"FROM `{_table_id('vw_neural_evolution_leaderboard')}` "
+        "WHERE decision != 'reject' "
+        "ORDER BY score_total DESC, score_directional_precision DESC "
+        "LIMIT @limit"
+    )
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[bigquery.ScalarQueryParameter("limit", "INT64", limit)]
+    )
+    rows = list(client.query(sql, job_config=job_config).result())
+    scored: list[tuple[CandidateConfig, EvaluationScore]] = []
+    for row in rows:
+        data = _row_to_dict(row)
+        architecture = _json_mapping(data.get("architecture_json"))
+        hyperparameters = _json_mapping(data.get("hyperparameters_json"))
+        if not architecture or not hyperparameters:
+            continue
+        candidate = CandidateConfig(
+            candidate_id=str(data["candidate_id"]),
+            evolution_run_id=str(data["evolution_run_id"]),
+            model_id=str(data.get("model_id") or "neural_eod_mlp"),
+            model_version=str(data["model_version"]),
+            candidate_source=str(data.get("candidate_source") or "leaderboard"),
+            architecture=dict(architecture),
+            hyperparameters=dict(hyperparameters),
+            training_request={},
+            dedupe_hash="",
+        )
+        score = EvaluationScore(
+            score_total=float(data.get("score_total") or 0.0),
+            score_directional_precision=float(
+                data.get("score_directional_precision") or 0.0
+            ),
+            score_coverage=float(data.get("score_coverage") or 0.0),
+            score_generalization=float(data.get("score_generalization") or 0.0),
+            score_stability=float(data.get("score_stability") or 0.0),
+            score_cost_penalty=float(data.get("score_cost_penalty") or 0.0),
+            decision=str(data.get("decision") or "keep_candidate"),
+            decision_reasons=tuple(_json_list(data.get("decision_reasons_json"))),
+        )
+        scored.append((candidate, score))
+    return scored
 
 
 def _request_payload(request_obj: Any) -> dict[str, Any]:
@@ -432,6 +576,26 @@ def _table_id(table: str) -> str:
             return table
         return f"{PROJECT_ID}.{table}"
     return f"{PROJECT_ID}.{BQ_DATASET}.{table}"
+
+
+def _json_mapping(value: Any) -> Mapping[str, Any]:
+    if isinstance(value, Mapping):
+        return value
+    if isinstance(value, str):
+        decoded = json.loads(value)
+        return decoded if isinstance(decoded, Mapping) else {}
+    return {}
+
+
+def _json_list(value: Any) -> list[Any]:
+    if isinstance(value, list):
+        return value
+    if isinstance(value, tuple):
+        return list(value)
+    if isinstance(value, str):
+        decoded = json.loads(value)
+        return decoded if isinstance(decoded, list) else []
+    return []
 
 
 def _row_to_dict(row: Any) -> dict[str, Any]:
