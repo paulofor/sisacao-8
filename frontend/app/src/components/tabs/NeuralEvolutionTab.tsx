@@ -68,7 +68,10 @@ const NeuralEvolutionTab: FC<NeuralEvolutionTabProps> = ({
   const kept = leaderboard.filter((entry) => entry.decision !== 'reject').length
   const rejected = leaderboard.filter((entry) => entry.decision === 'reject').length
   const evaluatedVersions = new Set(leaderboard.map((entry) => entry.modelVersion))
-  const waitingEvaluation = Math.max(0, trainingRuns.length - evaluatedVersions.size)
+  const evaluatedModels = evaluatedVersions.size
+  const totalCandidates = trainingRuns.length || leaderboard.length
+  const waitingEvaluation = Math.max(0, totalCandidates - leaderboard.length)
+  const waitingByModelVersion = Math.max(0, totalCandidates - evaluatedModels)
 
   return (
     <Stack spacing={3}>
@@ -104,16 +107,16 @@ const NeuralEvolutionTab: FC<NeuralEvolutionTabProps> = ({
               <Stack spacing={0.5}>
                 <Typography variant="h6" fontWeight={800}>Mapa visual da evolução</Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Diferencia o estoque total de redes candidatas do subconjunto efetivamente avaliado nesta rodada.
+                  Mostra a conta completa: redes no estoque, avaliações já feitas e quantas ainda faltam avaliar.
                 </Typography>
               </Stack>
               <Stack direction="row" flexWrap="wrap" gap={1.5} alignItems="stretch">
                 {[
-                  { label: 'Redes candidatas', value: trainingRuns.length || leaderboard.length, helper: 'registradas em Treinos' },
-                  { label: 'Aguardando avaliação', value: waitingEvaluation, helper: 'não entraram nesta rodada' },
-                  { label: 'Avaliadas agora', value: leaderboard.length, helper: latestRun },
-                  { label: 'Mantidas', value: kept, helper: 'seguem no funil' },
-                  { label: 'Rejeitadas', value: rejected, helper: 'bloqueadas pela governança' },
+                  { label: 'Redes no estoque', value: totalCandidates, helper: 'total registrado em Treinos' },
+                  { label: 'Avaliações feitas', value: leaderboard.length, helper: 'linhas avaliadas no leaderboard' },
+                  { label: 'Ainda faltam', value: waitingEvaluation, helper: `${totalCandidates} - ${leaderboard.length} avaliações` },
+                  { label: 'Mantidas', value: kept, helper: 'aprovadas entre as avaliações' },
+                  { label: 'Rejeitadas', value: rejected, helper: 'reprovadas entre as avaliações' },
                 ].map((stage, index) => (
                   <Box key={stage.label} sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
                     <Paper
@@ -135,6 +138,25 @@ const NeuralEvolutionTab: FC<NeuralEvolutionTabProps> = ({
                   </Box>
                 ))}
               </Stack>
+              <Alert severity="info" sx={{ alignItems: 'flex-start' }}>
+                <Typography variant="body2" fontWeight={700} gutterBottom>
+                  Como ler estes números
+                </Typography>
+                <Typography variant="body2">
+                  Hoje existem <strong>{totalCandidates}</strong> redes registradas em Treinos. O
+                  leaderboard tem <strong>{leaderboard.length}</strong> avaliações: <strong>{kept}</strong> mantidas
+                  e <strong>{rejected}</strong> rejeitadas. Por isso ainda faltam
+                  <strong> {waitingEvaluation}</strong> avaliações para fechar o estoque inteiro
+                  ({totalCandidates} - {leaderboard.length}).
+                </Typography>
+                {evaluatedModels !== leaderboard.length ? (
+                  <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
+                    Observação técnica: essas {leaderboard.length} avaliações representam {evaluatedModels} versões
+                    únicas de modelo. Pela contagem por versão única, ainda seriam {waitingByModelVersion} redes sem
+                    versão correspondente avaliada.
+                  </Typography>
+                ) : null}
+              </Alert>
             </Stack>
           </Paper>
 
