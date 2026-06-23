@@ -96,6 +96,18 @@ curl -sS -D - -X POST 'http://mcpserversisacao.shop/mcp' \
   --data '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}'
 ```
 
+### Cloud Scheduler e OIDC — cuidado operacional obrigatório
+
+- Antes de sugerir `gcloud scheduler jobs update/create http` com `--oidc-service-account-email`, confirme se o job atual usa OIDC e se a service account existe.
+- Para jobs que chamam Cloud Functions públicas (`--allow-unauthenticated`), prefira comandos **sem OIDC**. Só inclua OIDC quando houver decisão explícita de proteger a invocação.
+- Se usar OIDC, valide previamente:
+  1. `gcloud iam service-accounts describe sa-scheduler-invoker@ingestaokraken.iam.gserviceaccount.com --project=ingestaokraken`;
+  2. a service account possui `roles/run.invoker` no serviço/função Gen2 alvo;
+  3. a conta que executa o `gcloud scheduler jobs create/update http` possui `roles/iam.serviceAccountUser` sobre essa service account;
+  4. a conta também possui permissão de Scheduler, por exemplo `roles/cloudscheduler.admin` ou permissão equivalente para `cloudscheduler.jobs.create/update`.
+- Se `gcloud scheduler jobs update http` retornar `NOT_FOUND`, não concluir de imediato que o job não existe: primeiro executar `gcloud scheduler jobs describe <job> --project=ingestaokraken --location=us-east1` e verificar projeto, location, conta ativa e permissões. Em GCP, falta de permissão ou service account OIDC inválida pode aparecer como `NOT_FOUND`/`PERMISSION_DENIED`.
+- No caso validado do `neural-evolution-daily`, o job existe em `ingestaokraken/us-east1` e estava sem OIDC no diagnóstico; portanto o update recomendado enquanto a função estiver pública é sem `--oidc-service-account-email` e sem `--oidc-token-audience`.
+
 ### Dicas operacionais validadas para usar o MCP
 
 - O endpoint pode retornar `503`/timeout enquanto o upstream do MCP Java não está saudável. Nesses casos, **não trocar para HTTPS**: aguarde alguns instantes, repita `initialize` por HTTP e capture um novo `mcp-session-id`.

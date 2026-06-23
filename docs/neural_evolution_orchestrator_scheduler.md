@@ -5,7 +5,7 @@ Este runbook descreve como acionar a Cloud Function HTTP `neural_evolution_orche
 ## O que a função faz
 
 1. Lê o snapshot completo mais recente de `cotacao_intraday.neural_eod_training_dataset`, com splits `train`, `validation` e `test`, salvo quando `dataset_snapshot` é enviado no payload.
-2. Gera candidatos determinísticos com orçamento limitado (`max_trials`, `max_runtime_minutes`, `max_parameter_count`, `max_layers`, `random_seed`).
+2. Gera candidatos conforme a estratégia: `deterministic_phase1` cria novas arquiteturas determinísticas; `deterministic_phase2` lê candidatos mantidos no leaderboard e gera mutações/repetições controladas para a próxima avaliação.
 3. Grava a rodada em `neural_evolution_runs`.
 4. Grava as configurações em `neural_candidate_configs`.
 5. Chama `neural_training` uma vez por candidato.
@@ -62,13 +62,18 @@ gcloud run services add-iam-policy-binding neural_evolution_orchestrator \
 
 ```json
 {
-  "strategy": "deterministic_phase1",
+  "strategy": "deterministic_phase2",
   "budget": {
-    "max_trials": 10,
-    "max_runtime_minutes": 240,
+    "max_trials": 1,
+    "max_runtime_minutes": 45,
     "max_parameter_count": 150000,
     "max_layers": 4,
     "random_seed": 20260621
+  },
+  "phase2": {
+    "top_fraction": 1.0,
+    "parent_limit": 10,
+    "include_seed_repeats": false
   }
 }
 ```
@@ -125,7 +130,7 @@ gcloud scheduler jobs list \
   --filter='name:neural-evolution OR httpTarget.uri:neural_evolution_orchestrator'
 ```
 
-Estado esperado: `state: ENABLED`, `schedule: 45 * * * *`, `timeZone: America/Sao_Paulo`, URI apontando para `https://us-east1-ingestaokraken.cloudfunctions.net/neural_evolution_orchestrator` e `attemptDeadline` próximo de `1800s`.
+Estado esperado: `state: ENABLED`, `schedule: 30 * * * *`, `timeZone: America/Sao_Paulo`, URI apontando para `https://us-east1-ingestaokraken.cloudfunctions.net/neural_evolution_orchestrator` e `attemptDeadline` próximo de `1800s`.
 
 ## Deadline do Scheduler
 
@@ -145,13 +150,13 @@ Para rodadas maiores que 30 minutos, reduza `max_trials` ou evolua o orquestrado
 
 ## Operação recorrente
 
-Para evolução contínua com controle, a cadência recomendada passa a ser horária no minuto 45 (`neural-evolution-daily`) com orçamento menor por rodada. Essa configuração avalia redes pendentes com mais rapidez sem concentrar custo/runtime em uma única execução semanal.
+Para evolução contínua com controle, a cadência recomendada passa a ser horária no minuto 30 (`neural-evolution-daily`) com orçamento menor por rodada. Essa configuração avalia redes pendentes com mais rapidez sem concentrar custo/runtime em uma única execução semanal.
 
 Use `max_trials=1` como padrão para a cadência horária. A execução passa a ter até 24 tentativas por dia, então aumentar o orçamento por rodada pode multiplicar custo e concorrência rapidamente. Se precisar ampliar, faça isso apenas depois de confirmar que cada execução termina bem abaixo de `attempt-deadline=1800s`, que não há sobreposição de treinos e que as métricas/custos continuam estáveis. Rodadas manuais continuam úteis para antecipar uma triagem pontual ou recuperar uma execução perdida.
 
 ## Alteração via MCP Server
 
-Quando a versão do MCP que expõe a tool `neural_evolution_daily_scheduler_apply` estiver publicada, prefira alterar o Scheduler por JSON-RPC HTTP no endpoint `http://mcpserversisacao.shop/mcp`. A tool cria ou atualiza `neural-evolution-daily` com agenda horária no minuto 45, `max_trials=1`, `max_runtime_minutes=45` e pausa o job semanal após a aplicação:
+Quando a versão do MCP que expõe a tool `neural_evolution_daily_scheduler_apply` estiver publicada, prefira alterar o Scheduler por JSON-RPC HTTP no endpoint `http://mcpserversisacao.shop/mcp`. A tool cria ou atualiza `neural-evolution-daily` com agenda horária no minuto 30, `strategy=deterministic_phase2`, `max_trials=1`, `max_runtime_minutes=45` e pausa o job semanal após a aplicação:
 
 ```json
 {
@@ -162,9 +167,15 @@ Quando a versão do MCP que expõe a tool `neural_evolution_daily_scheduler_appl
     "name": "neural_evolution_daily_scheduler_apply",
     "arguments": {
       "location": "us-east1",
-      "schedule": "45 * * * *",
+      "schedule": "30 * * * *",
+      "strategy": "deterministic_phase2",
       "max_trials": 1,
       "max_runtime_minutes": 45,
+      "phase2": {
+        "top_fraction": 1.0,
+        "parent_limit": 10,
+        "include_seed_repeats": false
+      },
       "pause_weekly": true
     }
   }
@@ -181,6 +192,26 @@ gcloud scheduler jobs pause neural-evolution-weekly \
   --location=us-east1
 ```
 
+## Diagnóstico de `NOT_FOUND` no update
+
+Se `gcloud scheduler jobs update http neural-evolution-daily` retornar `NOT_FOUND`, não assuma imediatamente que o job não existe. Verifique primeiro:
+
+```bash
+gcloud scheduler jobs describe neural-evolution-daily \
+  --project=ingestaokraken \
+  --location=us-east1
+```
+
+Se o `describe` também retornar `NOT_FOUND`, as causas mais prováveis são:
+
+1. a conta ativa do `gcloud` não tem permissão para ver/atualizar Cloud Scheduler no projeto;
+2. o job foi criado em outro projeto/location;
+3. o comando incluiu `--oidc-service-account-email` com uma service account inexistente ou sem permissão de uso.
+
+Para este ambiente, o job `neural-evolution-daily` foi verificado via MCP/GCP em `ingestaokraken/us-east1`. Portanto, se o seu terminal local retornar `NOT_FOUND`, valide a conta ativa e solicite/atribua pelo menos `roles/cloudscheduler.admin` no projeto antes de repetir o update. Se for usar OIDC, a conta que executa o comando também precisa poder usar a service account invocadora (`roles/iam.serviceAccountUser` sobre `sa-scheduler-invoker@ingestaokraken.iam.gserviceaccount.com`).
+
+Como o job atual pode estar configurado sem OIDC quando a função está pública, prefira primeiro o update sem OIDC da seção rápida. Use o bloco com OIDC somente após confirmar que a service account existe e que sua conta pode usá-la.
+
 ## Configuração rápida do Cloud Scheduler sem OIDC
 
 Use esta forma quando a função estiver publicada com invocação pública (`--allow-unauthenticated`), que é o comportamento atual do workflow de deploy.
@@ -189,13 +220,28 @@ Use esta forma quando a função estiver publicada com invocação pública (`--
 gcloud scheduler jobs create http neural-evolution-daily \
   --project=ingestaokraken \
   --location=us-east1 \
-  --schedule='45 * * * *' \
+  --schedule='30 * * * *' \
   --time-zone='America/Sao_Paulo' \
   --uri='https://us-east1-ingestaokraken.cloudfunctions.net/neural_evolution_orchestrator' \
   --http-method=POST \
   --attempt-deadline=1800s \
   --headers='Content-Type=application/json' \
-  --message-body='{"strategy":"deterministic_phase1","budget":{"max_trials":1,"max_runtime_minutes":45,"max_parameter_count":150000,"max_layers":4,"random_seed":20260621}}'
+  --message-body='{"strategy":"deterministic_phase2","budget":{"max_trials":1,"max_runtime_minutes":45,"max_parameter_count":150000,"max_layers":4,"random_seed":20260621},"phase2":{"top_fraction":1.0,"parent_limit":10,"include_seed_repeats":false}}'
+```
+
+Para alterar o job existente sem OIDC:
+
+```bash
+gcloud scheduler jobs update http neural-evolution-daily \
+  --project=ingestaokraken \
+  --location=us-east1 \
+  --schedule='30 * * * *' \
+  --time-zone='America/Sao_Paulo' \
+  --uri='https://us-east1-ingestaokraken.cloudfunctions.net/neural_evolution_orchestrator' \
+  --http-method=POST \
+  --attempt-deadline=1800s \
+  --update-headers='Content-Type=application/json' \
+  --message-body='{"strategy":"deterministic_phase2","budget":{"max_trials":1,"max_runtime_minutes":45,"max_parameter_count":150000,"max_layers":4,"random_seed":20260621},"phase2":{"top_fraction":1.0,"parent_limit":10,"include_seed_repeats":false}}'
 ```
 
 ## Configuração do Cloud Scheduler com OIDC
@@ -206,13 +252,13 @@ Use esta forma quando quiser manter o job autenticado. Antes, confirme/crie `sa-
 gcloud scheduler jobs create http neural-evolution-daily \
   --project=ingestaokraken \
   --location=us-east1 \
-  --schedule='45 * * * *' \
+  --schedule='30 * * * *' \
   --time-zone='America/Sao_Paulo' \
   --uri='https://us-east1-ingestaokraken.cloudfunctions.net/neural_evolution_orchestrator' \
   --http-method=POST \
   --attempt-deadline=1800s \
   --headers='Content-Type=application/json' \
-  --message-body='{"strategy":"deterministic_phase1","budget":{"max_trials":1,"max_runtime_minutes":45,"max_parameter_count":150000,"max_layers":4,"random_seed":20260621}}' \
+  --message-body='{"strategy":"deterministic_phase2","budget":{"max_trials":1,"max_runtime_minutes":45,"max_parameter_count":150000,"max_layers":4,"random_seed":20260621},"phase2":{"top_fraction":1.0,"parent_limit":10,"include_seed_repeats":false}}' \
   --oidc-service-account-email='sa-scheduler-invoker@ingestaokraken.iam.gserviceaccount.com' \
   --oidc-token-audience='https://us-east1-ingestaokraken.cloudfunctions.net/neural_evolution_orchestrator'
 ```
@@ -223,13 +269,13 @@ Para alterar um job existente:
 gcloud scheduler jobs update http neural-evolution-daily \
   --project=ingestaokraken \
   --location=us-east1 \
-  --schedule='45 * * * *' \
+  --schedule='30 * * * *' \
   --time-zone='America/Sao_Paulo' \
   --uri='https://us-east1-ingestaokraken.cloudfunctions.net/neural_evolution_orchestrator' \
   --http-method=POST \
   --attempt-deadline=1800s \
   --update-headers='Content-Type=application/json' \
-  --message-body='{"strategy":"deterministic_phase1","budget":{"max_trials":1,"max_runtime_minutes":45,"max_parameter_count":150000,"max_layers":4,"random_seed":20260621}}' \
+  --message-body='{"strategy":"deterministic_phase2","budget":{"max_trials":1,"max_runtime_minutes":45,"max_parameter_count":150000,"max_layers":4,"random_seed":20260621},"phase2":{"top_fraction":1.0,"parent_limit":10,"include_seed_repeats":false}}' \
   --oidc-service-account-email='sa-scheduler-invoker@ingestaokraken.iam.gserviceaccount.com' \
   --oidc-token-audience='https://us-east1-ingestaokraken.cloudfunctions.net/neural_evolution_orchestrator'
 ```

@@ -1022,3 +1022,42 @@
 - Implementada paginação no leaderboard da aba **Redes neurais — Evolução determinística**, exibindo 20 candidatos por página.
 - Adicionada navegação via `TablePagination` com tamanho de página fixo e reset automático para a primeira página quando a lista do leaderboard é atualizada.
 - Validação local planejada com lint/build do frontend após o ajuste.
+
+## 2026-06-23 — Esclarecimento sobre redes neurais mantidas na evolução
+
+- Investigado o significado operacional das 3 redes `Mantidas` exibidas na tela **Redes neurais — Evolução determinística**.
+- Confirmado no frontend que `Mantidas` corresponde aos itens do leaderboard cuja decisão não é `reject`, enquanto `Rejeitadas` corresponde a `decision === 'reject'`.
+- Confirmado no módulo de evolução que as candidatas melhor pontuadas são selecionadas para exploração na Fase 2, onde podem gerar mutações de hiperparâmetros e repetições multi-seed para validar estabilidade.
+- Confirmado na view BigQuery `vw_neural_evolution_leaderboard` que a ordenação/ranking usa `score_total` e `score_directional_precision`, preservando decisão e razões da avaliação.
+- Comandos usados: `rg -n "mantidas|rejeitadas|Redes neurais|Evolução|leaderboard|Fase 1|Fase 2|selected|mantida|aprovad" -S . --glob '!node_modules' --glob '!dist' --glob '!build'`, `sed -n '120,190p' frontend/app/src/components/tabs/NeuralEvolutionTab.tsx`, `sed -n '140,260p' sisacao8/neural_evolution.py`, `sed -n '124,190p' infra/bq/21_neural_evolution.sql` e atualização deste diário.
+
+## 2026-06-23 — Esclarecimento sobre implementação da Fase 2 da evolução neural
+
+- Investigado se a Fase 2 mencionada para as redes neurais mantidas já está implementada no fluxo atual.
+- Confirmado que os blocos de código para seleção do top, mutação de hiperparâmetros e repetição multi-seed existem em `sisacao8/neural_evolution.py` e têm cobertura em `tests/test_neural_evolution.py`.
+- Confirmado que a Cloud Function `neural_evolution_orchestrator` publicada no repositório ainda importa e chama apenas `generate_deterministic_candidates`, ou seja, automatiza a geração determinística da Fase 1, não a cadeia completa de seleção/mutação/repetição da Fase 2.
+- Consultado o diário histórico, que registra uma execução manual/operacional da Fase 2 em 2026-06-21 com 6 candidatos gerados e treinados; conclusão: a Fase 2 existe como capacidade e já foi executada, mas ainda não está totalmente orquestrada automaticamente pelo scheduler/orchestrator atual.
+- Comandos usados: `rg -n "select_top_candidates|mutate_top_candidates|repeat_finalists_with_seeds|deterministic_phase2|phase2|Fase 2|candidate_source|mutation|seed_repeat" functions/neural_evolution_orchestrator sisacao8 tests infra docs -S --glob '!**/__pycache__/**'`, `sed -n '1,360p' functions/neural_evolution_orchestrator/main.py`, `sed -n '70,155p' tests/test_neural_evolution.py` e `sed -n '730,750p' docs/diario/registros1.md`.
+
+## 2026-06-23 — Automação da Fase 2 neural e Scheduler horário no minuto 30
+
+- Implementada no `neural_evolution_orchestrator` a estratégia `deterministic_phase2`, que lê candidatos mantidos em `vw_neural_evolution_leaderboard`, seleciona os melhores pais e gera candidatos de mutação/repetição multi-seed dentro do orçamento configurado.
+- Mantida compatibilidade com `deterministic_phase1`; a seleção da estratégia agora decide entre geração determinística nova e exploração de candidatos já mantidos.
+- Adicionado teste unitário cobrindo o fluxo `deterministic_phase2` com leitura do leaderboard, geração de mutação, persistência em `neural_candidate_configs` e payload de treino com early stopping.
+- Atualizado o runbook do Scheduler para cadência horária no minuto 30 (`30 * * * *`) usando payload `deterministic_phase2`, `max_trials=1`, `max_runtime_minutes=45` e `include_seed_repeats=false`, além dos comandos `gcloud scheduler jobs create/update http` correspondentes.
+- Comandos usados: `rg` para localizar referências de fase/estratégia, edição de `functions/neural_evolution_orchestrator/main.py`, `tests/test_neural_evolution_orchestrator_function.py`, `docs/neural_evolution_orchestrator_scheduler.md` e deste diário, `python -m black functions/neural_evolution_orchestrator/main.py tests/test_neural_evolution_orchestrator_function.py`, `python -m pytest tests/test_neural_evolution_orchestrator_function.py tests/test_neural_evolution.py` e `python -m flake8 functions/neural_evolution_orchestrator/main.py tests/test_neural_evolution_orchestrator_function.py`.
+
+## 2026-06-23 — Diagnóstico de NOT_FOUND no update do Scheduler neural
+
+- Recebido erro local do usuário ao executar `gcloud scheduler jobs update http neural-evolution-daily` com `NOT_FOUND` autenticado como `paulofore@gmail.com`.
+- Verificado via MCP JSON-RPC HTTP em `http://mcpserversisacao.shop/mcp` que o job `neural-evolution-daily` existe em `ingestaokraken/us-east1`, está `ENABLED`, ainda está em `schedule: 45 * * * *` e possui payload `deterministic_phase1`; o job semanal está `PAUSED`.
+- Tentada atualização via MCP com `cloud_scheduler_job_write`, mas a credencial remota `codex-openai@ingestaokraken.iam.gserviceaccount.com` não possui `cloudscheduler.jobs.update`.
+- Atualizado o runbook para explicar que `NOT_FOUND` no update pode indicar falta de permissão/conta ativa incorreta, location/projeto incorreto ou problema com service account OIDC, e para oferecer comando de update sem OIDC quando a função estiver pública.
+- Comandos usados: Python `urllib.request` para `initialize`, `tools/list`, `tools/call`/`cloud_scheduler_job` e `tools/call`/`cloud_scheduler_job_write` via MCP HTTP; edição de `docs/neural_evolution_orchestrator_scheduler.md` e deste diário.
+
+## 2026-06-23 — Registro permanente sobre OIDC no AGENTS
+
+- Adicionada orientação operacional no `AGENTS.md` para evitar repetir erros ao sugerir comandos de Cloud Scheduler com OIDC.
+- Registrado que comandos com `--oidc-service-account-email` só devem ser sugeridos após validar existência da service account, `roles/run.invoker`, `roles/iam.serviceAccountUser` para a conta que executa o `gcloud` e permissões de Cloud Scheduler.
+- Registrado que, para funções públicas, o caminho preferencial é atualizar/criar o Scheduler sem OIDC, e que `NOT_FOUND` no `gcloud scheduler jobs update http` deve levar a checagem de conta ativa, projeto, location e permissões antes de concluir que o job não existe.
+- Comandos usados: `sed -n '1,260p' AGENTS.md`, edição de `AGENTS.md` e atualização deste diário.

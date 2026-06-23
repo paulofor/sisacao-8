@@ -23,6 +23,7 @@ class _FakeClient:
         self.loaded = []
         self.queries = []
         self.registry_by_version = {}
+        self.leaderboard_rows = []
 
     def query(self, query, job_config=None):
         self.queries.append((query, job_config))
@@ -34,6 +35,11 @@ class _FakeClient:
             return _FakeQueryJob([{"value": "label_eod_barrier_v1"}])
         if "SELECT dedupe_hash" in query:
             return _FakeQueryJob([])
+        if (
+            "FROM `ingestaokraken.cotacao_intraday.vw_neural_evolution_leaderboard`"
+            in query
+        ):
+            return _FakeQueryJob(self.leaderboard_rows)
         if "FROM `ingestaokraken.cotacao_intraday.neural_model_registry`" in query:
             return _FakeQueryJob([next(iter(self.registry_by_version.values()))])
         if query.strip().startswith("UPDATE"):
@@ -100,6 +106,82 @@ def test_orchestrator_generates_trains_scores_and_persists(monkeypatch):
     evaluation_rows = fake_client.loaded[-1][1]
     assert evaluation_rows[0]["decision"] in {"keep_candidate", "shadow_candidate"}
     assert evaluation_rows[0]["score_total"] > 0
+
+
+def test_orchestrator_phase2_uses_kept_leaderboard_candidates(monkeypatch):
+    fake_client = _FakeClient()
+    fake_client.leaderboard_rows = [
+        {
+            "candidate_id": "parent-1",
+            "evolution_run_id": "run-phase1",
+            "model_version": "neural_eod_mlp_evo1_01",
+            "model_id": "neural_eod_mlp",
+            "candidate_source": "deterministic",
+            "architecture_json": {
+                "type": "mlp",
+                "hidden_units": [128, 64],
+                "batch_norm": False,
+            },
+            "hyperparameters_json": {
+                "dropout_rate": 0.15,
+                "learning_rate": 0.001,
+                "batch_size": 256,
+                "epochs": 40,
+                "random_seed": 20260621,
+                "early_stopping": True,
+                "early_stopping_patience": 8,
+                "class_weight": "balanced",
+            },
+            "score_total": 0.42,
+            "score_directional_precision": 0.35,
+            "score_coverage": 0.30,
+            "score_generalization": 0.10,
+            "score_stability": 0.10,
+            "score_cost_penalty": 0.01,
+            "decision": "keep_candidate",
+            "decision_reasons_json": [],
+        }
+    ]
+    monkeypatch.setattr(module, "_BQ_CLIENT", fake_client)
+
+    def fake_invoke_training(payload):
+        fake_client.registry_by_version[payload["model_version"]] = {
+            "model_version": payload["model_version"],
+            "metrics_json": {
+                "train": {"accuracy": 0.50},
+                "validation": {"accuracy": 0.46, "directional_precision": 0.42},
+                "test": {
+                    "accuracy": 0.44,
+                    "coverage": 0.35,
+                    "directional_precision": 0.43,
+                },
+            },
+        }
+        return {"status": "ok", "model_version": payload["model_version"]}
+
+    monkeypatch.setattr(module, "_invoke_training", fake_invoke_training)
+
+    response, status = module.neural_evolution_orchestrator(
+        _Request(
+            {
+                "evolution_run_id": "run-phase2",
+                "strategy": "deterministic_phase2",
+                "model_version_prefix": "evo2_test",
+                "budget": {"max_trials": 1, "random_seed": 42},
+            }
+        )
+    )
+
+    assert status == 200
+    assert response["candidate_count"] == 1
+    assert response["candidates"] == ["evo2_test_mutation_01"]
+    config_rows = next(
+        rows
+        for table, rows in fake_client.loaded
+        if table == "ingestaokraken.cotacao_intraday.neural_candidate_configs"
+    )
+    assert config_rows[0]["candidate_source"] == "mutation"
+    assert config_rows[0]["training_request_json"]["early_stopping"] is True
 
 
 def test_orchestrator_dry_run_does_not_persist_or_call_training(monkeypatch):
