@@ -995,3 +995,11 @@
 - Confirmado que o `neural-evolution-weekly` ainda permanece `ENABLED` com agenda `0 6 * * 1`; foi tentado pausar pelo MCP, mas a credencial remota `codex-openai@ingestaokraken.iam.gserviceaccount.com` ainda não possui `cloudscheduler.jobs.pause`.
 - Conclusão operacional: o Scheduler diário foi criado corretamente, mas ainda é necessário pausar/remover o semanal por um terminal autenticado com permissão de escrita para evitar duas execuções na segunda-feira.
 - Comandos usados: `curl`/Python `urllib.request` para `initialize`, `tools/call`/`cloud_scheduler_job` em `neural-evolution-daily` e `neural-evolution-weekly`, tentativa de `tools/call`/`cloud_scheduler_job_write` com `action=pause`, e decodificação local do payload base64 com Python.
+
+## 2026-06-23 — Proposta de Scheduler horário para evolução neural
+
+- Avaliada a mudança da execução de evolução neural de uma vez ao dia para execução horária no minuto 45, mantendo o job `neural-evolution-daily` e alterando sua agenda para `45 * * * *`.
+- Atualizado o runbook `docs/neural_evolution_orchestrator_scheduler.md` para recomendar orçamento menor por rodada (`max_trials=1`, `max_runtime_minutes=45`) na cadência horária, reduzindo risco de custo e sobreposição de treinos.
+- Tentada a aplicação pelo MCP via JSON-RPC HTTP em `http://mcpserversisacao.shop/mcp` usando `cloud_scheduler_job_write`, mas a credencial remota `codex-openai@ingestaokraken.iam.gserviceaccount.com` não possui `cloudscheduler.jobs.update` para alterar `neural-evolution-daily`.
+- Conclusão operacional: a mudança é tecnicamente adequada se cada rodada for pequena e idempotente; a alteração real no GCP ainda precisa ser aplicada por uma credencial com permissão de update no Cloud Scheduler.
+- Comandos usados: `rg` para localizar referências de Scheduler neural, edição de `docs/neural_evolution_orchestrator_scheduler.md`, Python `urllib.request` para `initialize` e `tools/call`/`cloud_scheduler_job_write` via MCP HTTP, e atualização deste diário.
