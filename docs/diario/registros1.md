@@ -1010,3 +1010,10 @@
 - O card `Aguardando avaliação` foi substituído por `Ainda faltam`, calculado como `Redes no estoque - Avaliações feitas`, deixando explícita a conta exibida para o usuário.
 - Adicionado bloco explicativo `Como ler estes números`, detalhando quantas redes estão registradas em Treinos, quantas avaliações existem no leaderboard, quantas foram mantidas/rejeitadas e uma observação técnica separada para versões únicas de modelo.
 - Comandos usados: `rg -n "Aguardando|AGUARDANDO|avaliadas|Avaliadas|Redes candidatas|CANDIDATAS|não entraram|nao entraram|Mantidas|Rejeitadas" -S .`, `nl -ba frontend/app/src/components/tabs/NeuralEvolutionTab.tsx`, consulta Python via `urllib.request` aos endpoints `http://34.194.252.70/api/ops/neural/training-runs` e `http://34.194.252.70/api/ops/neural/evolution/leaderboard`, `npm run lint` e `npm run build`.
+
+## 2026-06-23 — Documento de diagnóstico diário da evolução neural EOD
+
+- Criado `docs/planejamento/diagnostico-evolucao-redes-neurais-eod.md` para consolidar o diagnóstico operacional sobre redes aparentemente iguais no leaderboard, significado de MLP, prioridade de arquiteturas candidatas e plano diário de evolução.
+- Registrado que o fluxo atual deve priorizar variações de MLP/tabular MLP antes de avançar para arquiteturas sequenciais como TCN, GRU, LSTM e Transformer, pois o dataset e a governança atuais são tabulares.
+- Incluídos critérios práticos para comparar candidatos por `candidate_id`, `evolution_run_id`, arquitetura, hiperparâmetros, score, precisão direcional, cobertura, generalização, estabilidade e decisão.
+- Comandos usados: `git status --short`, leitura de `AGENTS.md` e criação do documento/registro via shell redirection.
