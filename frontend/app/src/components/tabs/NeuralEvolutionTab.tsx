@@ -10,11 +10,12 @@ import {
   TableCell,
   TableContainer,
   TableHead,
+  TablePagination,
   TableRow,
   Typography,
 } from '@mui/material'
 import dayjs from 'dayjs'
-import type { FC } from 'react'
+import { useEffect, useMemo, useState, type FC } from 'react'
 
 import type { NeuralEvolutionLeaderboardEntry, NeuralTrainingRun } from '../../api/ops'
 
@@ -58,12 +59,23 @@ const compactJson = (value: string | null | undefined) => {
   }
 }
 
+const LEADERBOARD_ROWS_PER_PAGE = 20
+
 const NeuralEvolutionTab: FC<NeuralEvolutionTabProps> = ({
   leaderboard,
   leaderboardError,
   leaderboardLoading,
   trainingRuns = [],
 }) => {
+  const [leaderboardPage, setLeaderboardPage] = useState(0)
+  const paginatedLeaderboard = useMemo(
+    () =>
+      leaderboard.slice(
+        leaderboardPage * LEADERBOARD_ROWS_PER_PAGE,
+        leaderboardPage * LEADERBOARD_ROWS_PER_PAGE + LEADERBOARD_ROWS_PER_PAGE,
+      ),
+    [leaderboard, leaderboardPage],
+  )
   const latestRun = leaderboard[0]?.evolutionRunId ?? '—'
   const kept = leaderboard.filter((entry) => entry.decision !== 'reject').length
   const rejected = leaderboard.filter((entry) => entry.decision === 'reject').length
@@ -72,6 +84,10 @@ const NeuralEvolutionTab: FC<NeuralEvolutionTabProps> = ({
   const totalCandidates = trainingRuns.length || leaderboard.length
   const waitingEvaluation = Math.max(0, totalCandidates - leaderboard.length)
   const waitingByModelVersion = Math.max(0, totalCandidates - evaluatedModels)
+
+  useEffect(() => {
+    setLeaderboardPage(0)
+  }, [leaderboard])
 
   return (
     <Stack spacing={3}>
@@ -188,7 +204,7 @@ const NeuralEvolutionTab: FC<NeuralEvolutionTabProps> = ({
                 </TableRow>
               </TableHead>
               <TableBody>
-                {leaderboard.map((entry) => (
+                {paginatedLeaderboard.map((entry) => (
                   <TableRow key={entry.candidateId} hover>
                     <TableCell>{entry.rankInRun ?? '—'}</TableCell>
                     <TableCell>
@@ -215,6 +231,18 @@ const NeuralEvolutionTab: FC<NeuralEvolutionTabProps> = ({
                 ))}
               </TableBody>
             </Table>
+            <TablePagination
+              component="div"
+              count={leaderboard.length}
+              page={leaderboardPage}
+              onPageChange={(_, nextPage) => setLeaderboardPage(nextPage)}
+              rowsPerPage={LEADERBOARD_ROWS_PER_PAGE}
+              rowsPerPageOptions={[LEADERBOARD_ROWS_PER_PAGE]}
+              labelRowsPerPage="Linhas por página"
+              labelDisplayedRows={({ from, to, count }) =>
+                `${from}–${to} de ${count !== -1 ? count : `mais de ${to}`}`
+              }
+            />
           </TableContainer>
         </>
       ) : null}

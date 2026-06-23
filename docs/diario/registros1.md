@@ -1017,3 +1017,8 @@
 - Registrado que o fluxo atual deve priorizar variações de MLP/tabular MLP antes de avançar para arquiteturas sequenciais como TCN, GRU, LSTM e Transformer, pois o dataset e a governança atuais são tabulares.
 - Incluídos critérios práticos para comparar candidatos por `candidate_id`, `evolution_run_id`, arquitetura, hiperparâmetros, score, precisão direcional, cobertura, generalização, estabilidade e decisão.
 - Comandos usados: `git status --short`, leitura de `AGENTS.md` e criação do documento/registro via shell redirection.
+
+## 2026-06-23 12:35:43 UTC-3
+- Implementada paginação no leaderboard da aba **Redes neurais — Evolução determinística**, exibindo 20 candidatos por página.
+- Adicionada navegação via `TablePagination` com tamanho de página fixo e reset automático para a primeira página quando a lista do leaderboard é atualizada.
+- Validação local planejada com lint/build do frontend após o ajuste.
