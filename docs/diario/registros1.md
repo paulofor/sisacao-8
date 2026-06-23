@@ -1003,3 +1003,10 @@
 - Tentada a aplicação pelo MCP via JSON-RPC HTTP em `http://mcpserversisacao.shop/mcp` usando `cloud_scheduler_job_write`, mas a credencial remota `codex-openai@ingestaokraken.iam.gserviceaccount.com` não possui `cloudscheduler.jobs.update` para alterar `neural-evolution-daily`.
 - Conclusão operacional: a mudança é tecnicamente adequada se cada rodada for pequena e idempotente; a alteração real no GCP ainda precisa ser aplicada por uma credencial com permissão de update no Cloud Scheduler.
 - Comandos usados: `rg` para localizar referências de Scheduler neural, edição de `docs/neural_evolution_orchestrator_scheduler.md`, Python `urllib.request` para `initialize` e `tools/call`/`cloud_scheduler_job_write` via MCP HTTP, e atualização deste diário.
+
+## 2026-06-23 — Comunicação do funil de evolução neural
+
+- Melhorada a comunicação do mapa visual de evolução neural para evitar a interpretação ambígua entre estoque total de redes, avaliações materializadas e versões únicas de modelo.
+- O card `Aguardando avaliação` foi substituído por `Ainda faltam`, calculado como `Redes no estoque - Avaliações feitas`, deixando explícita a conta exibida para o usuário.
+- Adicionado bloco explicativo `Como ler estes números`, detalhando quantas redes estão registradas em Treinos, quantas avaliações existem no leaderboard, quantas foram mantidas/rejeitadas e uma observação técnica separada para versões únicas de modelo.
+- Comandos usados: `rg -n "Aguardando|AGUARDANDO|avaliadas|Avaliadas|Redes candidatas|CANDIDATAS|não entraram|nao entraram|Mantidas|Rejeitadas" -S .`, `nl -ba frontend/app/src/components/tabs/NeuralEvolutionTab.tsx`, consulta Python via `urllib.request` aos endpoints `http://34.194.252.70/api/ops/neural/training-runs` e `http://34.194.252.70/api/ops/neural/evolution/leaderboard`, `npm run lint` e `npm run build`.
