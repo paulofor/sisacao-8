@@ -17,6 +17,7 @@ from google.cloud import bigquery  # type: ignore[import-untyped]
 from sisacao8.neural_dataset import (
     BarrierLabelConfig,
     TemporalSplitConfig,
+    build_dataset_manifest,
     build_training_dataset,
 )
 
@@ -29,6 +30,11 @@ HOLIDAYS_TABLE_ID = os.environ.get("BQ_HOLIDAYS_TABLE", "feriados_b3")
 TRAINING_DATASET_TABLE_ID = os.environ.get(
     "BQ_NEURAL_TRAINING_DATASET_TABLE", "neural_eod_training_dataset"
 )
+MANIFESTS_TABLE_ID = os.environ.get(
+    "BQ_NEURAL_DATASET_MANIFESTS_TABLE", "neural_dataset_manifests"
+)
+PROTOCOL_VERSION = os.environ.get("NEURAL_PROTOCOL_VERSION", "neural_eod_protocol_v1")
+UNIVERSE_VERSION = os.environ.get("NEURAL_UNIVERSE_VERSION", "b3_point_in_time_v1")
 BQ_LOCATION = os.environ.get("BQ_LOCATION", "us-east1").replace("region-", "")
 DEFAULT_LOOKBACK_DAYS = int(os.environ.get("NEURAL_TRAINING_LOOKBACK_DAYS", "1825"))
 DEFAULT_MIN_HISTORY_DAYS = int(os.environ.get("NEURAL_TRAINING_MIN_HISTORY_DAYS", "20"))
@@ -67,19 +73,31 @@ def neural_training_dataset(request: Any) -> tuple[Dict[str, Any], int]:
 
     candles = _load_candles(client, start_date, end_date)
     holidays = _load_holidays(client, start_date, end_date + dt.timedelta(days=30))
+    label_config = _label_config(payload)
+    split_config = _split_config(payload, label_config)
     dataset = build_training_dataset(
         candles,
         holidays=holidays,
-        label_config=_label_config(payload),
-        split_config=_split_config(payload),
+        label_config=label_config,
+        split_config=split_config,
         min_history_days=_int_payload(
             payload, "min_history_days", DEFAULT_MIN_HISTORY_DAYS
         ),
     )
-    dataset = _prepare_for_bigquery(dataset, snapshot)
+    manifest = build_dataset_manifest(
+        dataset,
+        dataset_snapshot=snapshot,
+        protocol_version=str(payload.get("protocol_version") or PROTOCOL_VERSION),
+        universe_version=str(payload.get("universe_version") or UNIVERSE_VERSION),
+        query_text=_candles_query_text(),
+        code_text=_dataset_code_contract(),
+        label_config=label_config,
+    )
+    dataset = _prepare_for_bigquery(dataset, snapshot, manifest.to_json_dict())
     if replace_snapshot:
         _delete_snapshot(client, snapshot)
     inserted = _load_dataset(client, dataset)
+    _load_manifest(client, manifest.to_json_dict())
     split_counts = _split_counts(dataset)
 
     logging.info(
@@ -96,6 +114,7 @@ def neural_training_dataset(request: Any) -> tuple[Dict[str, Any], int]:
         "end_date": end_date.isoformat(),
         "rows": inserted,
         "splits": split_counts,
+        "manifest": manifest.to_json_dict(),
     }, 200
 
 
@@ -174,14 +193,22 @@ def _label_config(payload: Mapping[str, Any]) -> BarrierLabelConfig:
     )
 
 
-def _split_config(payload: Mapping[str, Any]) -> TemporalSplitConfig:
+def _split_config(
+    payload: Mapping[str, Any], label_config: BarrierLabelConfig | None = None
+) -> TemporalSplitConfig:
     defaults = TemporalSplitConfig()
+    horizon_days = (label_config or BarrierLabelConfig()).horizon_days
+    embargo_days = _int_payload(
+        payload, "embargo_days", max(defaults.embargo_days, horizon_days)
+    )
+    if embargo_days < horizon_days:
+        raise ValueError("embargo_days must be greater than or equal to horizon_days")
     return TemporalSplitConfig(
         train_pct=_float_payload(payload, "train_pct", defaults.train_pct),
         validation_pct=_float_payload(
             payload, "validation_pct", defaults.validation_pct
         ),
-        embargo_days=_int_payload(payload, "embargo_days", defaults.embargo_days),
+        embargo_days=embargo_days,
     )
 
 
@@ -190,10 +217,8 @@ def _table_ref(table_id: str) -> str:
     return f"{client.project}.{DATASET_ID}.{table_id}"
 
 
-def _load_candles(
-    client: bigquery.Client, start_date: dt.date, end_date: dt.date
-) -> pd.DataFrame:
-    query = f"""
+def _candles_query_text() -> str:
+    return f"""
         SELECT ticker, data_pregao, open, high, low, close,
                qtd_negociada AS volume,
                volume_financeiro AS financial_volume
@@ -201,6 +226,24 @@ def _load_candles(
         WHERE data_pregao BETWEEN @start_date AND @end_date
         ORDER BY ticker, data_pregao
     """
+
+
+def _dataset_code_contract() -> str:
+    return json.dumps(
+        {
+            "builder": "sisacao8.neural_dataset.build_training_dataset",
+            "protocol_version": PROTOCOL_VERSION,
+            "feature_version": "feature_eod_tabular_v2",
+            "label_version": "label_eod_barrier_v2",
+        },
+        sort_keys=True,
+    )
+
+
+def _load_candles(
+    client: bigquery.Client, start_date: dt.date, end_date: dt.date
+) -> pd.DataFrame:
+    query = _candles_query_text()
     job_config = bigquery.QueryJobConfig(
         query_parameters=[
             bigquery.ScalarQueryParameter("start_date", "DATE", start_date),
@@ -237,19 +280,27 @@ def _load_holidays(
         return set()
 
 
-def _prepare_for_bigquery(dataset: pd.DataFrame, snapshot: str) -> pd.DataFrame:
+def _prepare_for_bigquery(
+    dataset: pd.DataFrame, snapshot: str, manifest: Mapping[str, Any]
+) -> pd.DataFrame:
     prepared = dataset.copy()
     prepared["created_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
     prepared["dataset_snapshot"] = snapshot
-    prepared["metadata_json"] = prepared.apply(_metadata_json, axis=1)
+    prepared["metadata_json"] = prepared.apply(
+        lambda row: _metadata_json(row, manifest), axis=1
+    )
     return prepared.where(pd.notnull(prepared), None)
 
 
-def _metadata_json(row: pd.Series) -> dict[str, Any]:
+def _metadata_json(row: pd.Series, manifest: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "builder": "sisacao8.neural_dataset.build_training_dataset",
+        "protocol_version": manifest.get("protocol_version"),
         "feature_version": row.get("feature_version"),
         "label_version": row.get("label_version"),
+        "manifest_query_hash": manifest.get("query_hash"),
+        "manifest_code_hash": manifest.get("code_hash"),
+        "survivorship_policy": manifest.get("survivorship_policy"),
     }
 
 
@@ -279,6 +330,32 @@ def _load_dataset(client: bigquery.Client, dataset: pd.DataFrame) -> int:
     )
     job.result()
     return len(records)
+
+
+def _load_manifest(client: bigquery.Client, manifest: Mapping[str, Any]) -> None:
+    record = {
+        "dataset_snapshot": manifest["dataset_snapshot"],
+        "protocol_version": manifest["protocol_version"],
+        "feature_version": manifest["feature_version"],
+        "label_version": manifest["label_version"],
+        "universe_version": manifest["universe_version"],
+        "start_date": manifest["start_date"],
+        "end_date": manifest["end_date"],
+        "rows": manifest["rows"],
+        "tickers": manifest["tickers"],
+        "query_hash": manifest["query_hash"],
+        "code_hash": manifest["code_hash"],
+        "manifest_json": manifest,
+        "created_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+    }
+    job = client.load_table_from_json(
+        [_json_safe_record(record)],
+        _table_ref(MANIFESTS_TABLE_ID),
+        job_config=bigquery.LoadJobConfig(
+            write_disposition=bigquery.WriteDisposition.WRITE_APPEND
+        ),
+    )
+    job.result()
 
 
 def _json_safe_record(record: Mapping[str, Any]) -> dict[str, Any]:

@@ -8,6 +8,7 @@ from sisacao8.neural_dataset import (
     BarrierLabelConfig,
     TemporalSplitConfig,
     assign_temporal_splits,
+    build_dataset_manifest,
     build_training_dataset,
 )
 
@@ -43,7 +44,7 @@ def test_build_training_dataset_creates_features_labels_and_splits() -> None:
 
     assert not dataset.empty
     assert set(dataset["label_class"]).issubset({"up", "down", "neutral"})
-    assert dataset["feature_version"].eq("feature_eod_tabular_v1").all()
+    assert dataset["feature_version"].eq("feature_eod_tabular_v2").all()
     assert dataset["label_version"].eq("label_eod_barrier_v2").all()
     assert dataset["valid_for"].gt(dataset["reference_date"]).all()
     assert dataset["return_20d"].notna().any()
@@ -109,3 +110,33 @@ def test_label_v2_keeps_trade_open_after_entry_until_later_target() -> None:
     assert (
         row["execution_policy_version"] == "execution_eod_barrier_v2_conservative_daily"
     )
+
+
+def test_dataset_manifest_records_phase2_point_in_time_controls() -> None:
+    dataset = build_training_dataset(
+        _candles(),
+        label_config=BarrierLabelConfig(horizon_days=3, cost_pct=0.001),
+        split_config=TemporalSplitConfig(
+            train_pct=0.5, validation_pct=0.25, embargo_days=3
+        ),
+        min_history_days=20,
+    )
+
+    manifest = build_dataset_manifest(
+        dataset,
+        dataset_snapshot="snapshot_test",
+        query_text="SELECT * FROM candles WHERE data_pregao <= @end_date",
+        label_config=BarrierLabelConfig(horizon_days=3, cost_pct=0.001),
+    ).to_json_dict()
+
+    assert manifest["dataset_snapshot"] == "snapshot_test"
+    assert manifest["protocol_version"] == "neural_eod_protocol_v1"
+    assert manifest["feature_version"] == "feature_eod_tabular_v2"
+    assert manifest["label_version"] == "label_eod_barrier_v2"
+    assert manifest["universe_version"] == "b3_point_in_time_v1"
+    assert len(manifest["query_hash"]) == 64
+    assert len(manifest["code_hash"]) == 64
+    assert manifest["rows"] == len(dataset)
+    assert manifest["tickers"] == 1
+    assert manifest["cost_assumptions"]["cost_pct"] == 0.001
+    assert "embargo_rows" in manifest["quality_summary"]

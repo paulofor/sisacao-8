@@ -47,6 +47,7 @@ class _FakeClient:
     def __init__(self):
         self.queries = []
         self.loaded_rows = []
+        self.loaded_table_ids = []
 
     def query(self, query, job_config=None):
         self.queries.append(query)
@@ -57,6 +58,7 @@ class _FakeClient:
     def load_table_from_json(self, rows, table_id, job_config=None):
         self.loaded_rows.extend(rows)
         self.loaded_table_id = table_id
+        self.loaded_table_ids.append(table_id)
         self.load_job_config = job_config
         return _FakeLoadJob()
 
@@ -82,7 +84,7 @@ def test_neural_training_dataset_materializes_and_loads_rows(monkeypatch):
                 "end_date": "2024-02-14",
                 "dataset_snapshot": "snapshot_test",
                 "horizon_days": 3,
-                "embargo_days": 1,
+                "embargo_days": 3,
             }
         )
     )
@@ -90,16 +92,34 @@ def test_neural_training_dataset_materializes_and_loads_rows(monkeypatch):
     assert status == 200
     assert response["status"] == "ok"
     assert response["dataset_snapshot"] == "snapshot_test"
-    assert response["rows"] == len(fake_client.loaded_rows)
+    dataset_rows = [
+        row for row in fake_client.loaded_rows if row.get("manifest_json") is None
+    ]
+    assert response["rows"] == len(dataset_rows)
     assert response["rows"] > 0
-    assert fake_client.loaded_table_id == (
+    assert (
         "ingestaokraken.cotacao_intraday.neural_eod_training_dataset"
+        in fake_client.loaded_table_ids
+    )
+    assert (
+        "ingestaokraken.cotacao_intraday.neural_dataset_manifests"
+        in fake_client.loaded_table_ids
     )
     assert any("DELETE FROM" in query for query in fake_client.queries)
     first_row = fake_client.loaded_rows[0]
     assert first_row["dataset_snapshot"] == "snapshot_test"
     assert first_row["metadata_json"]["builder"].endswith("build_training_dataset")
-    loaded_splits = {row["dataset_split"] for row in fake_client.loaded_rows}
+    assert first_row["metadata_json"]["protocol_version"] == "neural_eod_protocol_v1"
+    assert first_row["metadata_json"]["manifest_query_hash"]
+    manifest_rows = [
+        row
+        for row in fake_client.loaded_rows
+        if row.get("dataset_snapshot") == "snapshot_test"
+        and row.get("manifest_json") is not None
+    ]
+    assert len(manifest_rows) == 1
+    assert manifest_rows[0]["feature_version"] == "feature_eod_tabular_v2"
+    loaded_splits = {row["dataset_split"] for row in dataset_rows}
     assert {"train", "validation", "test"}.issubset(loaded_splits)
 
 
@@ -162,3 +182,14 @@ def test_json_safe_record_casts_nullable_integer_fields():
         "days_to_event_sell": None,
         "return_5d": 1.25,
     }
+
+
+def test_split_config_requires_embargo_at_least_horizon() -> None:
+    try:
+        module._split_config(
+            {"embargo_days": 2}, module.BarrierLabelConfig(horizon_days=3)
+        )
+    except ValueError as exc:
+        assert "embargo_days" in str(exc)
+    else:
+        raise AssertionError("expected ValueError")
