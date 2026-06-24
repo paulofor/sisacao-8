@@ -14,10 +14,12 @@ from typing import Iterable, Literal
 
 import pandas as pd
 
+from sisacao8.trade_engine import TradeEngineConfig, simulate_eod_barrier_trade
+
 LabelClass = Literal["up", "down", "neutral"]
 
 FEATURE_VERSION = "feature_eod_tabular_v1"
-LABEL_VERSION = "label_eod_barrier_v1"
+LABEL_VERSION = "label_eod_barrier_v2"
 DEFAULT_MIN_HISTORY_DAYS = 20
 
 
@@ -30,6 +32,10 @@ class BarrierLabelConfig:
     stop_pct: float = 0.07
     horizon_days: int = 15
     min_net_return_pct: float = 0.0
+    cost_pct: float = 0.0
+    spread_pct: float = 0.0
+    slippage_pct: float = 0.0
+    borrow_cost_pct: float = 0.0
     version: str = LABEL_VERSION
 
     def __post_init__(self) -> None:
@@ -265,13 +271,16 @@ def _build_labels(candles: pd.DataFrame, config: BarrierLabelConfig) -> pd.DataF
         for idx, candle in enumerate(records[:-1]):
             valid_for = records[idx + 1]["data_pregao"]
             future = records[idx + 1 : idx + 1 + config.horizon_days]
-            buy_return, buy_fill, buy_days = _evaluate_side(
-                candle, future, "BUY", config
-            )
-            sell_return, sell_fill, sell_days = _evaluate_side(
-                candle, future, "SELL", config
-            )
+            buy_result = _evaluate_side(candle, future, "BUY", config)
+            sell_result = _evaluate_side(candle, future, "SELL", config)
+            buy_return = buy_result.net_return
+            sell_return = sell_result.net_return
             label = _choose_label(buy_return, sell_return, config.min_net_return_pct)
+            selected_result = (
+                buy_result
+                if label == "up"
+                else sell_result if label == "down" else None
+            )
             rows.append(
                 {
                     "ticker": ticker,
@@ -282,10 +291,53 @@ def _build_labels(candles: pd.DataFrame, config: BarrierLabelConfig) -> pd.DataF
                     "future_return": max(buy_return, sell_return),
                     "buy_net_return": buy_return,
                     "sell_net_return": sell_return,
-                    "entry_filled_buy": buy_fill,
-                    "entry_filled_sell": sell_fill,
-                    "days_to_event_buy": buy_days,
-                    "days_to_event_sell": sell_days,
+                    "entry_filled_buy": buy_result.entry_filled,
+                    "entry_filled_sell": sell_result.entry_filled,
+                    "days_to_event_buy": buy_result.holding_sessions,
+                    "days_to_event_sell": sell_result.holding_sessions,
+                    "trade_side": (
+                        selected_result.trade_side if selected_result else None
+                    ),
+                    "entry_filled": (
+                        selected_result.entry_filled if selected_result else False
+                    ),
+                    "entry_date": (
+                        selected_result.entry_date if selected_result else None
+                    ),
+                    "entry_price": (
+                        selected_result.entry_price if selected_result else None
+                    ),
+                    "exit_date": selected_result.exit_date if selected_result else None,
+                    "exit_price": (
+                        selected_result.exit_price if selected_result else None
+                    ),
+                    "exit_reason": (
+                        selected_result.exit_reason if selected_result else None
+                    ),
+                    "gross_return": (
+                        selected_result.gross_return if selected_result else 0.0
+                    ),
+                    "net_return": (
+                        selected_result.net_return if selected_result else 0.0
+                    ),
+                    "holding_sessions": (
+                        selected_result.holding_sessions if selected_result else None
+                    ),
+                    "max_adverse_excursion": (
+                        selected_result.max_adverse_excursion
+                        if selected_result
+                        else None
+                    ),
+                    "max_favorable_excursion": (
+                        selected_result.max_favorable_excursion
+                        if selected_result
+                        else None
+                    ),
+                    "execution_policy_version": (
+                        selected_result.execution_policy_version
+                        if selected_result
+                        else TradeEngineConfig().version
+                    ),
                 }
             )
     return pd.DataFrame(rows)
@@ -296,31 +348,30 @@ def _evaluate_side(
     future: list[dict[str, object]],
     side: Literal["BUY", "SELL"],
     config: BarrierLabelConfig,
-) -> tuple[float, bool, int | None]:
+):
     close = float(candle["close"])
     if side == "BUY":
         entry = close * (1 - config.entry_pct)
         target = entry * (1 + config.target_pct)
         stop = entry * (1 - config.stop_pct)
-        for day_number, row in enumerate(future, start=1):
-            if float(row["low"]) <= entry:
-                if float(row["low"]) <= stop:
-                    return -config.stop_pct, True, day_number
-                if float(row["high"]) >= target:
-                    return config.target_pct, True, day_number
-                return (float(row["close"]) - entry) / entry, True, day_number
     else:
         entry = close * (1 + config.entry_pct)
         target = entry * (1 - config.target_pct)
         stop = entry * (1 + config.stop_pct)
-        for day_number, row in enumerate(future, start=1):
-            if float(row["high"]) >= entry:
-                if float(row["high"]) >= stop:
-                    return -config.stop_pct, True, day_number
-                if float(row["low"]) <= target:
-                    return config.target_pct, True, day_number
-                return (entry - float(row["close"])) / entry, True, day_number
-    return 0.0, False, None
+    return simulate_eod_barrier_trade(
+        side=side,
+        entry=entry,
+        target=target,
+        stop=stop,
+        bars=future,
+        config=TradeEngineConfig(
+            horizon_days=config.horizon_days,
+            cost_pct=config.cost_pct,
+            spread_pct=config.spread_pct,
+            slippage_pct=config.slippage_pct,
+            borrow_cost_pct=config.borrow_cost_pct,
+        ),
+    )
 
 
 def _choose_label(

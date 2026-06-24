@@ -8,6 +8,12 @@ from typing import Iterable, List, Mapping, MutableMapping, Sequence
 
 import pandas as pd  # type: ignore[import-untyped]
 
+from sisacao8.trade_engine import (
+    TradeEngineConfig,
+    TradeBar,
+    simulate_eod_barrier_trade,
+)
+
 
 @dataclass(frozen=True)
 class DailyBar:
@@ -177,51 +183,23 @@ def _simulate_signal(
         if bar.date >= signal.valid_for
     ]
     ordered_days = ordered_days[: signal.horizon_days]
-    entry_hit = False
-    entry_fill_date: dt.date | None = None
-    exit_date: dt.date | None = None
-    exit_reason = "NO_FILL"
-    exit_price: float | None = None
-    return_pct: float | None = 0.0
-    mfe_pct: float | None = None
-    mae_pct: float | None = None
-
-    valid_for_bar = next(
-        (bar for bar in ordered_days if bar.date == signal.valid_for),
-        None,
-    )
-    if valid_for_bar is None:
-        exit_reason = "NO_DATA"
-    elif _entry_touched(signal.side, valid_for_bar, signal.entry):
-        entry_hit = True
-        entry_fill_date = valid_for_bar.date
-        for bar in ordered_days:
-            if bar.date < signal.valid_for:
-                continue
-            mfe_pct, mae_pct = _update_excursions(
-                signal.side,
-                signal.entry,
-                bar.high,
-                bar.low,
-                mfe_pct,
-                mae_pct,
+    result = simulate_eod_barrier_trade(
+        side="SELL" if signal.side == "SELL" else "BUY",
+        entry=signal.entry,
+        target=signal.target,
+        stop=signal.stop,
+        bars=[
+            TradeBar(
+                date=bar.date,
+                open=bar.open,
+                high=bar.high,
+                low=bar.low,
+                close=bar.close,
             )
-            reason, price = _check_exit(signal.side, bar, signal.target, signal.stop)
-            if reason:
-                exit_reason = reason
-                exit_price = price
-                exit_date = bar.date
-                break
-        if exit_price is None:
-            exit_reason = "EXPIRE"
-            last_bar = ordered_days[-1] if ordered_days else None
-            if last_bar is not None:
-                exit_price = last_bar.close
-                exit_date = last_bar.date
-    if entry_hit and exit_price is not None:
-        return_pct = _compute_return(signal.side, signal.entry, exit_price)
-    elif not entry_hit:
-        return_pct = 0.0
+            for bar in ordered_days
+        ],
+        config=TradeEngineConfig(horizon_days=signal.horizon_days),
+    )
     return BacktestTrade(
         date_ref=signal.date_ref,
         valid_for=signal.valid_for,
@@ -232,15 +210,23 @@ def _simulate_signal(
         stop=signal.stop,
         horizon_days=signal.horizon_days,
         model_version=signal.model_version,
-        entry_hit=entry_hit,
-        entry_fill_date=entry_fill_date,
-        exit_date=exit_date,
-        exit_reason=exit_reason,
-        exit_price=exit_price,
-        return_pct=return_pct,
-        mfe_pct=mfe_pct,
-        mae_pct=mae_pct,
+        entry_hit=result.entry_filled,
+        entry_fill_date=result.entry_date,
+        exit_date=result.exit_date,
+        exit_reason=_legacy_exit_reason(result.exit_reason),
+        exit_price=result.exit_price,
+        return_pct=result.net_return,
+        mfe_pct=result.max_favorable_excursion,
+        mae_pct=result.max_adverse_excursion,
     )
+
+
+def _legacy_exit_reason(reason: str) -> str:
+    if reason == "EXPIRED_UNFILLED":
+        return "NO_FILL"
+    if reason == "EXPIRED_MARK_TO_MARKET":
+        return "EXPIRE"
+    return reason
 
 
 def _entry_touched(side: str, bar: DailyBar, entry: float) -> bool:

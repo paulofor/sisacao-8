@@ -182,6 +182,8 @@ Exemplo:
 
 ## 7. Fase 1 — Label e motor de execução únicos
 
+**Execução registrada:** [Fase 1 — Label e motor de execução únicos](../implementacao/fase1-muen-label-motor-execucao.md).
+
 Labels, backtest, paper e avaliação operacional devem usar o mesmo motor de estado.
 
 ```text
