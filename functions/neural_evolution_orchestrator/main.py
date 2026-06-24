@@ -20,7 +20,7 @@ from sisacao8.neural_evolution import (
     mutate_top_candidates,
     penalized_score,
     repeat_finalists_with_seeds,
-    select_top_candidates,
+    select_diverse_top_candidates,
 )
 
 PROJECT_ID = os.environ.get("GCP_PROJECT", "ingestaokraken")
@@ -260,9 +260,14 @@ def _generate_phase2_candidates(
     )
     top_fraction = float(phase2_options.get("top_fraction", 1.0))
     parent_limit = int(phase2_options.get("parent_limit", 10))
+    max_parents_per_family = int(phase2_options.get("max_parents_per_family", 1))
     include_seed_repeats = bool(phase2_options.get("include_seed_repeats", True))
     scored_parents = _phase2_parent_candidates(client, limit=parent_limit)
-    top_candidates = select_top_candidates(scored_parents, top_fraction=top_fraction)
+    top_candidates = select_diverse_top_candidates(
+        scored_parents,
+        top_fraction=top_fraction,
+        max_per_family=max_parents_per_family,
+    )
     if not top_candidates:
         raise ValueError("No kept neural candidates available for deterministic_phase2")
 

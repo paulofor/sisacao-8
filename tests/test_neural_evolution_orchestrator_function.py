@@ -184,6 +184,86 @@ def test_orchestrator_phase2_uses_kept_leaderboard_candidates(monkeypatch):
     assert config_rows[0]["training_request_json"]["early_stopping"] is True
 
 
+def test_orchestrator_phase2_consolidates_similar_parent_families(monkeypatch):
+    fake_client = _FakeClient()
+    base_parent = {
+        "candidate_id": "parent-1",
+        "evolution_run_id": "run-phase1",
+        "model_version": "neural_eod_mlp_evo1_01",
+        "model_id": "neural_eod_mlp",
+        "candidate_source": "deterministic",
+        "architecture_json": {
+            "type": "mlp",
+            "hidden_units": [128, 64],
+            "batch_norm": False,
+        },
+        "hyperparameters_json": {
+            "dropout_rate": 0.15,
+            "learning_rate": 0.001,
+            "batch_size": 256,
+            "epochs": 40,
+            "random_seed": 20260621,
+            "early_stopping": True,
+            "early_stopping_patience": 8,
+            "class_weight": "balanced",
+        },
+        "score_total": 0.44,
+        "score_directional_precision": 0.36,
+        "score_coverage": 0.31,
+        "score_generalization": 0.10,
+        "score_stability": 0.10,
+        "score_cost_penalty": 0.01,
+        "decision": "keep_candidate",
+        "decision_reasons_json": [],
+    }
+    repeated_parent = {
+        **base_parent,
+        "candidate_id": "parent-1-repeat",
+        "model_version": "neural_eod_mlp_evo1_01_seed",
+        "hyperparameters_json": {
+            **base_parent["hyperparameters_json"],
+            "random_seed": 20260701,
+        },
+        "score_total": 0.43,
+    }
+    different_family = {
+        **base_parent,
+        "candidate_id": "parent-2",
+        "model_version": "neural_eod_mlp_evo1_02",
+        "hyperparameters_json": {
+            **base_parent["hyperparameters_json"],
+            "dropout_rate": 0.25,
+        },
+        "score_total": 0.42,
+    }
+    fake_client.leaderboard_rows = [base_parent, repeated_parent, different_family]
+    monkeypatch.setattr(module, "_BQ_CLIENT", fake_client)
+
+    candidates = module._generate_phase2_candidates(
+        client=fake_client,
+        evolution_run_id="run-phase2",
+        dataset_snapshot="snapshot_2026",
+        budget=module.EvolutionBudget(max_trials=4, random_seed=42),
+        existing_hashes=set(),
+        model_version_prefix="evo2_test",
+        payload={
+            "phase2": {
+                "top_fraction": 1.0,
+                "parent_limit": 3,
+                "max_parents_per_family": 1,
+                "include_seed_repeats": False,
+            }
+        },
+    )
+
+    parent_notes = [candidate.training_request["notes"] for candidate in candidates]
+
+    assert len(candidates) == 4
+    assert any("neural_eod_mlp_evo1_01" in notes for notes in parent_notes)
+    assert any("neural_eod_mlp_evo1_02" in notes for notes in parent_notes)
+    assert not any("neural_eod_mlp_evo1_01_seed" in notes for notes in parent_notes)
+
+
 def test_orchestrator_dry_run_does_not_persist_or_call_training(monkeypatch):
     fake_client = _FakeClient()
     monkeypatch.setattr(module, "_BQ_CLIENT", fake_client)
