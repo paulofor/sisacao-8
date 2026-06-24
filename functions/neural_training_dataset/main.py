@@ -16,6 +16,7 @@ from google.cloud import bigquery  # type: ignore[import-untyped]
 
 from sisacao8.neural_dataset import (
     BarrierLabelConfig,
+    NestedWalkForwardConfig,
     TemporalSplitConfig,
     build_dataset_manifest,
     build_training_dataset,
@@ -75,11 +76,13 @@ def neural_training_dataset(request: Any) -> tuple[Dict[str, Any], int]:
     holidays = _load_holidays(client, start_date, end_date + dt.timedelta(days=30))
     label_config = _label_config(payload)
     split_config = _split_config(payload, label_config)
+    nested_split_config = _nested_split_config(payload, label_config)
     dataset = build_training_dataset(
         candles,
         holidays=holidays,
         label_config=label_config,
         split_config=split_config,
+        nested_split_config=nested_split_config,
         min_history_days=_int_payload(
             payload, "min_history_days", DEFAULT_MIN_HISTORY_DAYS
         ),
@@ -209,6 +212,30 @@ def _split_config(
             payload, "validation_pct", defaults.validation_pct
         ),
         embargo_days=embargo_days,
+    )
+
+
+def _nested_split_config(
+    payload: Mapping[str, Any], label_config: BarrierLabelConfig | None = None
+) -> NestedWalkForwardConfig | None:
+    split_mode = str(payload.get("split_mode") or "").strip().lower()
+    if split_mode not in {"nested_expanding_walk_forward", "expanding_walk_forward"}:
+        return None
+    horizon_days = (label_config or BarrierLabelConfig()).horizon_days
+    embargo_sessions = _int_payload(
+        payload, "embargo_sessions", _int_payload(payload, "embargo_days", horizon_days)
+    )
+    if embargo_sessions < horizon_days:
+        raise ValueError(
+            "embargo_sessions must be greater than or equal to horizon_days"
+        )
+    return NestedWalkForwardConfig(
+        min_train_sessions=_int_payload(payload, "min_train_sessions", 504),
+        outer_folds=_int_payload(payload, "outer_folds", 5),
+        outer_test_sessions=_int_payload(payload, "outer_test_sessions", 63),
+        calibration_sessions=_int_payload(payload, "calibration_sessions", 42),
+        embargo_sessions=embargo_sessions,
+        locked_holdout_sessions=_int_payload(payload, "locked_holdout_sessions", 126),
     )
 
 

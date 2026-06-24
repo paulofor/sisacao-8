@@ -52,6 +52,84 @@ class BarrierLabelConfig:
 
 
 @dataclass(frozen=True)
+class NestedWalkForwardConfig:
+    """MUEN Phase 3 temporal protocol for nested expanding walk-forward."""
+
+    min_train_sessions: int = 504
+    outer_folds: int = 5
+    outer_test_sessions: int = 63
+    calibration_sessions: int = 42
+    embargo_sessions: int = 15
+    locked_holdout_sessions: int = 126
+    split_mode: str = "expanding_walk_forward"
+
+    def __post_init__(self) -> None:
+        positive_fields = {
+            "min_train_sessions": self.min_train_sessions,
+            "outer_folds": self.outer_folds,
+            "outer_test_sessions": self.outer_test_sessions,
+            "calibration_sessions": self.calibration_sessions,
+            "locked_holdout_sessions": self.locked_holdout_sessions,
+        }
+        for name, value in positive_fields.items():
+            if value < 1:
+                raise ValueError(f"{name} must be positive")
+        if self.embargo_sessions < 0:
+            raise ValueError("embargo_sessions cannot be negative")
+        if self.split_mode != "expanding_walk_forward":
+            raise ValueError("split_mode must be expanding_walk_forward")
+
+
+@dataclass(frozen=True)
+class WalkForwardFold:
+    """One outer research fold with train, calibration and outer test windows."""
+
+    fold_id: str
+    train_start: dt.date
+    train_end: dt.date
+    calibration_start: dt.date
+    calibration_end: dt.date
+    outer_test_start: dt.date
+    outer_test_end: dt.date
+    train_sessions: int
+    calibration_sessions: int
+    outer_test_sessions: int
+
+    def to_json_dict(self) -> dict[str, Any]:
+        payload = asdict(self)
+        for key in (
+            "train_start",
+            "train_end",
+            "calibration_start",
+            "calibration_end",
+            "outer_test_start",
+            "outer_test_end",
+        ):
+            payload[key] = payload[key].isoformat()
+        return payload
+
+
+@dataclass(frozen=True)
+class NestedWalkForwardPlan:
+    """Auditable MUEN Phase 3 plan with blocked holdout metadata."""
+
+    config: NestedWalkForwardConfig
+    folds: tuple[WalkForwardFold, ...]
+    locked_holdout_start: dt.date
+    locked_holdout_end: dt.date
+    total_sessions: int
+
+    def to_json_dict(self) -> dict[str, Any]:
+        return {
+            "config": asdict(self.config),
+            "folds": [fold.to_json_dict() for fold in self.folds],
+            "locked_holdout_start": self.locked_holdout_start.isoformat(),
+            "locked_holdout_end": self.locked_holdout_end.isoformat(),
+            "total_sessions": self.total_sessions,
+        }
+
+
+@dataclass(frozen=True)
 class DatasetSnapshotManifest:
     """Audit manifest for an immutable point-in-time neural dataset snapshot."""
 
@@ -70,6 +148,7 @@ class DatasetSnapshotManifest:
     label_distribution: dict[str, int]
     quality_summary: dict[str, int]
     cost_assumptions: dict[str, float]
+    temporal_protocol: dict[str, Any] | None
     calendar_version: str
     corporate_actions_policy: str
     survivorship_policy: str
@@ -106,6 +185,7 @@ def build_training_dataset(
     holidays: Iterable[dt.date] | None = None,
     label_config: BarrierLabelConfig | None = None,
     split_config: TemporalSplitConfig | None = None,
+    nested_split_config: NestedWalkForwardConfig | None = None,
     min_history_days: int = DEFAULT_MIN_HISTORY_DAYS,
 ) -> pd.DataFrame:
     """Return a supervised neural EOD dataset from daily OHLCV candles.
@@ -130,9 +210,18 @@ def build_training_dataset(
         dataset = dataset[~dataset["reference_date"].isin(holiday_set)]
         dataset = dataset[~dataset["valid_for"].isin(holiday_set)]
     dataset = dataset.sort_values(["reference_date", "ticker"]).reset_index(drop=True)
-    dataset["dataset_split"] = assign_temporal_splits(
-        dataset["reference_date"], split_config
-    )
+    if nested_split_config is not None:
+        plan = build_nested_walk_forward_plan(
+            dataset["reference_date"], nested_split_config
+        )
+        dataset["dataset_split"] = assign_research_holdout_split(
+            dataset["reference_date"], nested_split_config
+        )
+        dataset["temporal_protocol_json"] = [plan.to_json_dict()] * len(dataset)
+    else:
+        dataset["dataset_split"] = assign_temporal_splits(
+            dataset["reference_date"], split_config
+        )
     return dataset
 
 
@@ -240,10 +329,18 @@ def build_dataset_manifest(
             "slippage_pct": float(label_config.slippage_pct),
             "borrow_cost_pct": float(label_config.borrow_cost_pct),
         },
+        temporal_protocol=_manifest_temporal_protocol(dataset),
         calendar_version=calendar_version,
         corporate_actions_policy=corporate_actions_policy,
         survivorship_policy=survivorship_policy,
     )
+
+
+def _manifest_temporal_protocol(dataset: pd.DataFrame) -> dict[str, Any] | None:
+    if "temporal_protocol_json" not in dataset or dataset.empty:
+        return None
+    values = dataset["temporal_protocol_json"].dropna().tolist()
+    return values[0] if values else None
 
 
 def _stable_hash(text: str) -> str:
@@ -520,3 +617,98 @@ def _choose_label(
     if sell_return > buy_return and sell_return > min_net_return_pct:
         return "down"
     return "neutral"
+
+
+def build_nested_walk_forward_plan(
+    reference_dates: pd.Series,
+    config: NestedWalkForwardConfig | None = None,
+) -> NestedWalkForwardPlan:
+    """Build MUEN Phase 3 nested expanding walk-forward windows.
+
+    The most recent ``locked_holdout_sessions`` dates are isolated and never
+    assigned to research folds. Each fold has an expanding train window, an
+    exclusive calibration window and an outer test window separated by embargo
+    sessions so labels that cross boundaries are purged from tuning data.
+    """
+
+    config = config or NestedWalkForwardConfig()
+    unique_dates = sorted(pd.to_datetime(reference_dates).dt.date.unique())
+    required = (
+        config.min_train_sessions
+        + config.embargo_sessions
+        + config.calibration_sessions
+        + config.embargo_sessions
+        + (config.outer_folds * config.outer_test_sessions)
+        + config.locked_holdout_sessions
+    )
+    if len(unique_dates) < required:
+        raise ValueError(
+            "not enough sessions for nested walk-forward: "
+            f"got {len(unique_dates)}, require at least {required}"
+        )
+
+    holdout_start_idx = len(unique_dates) - config.locked_holdout_sessions
+    research_dates = unique_dates[:holdout_start_idx]
+    holdout_dates = unique_dates[holdout_start_idx:]
+    first_test_start = len(research_dates) - (
+        config.outer_folds * config.outer_test_sessions
+    )
+    folds: list[WalkForwardFold] = []
+    for index in range(config.outer_folds):
+        test_start = first_test_start + (index * config.outer_test_sessions)
+        test_end = test_start + config.outer_test_sessions
+        calibration_end = test_start - config.embargo_sessions
+        calibration_start = calibration_end - config.calibration_sessions
+        train_end = calibration_start - config.embargo_sessions
+        if train_end < config.min_train_sessions:
+            raise ValueError(
+                "not enough train sessions before fold "
+                f"{index + 1}: got {train_end}, require {config.min_train_sessions}"
+            )
+        train_dates = research_dates[:train_end]
+        calibration_dates = research_dates[calibration_start:calibration_end]
+        outer_test_dates = research_dates[test_start:test_end]
+        folds.append(
+            WalkForwardFold(
+                fold_id=f"fold_{index + 1}",
+                train_start=train_dates[0],
+                train_end=train_dates[-1],
+                calibration_start=calibration_dates[0],
+                calibration_end=calibration_dates[-1],
+                outer_test_start=outer_test_dates[0],
+                outer_test_end=outer_test_dates[-1],
+                train_sessions=len(train_dates),
+                calibration_sessions=len(calibration_dates),
+                outer_test_sessions=len(outer_test_dates),
+            )
+        )
+    return NestedWalkForwardPlan(
+        config=config,
+        folds=tuple(folds),
+        locked_holdout_start=holdout_dates[0],
+        locked_holdout_end=holdout_dates[-1],
+        total_sessions=len(unique_dates),
+    )
+
+
+def assign_research_holdout_split(
+    reference_dates: pd.Series,
+    config: NestedWalkForwardConfig | None = None,
+) -> pd.Series:
+    """Classify rows as research or locked_holdout for MUEN Phase 3.
+
+    This coarse split is safe for persisted datasets and UIs. The detailed,
+    overlapping fold windows are stored in the manifest via
+    ``build_nested_walk_forward_plan`` and should be used by training/HPO jobs.
+    """
+
+    plan = build_nested_walk_forward_plan(reference_dates, config)
+    holdout_start = plan.locked_holdout_start
+
+    def classify(value: object) -> str:
+        date_value = pd.Timestamp(value).date()
+        if date_value >= holdout_start:
+            return "locked_holdout"
+        return "research"
+
+    return reference_dates.map(classify)

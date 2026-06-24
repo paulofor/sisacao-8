@@ -1128,3 +1128,11 @@
 - Investigado o erro de deploy da Cloud Function Gen2 `neural_training` reportado às 2026-06-24 16:45 UTC-3 (19:45 UTC), em que a revisão `neural-training-00021-yip` falhou no healthcheck por não iniciar o Functions Framework na porta `PORT=8080`.
 - Confirmada a causa via MCP JSON-RPC HTTP em `http://mcpserversisacao.shop/mcp`, usando `initialize` e `tools/call` com `cloud_run_function_logs(function_name=neural_training, hours=2, limit=80)`: o container falhava durante import de `/workspace/main.py` com `ModuleNotFoundError: No module named 'sisacao8.trade_engine'`.
 - Corrigida a causa ao incluir a cópia vendorizada de `sisacao8/trade_engine.py` em `functions/neural_training/sisacao8/trade_engine.py`, pois `functions/neural_training/sisacao8/neural_dataset.py` importa `TradeEngineConfig` e `simulate_eod_barrier_trade` no ambiente isolado da função.
+
+## 2026-06-24 — Fase 3 MUEN: protocolo temporal
+
+- Executei a Fase 3 do documento `docs/planejamento/metodo-unificado-evolucao-neural-sisacao.md`, implementando o plano nested expanding walk-forward em `sisacao8.neural_dataset`.
+- Ferramentas/comandos usados para confirmar o escopo e a causa da lacuna: `sed -n` no documento MUEN, `rg -n "walk|fold|holdout|split|neural"` e inspeção de `functions/neural_training_dataset/main.py`, `sisacao8/neural_dataset.py` e testes existentes.
+- Correção aplicada: adição de `NestedWalkForwardConfig`, `WalkForwardFold`, `NestedWalkForwardPlan`, geração de folds externos com calibração exclusiva, embargo e locked holdout bloqueado; a Cloud Function `neural_training_dataset` agora aceita `split_mode=nested_expanding_walk_forward`/`expanding_walk_forward` e parâmetros da Fase 3; o schema BigQuery passou a aceitar `temporal_protocol_json`.
+- Validação adicionada: testes unitários para bloqueio do holdout, embargo entre janelas, expansão do treino por fold e rejeição de histórico insuficiente.
+- Documento de implementação criado em `docs/implementacao/fase3-muen-protocolo-temporal.md`, registrando objetivo, configuração padrão, regras de segurança e próximos passos da Fase 3.

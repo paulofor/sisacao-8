@@ -45,7 +45,8 @@ CREATE TABLE IF NOT EXISTS `ingestaokraken.cotacao_intraday.neural_eod_training_
   days_to_event_sell INT64,
   created_at TIMESTAMP NOT NULL,
   dataset_snapshot STRING NOT NULL,
-  metadata_json JSON
+  metadata_json JSON,
+  temporal_protocol_json JSON
 )
 PARTITION BY reference_date
 CLUSTER BY ticker, feature_version, label_version, dataset_split
