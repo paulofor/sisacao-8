@@ -9,15 +9,19 @@ can be reused by batch extraction jobs and unit tests.
 from __future__ import annotations
 
 import datetime as dt
-from dataclasses import dataclass
-from typing import Iterable, Literal
+import hashlib
+from dataclasses import asdict, dataclass
+from typing import Any, Iterable, Literal
 
+import numpy as np
 import pandas as pd
+
+from sisacao8.trade_engine import TradeEngineConfig, simulate_eod_barrier_trade
 
 LabelClass = Literal["up", "down", "neutral"]
 
-FEATURE_VERSION = "feature_eod_tabular_v1"
-LABEL_VERSION = "label_eod_barrier_v1"
+FEATURE_VERSION = "feature_eod_tabular_v2"
+LABEL_VERSION = "label_eod_barrier_v2"
 DEFAULT_MIN_HISTORY_DAYS = 20
 
 
@@ -30,6 +34,10 @@ class BarrierLabelConfig:
     stop_pct: float = 0.07
     horizon_days: int = 15
     min_net_return_pct: float = 0.0
+    cost_pct: float = 0.0
+    spread_pct: float = 0.0
+    slippage_pct: float = 0.0
+    borrow_cost_pct: float = 0.0
     version: str = LABEL_VERSION
 
     def __post_init__(self) -> None:
@@ -41,6 +49,37 @@ class BarrierLabelConfig:
             raise ValueError("stop_pct must be between 0 and 1")
         if self.horizon_days < 1:
             raise ValueError("horizon_days must be positive")
+
+
+@dataclass(frozen=True)
+class DatasetSnapshotManifest:
+    """Audit manifest for an immutable point-in-time neural dataset snapshot."""
+
+    dataset_snapshot: str
+    protocol_version: str
+    feature_version: str
+    label_version: str
+    universe_version: str
+    query_hash: str
+    code_hash: str
+    start_date: dt.date | None
+    end_date: dt.date | None
+    tickers: int
+    rows: int
+    split_counts: dict[str, int]
+    label_distribution: dict[str, int]
+    quality_summary: dict[str, int]
+    cost_assumptions: dict[str, float]
+    calendar_version: str
+    corporate_actions_policy: str
+    survivorship_policy: str
+
+    def to_json_dict(self) -> dict[str, Any]:
+        payload = asdict(self)
+        for key in ("start_date", "end_date"):
+            if payload[key] is not None:
+                payload[key] = payload[key].isoformat()
+        return payload
 
 
 @dataclass(frozen=True)
@@ -132,10 +171,16 @@ def assign_temporal_splits(
     split_boundary = split_config.train_pct + split_config.validation_pct
     valid_end_idx = int(len(unique_dates) * split_boundary)
     train_dates = set(unique_dates[:train_end_idx])
-    validation_dates = set(
-        unique_dates[train_end_idx + split_config.embargo_days : valid_end_idx]
+    validation_embargo_days = _bounded_embargo_days(
+        split_config.embargo_days, valid_end_idx - train_end_idx
     )
-    test_dates = set(unique_dates[valid_end_idx + split_config.embargo_days :])
+    test_embargo_days = _bounded_embargo_days(
+        split_config.embargo_days, len(unique_dates) - valid_end_idx
+    )
+    validation_dates = set(
+        unique_dates[train_end_idx + validation_embargo_days : valid_end_idx]
+    )
+    test_dates = set(unique_dates[valid_end_idx + test_embargo_days :])
 
     def classify(value: object) -> str | None:
         date_value = pd.Timestamp(value).date()
@@ -148,6 +193,107 @@ def assign_temporal_splits(
         return None
 
     return reference_dates.map(classify)
+
+
+def build_dataset_manifest(
+    dataset: pd.DataFrame,
+    *,
+    dataset_snapshot: str,
+    protocol_version: str = "neural_eod_protocol_v1",
+    universe_version: str = "b3_point_in_time_v1",
+    query_text: str = "",
+    code_text: str = "sisacao8.neural_dataset.build_training_dataset",
+    label_config: BarrierLabelConfig | None = None,
+    calendar_version: str = "b3_holidays_v1",
+    corporate_actions_policy: str = "daily_ohlcv_adjustment_policy_source_table",
+    survivorship_policy: str = "acao_bovespa_point_in_time_when_available",
+) -> DatasetSnapshotManifest:
+    """Create the Phase 2 immutable manifest for a dataset snapshot."""
+
+    label_config = label_config or BarrierLabelConfig()
+    split_counts = _value_counts(dataset, "dataset_split", null_label="embargo")
+    return DatasetSnapshotManifest(
+        dataset_snapshot=dataset_snapshot,
+        protocol_version=protocol_version,
+        feature_version=_single_or_default(dataset, "feature_version", FEATURE_VERSION),
+        label_version=_single_or_default(
+            dataset, "label_version", label_config.version
+        ),
+        universe_version=universe_version,
+        query_hash=_stable_hash(query_text),
+        code_hash=_stable_hash(code_text),
+        start_date=_min_date(dataset, "reference_date"),
+        end_date=_max_date(dataset, "reference_date"),
+        tickers=int(dataset["ticker"].nunique()) if "ticker" in dataset else 0,
+        rows=int(len(dataset)),
+        split_counts=split_counts,
+        label_distribution=_value_counts(dataset, "label_class"),
+        quality_summary={
+            "missing_ohlcv_rows": _true_count(dataset, "has_missing_ohlcv"),
+            "zero_volume_rows": _true_count(dataset, "has_zero_volume"),
+            "suspicious_candle_rows": _true_count(dataset, "is_suspicious_candle"),
+            "embargo_rows": int(split_counts.get("embargo", 0)),
+        },
+        cost_assumptions={
+            "cost_pct": float(label_config.cost_pct),
+            "spread_pct": float(label_config.spread_pct),
+            "slippage_pct": float(label_config.slippage_pct),
+            "borrow_cost_pct": float(label_config.borrow_cost_pct),
+        },
+        calendar_version=calendar_version,
+        corporate_actions_policy=corporate_actions_policy,
+        survivorship_policy=survivorship_policy,
+    )
+
+
+def _stable_hash(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _single_or_default(dataset: pd.DataFrame, column: str, default: str) -> str:
+    if column not in dataset or dataset.empty:
+        return default
+    values = dataset[column].dropna().astype(str).unique()
+    return str(values[0]) if len(values) else default
+
+
+def _value_counts(
+    dataset: pd.DataFrame, column: str, null_label: str | None = None
+) -> dict[str, int]:
+    if column not in dataset or dataset.empty:
+        return {}
+    values = dataset[column]
+    if null_label is not None:
+        values = values.fillna(null_label)
+    return {str(k): int(v) for k, v in values.value_counts().sort_index().items()}
+
+
+def _true_count(dataset: pd.DataFrame, column: str) -> int:
+    if column not in dataset or dataset.empty:
+        return 0
+    return int(dataset[column].fillna(False).astype(bool).sum())
+
+
+def _min_date(dataset: pd.DataFrame, column: str) -> dt.date | None:
+    if column not in dataset or dataset.empty:
+        return None
+    value = pd.to_datetime(dataset[column]).min()
+    return None if pd.isna(value) else value.date()
+
+
+def _max_date(dataset: pd.DataFrame, column: str) -> dt.date | None:
+    if column not in dataset or dataset.empty:
+        return None
+    value = pd.to_datetime(dataset[column]).max()
+    return None if pd.isna(value) else value.date()
+
+
+def _bounded_embargo_days(
+    configured_embargo_days: int, split_capacity_days: int
+) -> int:
+    if split_capacity_days <= 0:
+        return 0
+    return min(configured_embargo_days, split_capacity_days // 2)
 
 
 def _prepare_candles(candles: pd.DataFrame) -> pd.DataFrame:
@@ -178,6 +324,10 @@ def _build_features(candles: pd.DataFrame, min_history_days: int) -> pd.DataFram
         volume = group["volume"]
         fin_volume = group["financial_volume"]
         returns = close.pct_change()
+        group["log_return_1d"] = np.log(close / close.shift(1))
+        group["log_return_5d"] = np.log(close / close.shift(5))
+        group["log_return_10d"] = np.log(close / close.shift(10))
+        group["log_return_20d"] = np.log(close / close.shift(20))
         group["return_5d"] = close.pct_change(5)
         group["return_10d"] = close.pct_change(10)
         group["return_20d"] = close.pct_change(20)
@@ -191,6 +341,8 @@ def _build_features(candles: pd.DataFrame, min_history_days: int) -> pd.DataFram
         group["financial_volume_z20"] = (
             fin_volume - fin_volume_mean_20
         ) / fin_volume_std_20
+        group["log_financial_volume"] = np.log1p(fin_volume.clip(lower=0))
+        group["log_volume"] = np.log1p(volume.clip(lower=0))
         group["volume_ratio_20d"] = volume / volume.rolling(20).mean()
         group["distance_high_20d_pct"] = (
             close - group["high"].rolling(20).max()
@@ -224,6 +376,10 @@ def _build_features(candles: pd.DataFrame, min_history_days: int) -> pd.DataFram
             "close",
             "volume",
             "financial_volume",
+            "log_return_1d",
+            "log_return_5d",
+            "log_return_10d",
+            "log_return_20d",
             "return_5d",
             "return_10d",
             "return_20d",
@@ -233,6 +389,8 @@ def _build_features(candles: pd.DataFrame, min_history_days: int) -> pd.DataFram
             "intraday_return_pct",
             "gap_open_pct",
             "financial_volume_z20",
+            "log_financial_volume",
+            "log_volume",
             "volume_ratio_20d",
             "distance_high_20d_pct",
             "distance_low_20d_pct",
@@ -251,13 +409,16 @@ def _build_labels(candles: pd.DataFrame, config: BarrierLabelConfig) -> pd.DataF
         for idx, candle in enumerate(records[:-1]):
             valid_for = records[idx + 1]["data_pregao"]
             future = records[idx + 1 : idx + 1 + config.horizon_days]
-            buy_return, buy_fill, buy_days = _evaluate_side(
-                candle, future, "BUY", config
-            )
-            sell_return, sell_fill, sell_days = _evaluate_side(
-                candle, future, "SELL", config
-            )
+            buy_result = _evaluate_side(candle, future, "BUY", config)
+            sell_result = _evaluate_side(candle, future, "SELL", config)
+            buy_return = buy_result.net_return
+            sell_return = sell_result.net_return
             label = _choose_label(buy_return, sell_return, config.min_net_return_pct)
+            selected_result = (
+                buy_result
+                if label == "up"
+                else sell_result if label == "down" else None
+            )
             rows.append(
                 {
                     "ticker": ticker,
@@ -268,10 +429,53 @@ def _build_labels(candles: pd.DataFrame, config: BarrierLabelConfig) -> pd.DataF
                     "future_return": max(buy_return, sell_return),
                     "buy_net_return": buy_return,
                     "sell_net_return": sell_return,
-                    "entry_filled_buy": buy_fill,
-                    "entry_filled_sell": sell_fill,
-                    "days_to_event_buy": buy_days,
-                    "days_to_event_sell": sell_days,
+                    "entry_filled_buy": buy_result.entry_filled,
+                    "entry_filled_sell": sell_result.entry_filled,
+                    "days_to_event_buy": buy_result.holding_sessions,
+                    "days_to_event_sell": sell_result.holding_sessions,
+                    "trade_side": (
+                        selected_result.trade_side if selected_result else None
+                    ),
+                    "entry_filled": (
+                        selected_result.entry_filled if selected_result else False
+                    ),
+                    "entry_date": (
+                        selected_result.entry_date if selected_result else None
+                    ),
+                    "entry_price": (
+                        selected_result.entry_price if selected_result else None
+                    ),
+                    "exit_date": selected_result.exit_date if selected_result else None,
+                    "exit_price": (
+                        selected_result.exit_price if selected_result else None
+                    ),
+                    "exit_reason": (
+                        selected_result.exit_reason if selected_result else None
+                    ),
+                    "gross_return": (
+                        selected_result.gross_return if selected_result else 0.0
+                    ),
+                    "net_return": (
+                        selected_result.net_return if selected_result else 0.0
+                    ),
+                    "holding_sessions": (
+                        selected_result.holding_sessions if selected_result else None
+                    ),
+                    "max_adverse_excursion": (
+                        selected_result.max_adverse_excursion
+                        if selected_result
+                        else None
+                    ),
+                    "max_favorable_excursion": (
+                        selected_result.max_favorable_excursion
+                        if selected_result
+                        else None
+                    ),
+                    "execution_policy_version": (
+                        selected_result.execution_policy_version
+                        if selected_result
+                        else TradeEngineConfig().version
+                    ),
                 }
             )
     return pd.DataFrame(rows)
@@ -282,31 +486,30 @@ def _evaluate_side(
     future: list[dict[str, object]],
     side: Literal["BUY", "SELL"],
     config: BarrierLabelConfig,
-) -> tuple[float, bool, int | None]:
+):
     close = float(candle["close"])
     if side == "BUY":
         entry = close * (1 - config.entry_pct)
         target = entry * (1 + config.target_pct)
         stop = entry * (1 - config.stop_pct)
-        for day_number, row in enumerate(future, start=1):
-            if float(row["low"]) <= entry:
-                if float(row["low"]) <= stop:
-                    return -config.stop_pct, True, day_number
-                if float(row["high"]) >= target:
-                    return config.target_pct, True, day_number
-                return (float(row["close"]) - entry) / entry, True, day_number
     else:
         entry = close * (1 + config.entry_pct)
         target = entry * (1 - config.target_pct)
         stop = entry * (1 + config.stop_pct)
-        for day_number, row in enumerate(future, start=1):
-            if float(row["high"]) >= entry:
-                if float(row["high"]) >= stop:
-                    return -config.stop_pct, True, day_number
-                if float(row["low"]) <= target:
-                    return config.target_pct, True, day_number
-                return (entry - float(row["close"])) / entry, True, day_number
-    return 0.0, False, None
+    return simulate_eod_barrier_trade(
+        side=side,
+        entry=entry,
+        target=target,
+        stop=stop,
+        bars=future,
+        config=TradeEngineConfig(
+            horizon_days=config.horizon_days,
+            cost_pct=config.cost_pct,
+            spread_pct=config.spread_pct,
+            slippage_pct=config.slippage_pct,
+            borrow_cost_pct=config.borrow_cost_pct,
+        ),
+    )
 
 
 def _choose_label(

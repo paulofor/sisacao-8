@@ -9,16 +9,18 @@ can be reused by batch extraction jobs and unit tests.
 from __future__ import annotations
 
 import datetime as dt
-from dataclasses import dataclass
-from typing import Iterable, Literal
+import hashlib
+from dataclasses import asdict, dataclass
+from typing import Any, Iterable, Literal
 
+import numpy as np
 import pandas as pd
 
 from sisacao8.trade_engine import TradeEngineConfig, simulate_eod_barrier_trade
 
 LabelClass = Literal["up", "down", "neutral"]
 
-FEATURE_VERSION = "feature_eod_tabular_v1"
+FEATURE_VERSION = "feature_eod_tabular_v2"
 LABEL_VERSION = "label_eod_barrier_v2"
 DEFAULT_MIN_HISTORY_DAYS = 20
 
@@ -47,6 +49,37 @@ class BarrierLabelConfig:
             raise ValueError("stop_pct must be between 0 and 1")
         if self.horizon_days < 1:
             raise ValueError("horizon_days must be positive")
+
+
+@dataclass(frozen=True)
+class DatasetSnapshotManifest:
+    """Audit manifest for an immutable point-in-time neural dataset snapshot."""
+
+    dataset_snapshot: str
+    protocol_version: str
+    feature_version: str
+    label_version: str
+    universe_version: str
+    query_hash: str
+    code_hash: str
+    start_date: dt.date | None
+    end_date: dt.date | None
+    tickers: int
+    rows: int
+    split_counts: dict[str, int]
+    label_distribution: dict[str, int]
+    quality_summary: dict[str, int]
+    cost_assumptions: dict[str, float]
+    calendar_version: str
+    corporate_actions_policy: str
+    survivorship_policy: str
+
+    def to_json_dict(self) -> dict[str, Any]:
+        payload = asdict(self)
+        for key in ("start_date", "end_date"):
+            if payload[key] is not None:
+                payload[key] = payload[key].isoformat()
+        return payload
 
 
 @dataclass(frozen=True)
@@ -162,6 +195,99 @@ def assign_temporal_splits(
     return reference_dates.map(classify)
 
 
+def build_dataset_manifest(
+    dataset: pd.DataFrame,
+    *,
+    dataset_snapshot: str,
+    protocol_version: str = "neural_eod_protocol_v1",
+    universe_version: str = "b3_point_in_time_v1",
+    query_text: str = "",
+    code_text: str = "sisacao8.neural_dataset.build_training_dataset",
+    label_config: BarrierLabelConfig | None = None,
+    calendar_version: str = "b3_holidays_v1",
+    corporate_actions_policy: str = "daily_ohlcv_adjustment_policy_source_table",
+    survivorship_policy: str = "acao_bovespa_point_in_time_when_available",
+) -> DatasetSnapshotManifest:
+    """Create the Phase 2 immutable manifest for a dataset snapshot."""
+
+    label_config = label_config or BarrierLabelConfig()
+    split_counts = _value_counts(dataset, "dataset_split", null_label="embargo")
+    return DatasetSnapshotManifest(
+        dataset_snapshot=dataset_snapshot,
+        protocol_version=protocol_version,
+        feature_version=_single_or_default(dataset, "feature_version", FEATURE_VERSION),
+        label_version=_single_or_default(
+            dataset, "label_version", label_config.version
+        ),
+        universe_version=universe_version,
+        query_hash=_stable_hash(query_text),
+        code_hash=_stable_hash(code_text),
+        start_date=_min_date(dataset, "reference_date"),
+        end_date=_max_date(dataset, "reference_date"),
+        tickers=int(dataset["ticker"].nunique()) if "ticker" in dataset else 0,
+        rows=int(len(dataset)),
+        split_counts=split_counts,
+        label_distribution=_value_counts(dataset, "label_class"),
+        quality_summary={
+            "missing_ohlcv_rows": _true_count(dataset, "has_missing_ohlcv"),
+            "zero_volume_rows": _true_count(dataset, "has_zero_volume"),
+            "suspicious_candle_rows": _true_count(dataset, "is_suspicious_candle"),
+            "embargo_rows": int(split_counts.get("embargo", 0)),
+        },
+        cost_assumptions={
+            "cost_pct": float(label_config.cost_pct),
+            "spread_pct": float(label_config.spread_pct),
+            "slippage_pct": float(label_config.slippage_pct),
+            "borrow_cost_pct": float(label_config.borrow_cost_pct),
+        },
+        calendar_version=calendar_version,
+        corporate_actions_policy=corporate_actions_policy,
+        survivorship_policy=survivorship_policy,
+    )
+
+
+def _stable_hash(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _single_or_default(dataset: pd.DataFrame, column: str, default: str) -> str:
+    if column not in dataset or dataset.empty:
+        return default
+    values = dataset[column].dropna().astype(str).unique()
+    return str(values[0]) if len(values) else default
+
+
+def _value_counts(
+    dataset: pd.DataFrame, column: str, null_label: str | None = None
+) -> dict[str, int]:
+    if column not in dataset or dataset.empty:
+        return {}
+    values = dataset[column]
+    if null_label is not None:
+        values = values.fillna(null_label)
+    return {str(k): int(v) for k, v in values.value_counts().sort_index().items()}
+
+
+def _true_count(dataset: pd.DataFrame, column: str) -> int:
+    if column not in dataset or dataset.empty:
+        return 0
+    return int(dataset[column].fillna(False).astype(bool).sum())
+
+
+def _min_date(dataset: pd.DataFrame, column: str) -> dt.date | None:
+    if column not in dataset or dataset.empty:
+        return None
+    value = pd.to_datetime(dataset[column]).min()
+    return None if pd.isna(value) else value.date()
+
+
+def _max_date(dataset: pd.DataFrame, column: str) -> dt.date | None:
+    if column not in dataset or dataset.empty:
+        return None
+    value = pd.to_datetime(dataset[column]).max()
+    return None if pd.isna(value) else value.date()
+
+
 def _bounded_embargo_days(
     configured_embargo_days: int, split_capacity_days: int
 ) -> int:
@@ -198,6 +324,10 @@ def _build_features(candles: pd.DataFrame, min_history_days: int) -> pd.DataFram
         volume = group["volume"]
         fin_volume = group["financial_volume"]
         returns = close.pct_change()
+        group["log_return_1d"] = np.log(close / close.shift(1))
+        group["log_return_5d"] = np.log(close / close.shift(5))
+        group["log_return_10d"] = np.log(close / close.shift(10))
+        group["log_return_20d"] = np.log(close / close.shift(20))
         group["return_5d"] = close.pct_change(5)
         group["return_10d"] = close.pct_change(10)
         group["return_20d"] = close.pct_change(20)
@@ -211,6 +341,8 @@ def _build_features(candles: pd.DataFrame, min_history_days: int) -> pd.DataFram
         group["financial_volume_z20"] = (
             fin_volume - fin_volume_mean_20
         ) / fin_volume_std_20
+        group["log_financial_volume"] = np.log1p(fin_volume.clip(lower=0))
+        group["log_volume"] = np.log1p(volume.clip(lower=0))
         group["volume_ratio_20d"] = volume / volume.rolling(20).mean()
         group["distance_high_20d_pct"] = (
             close - group["high"].rolling(20).max()
@@ -244,6 +376,10 @@ def _build_features(candles: pd.DataFrame, min_history_days: int) -> pd.DataFram
             "close",
             "volume",
             "financial_volume",
+            "log_return_1d",
+            "log_return_5d",
+            "log_return_10d",
+            "log_return_20d",
             "return_5d",
             "return_10d",
             "return_20d",
@@ -253,6 +389,8 @@ def _build_features(candles: pd.DataFrame, min_history_days: int) -> pd.DataFram
             "intraday_return_pct",
             "gap_open_pct",
             "financial_volume_z20",
+            "log_financial_volume",
+            "log_volume",
             "volume_ratio_20d",
             "distance_high_20d_pct",
             "distance_low_20d_pct",

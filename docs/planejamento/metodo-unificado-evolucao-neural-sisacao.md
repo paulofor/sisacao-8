@@ -233,6 +233,9 @@ Cobrir entrada não tocada, target/stop posterior, ambiguidades no mesmo candle,
 
 ## 8. Fase 2 — Dataset point-in-time
 
+**Execução registrada:** [Fase 2 — Dataset point-in-time](../implementacao/fase2-muen-dataset-point-in-time.md).
+
+
 Cada snapshot registra:
 
 - snapshot, protocolo, feature e label version;
