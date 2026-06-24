@@ -427,7 +427,7 @@ def candidate_hash(
 
 
 def estimate_parameter_count(
-    hidden_units: Sequence[int], feature_count: int = 18, classes: int = 3
+    hidden_units: Sequence[int], feature_count: int = 19, classes: int = 3
 ) -> int:
     """Estimate dense MLP parameters for budget validation."""
 
