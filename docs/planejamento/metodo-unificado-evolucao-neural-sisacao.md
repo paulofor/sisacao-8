@@ -159,6 +159,8 @@ flowchart TD
 
 ## 6. Fase 0 — Hipótese econômica
 
+**Execução registrada:** [Fase 0 — Hipótese econômica MUEN v1](../implementacao/fase0-muen-hipotese-economica.md).
+
 Nenhuma rodada começa apenas com “testar rede maior”. Cada protocolo declara:
 
 - padrão de mercado pretendido;

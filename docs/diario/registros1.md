@@ -1094,3 +1094,10 @@
 - Revisado o plano de evolução das redes neurais para torná-lo genérico e reutilizável, removendo o foco excessivo na situação atual do painel e estruturando o processo para qualquer família de modelos financeiros.
 - O documento agora separa regras centrais de evolução neural de análises específicas de rodadas/modelos, orientando que casos concretos sejam registrados em relatórios anexos.
 - Comandos utilizados: `sed -n '1,340p' docs/planejamento/plano-evolucao-redes-neurais-mercado-financeiro.md` e `TZ=America/Sao_Paulo date '+%Y-%m-%d %H:%M:%S UTC-3'`.
+
+## 2026-06-24 15:19:01 UTC-3 — Execução da Fase 0 do MUEN v1
+- Executada a Fase 0 do documento `docs/planejamento/metodo-unificado-evolucao-neural-sisacao.md`, registrando a hipótese econômica antes de qualquer novo treino, mutação ou promoção neural.
+- Criado o documento `docs/implementacao/fase0-muen-hipotese-economica.md` com declaração do protocolo `neural_eod_protocol_v1`, hipótese `eod_barrier_direction_v2`, padrão de mercado, universo point-in-time, instante de decisão, horizonte, lados BUY/SELL, regras de entrada/saída, capacidade operacional, custos, baselines, motivo para rede neural e métrica econômica primária.
+- Atualizado o método unificado para apontar para a execução registrada da Fase 0.
+- Próximo passo autorizado: iniciar a Fase 1 com o `label_eod_barrier_v2` e o motor de trade stateful único compartilhado por labels, backtest, paper e produção.
+- Comandos usados: `pwd`, `rg --files -g 'AGENTS.md' -g 'docs/planejamento/metodo-unificado-evolucao-neural-sisacao.md' -g 'docs/diario/registros1.md'`, `cat AGENTS.md`, `sed -n` para leitura do método MUEN, `tail -80 docs/diario/registros1.md`, `rg -n "neural_eod_protocol|hypothesis_id|Hipótese econômica|Fase 0|eod_barrier" docs sisacao8 functions tests infra -S`, criação/edição dos documentos via shell/Python e `TZ=America/Sao_Paulo date '+%Y-%m-%d %H:%M:%S UTC-3'`.
