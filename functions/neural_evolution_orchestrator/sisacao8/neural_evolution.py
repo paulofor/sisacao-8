@@ -162,6 +162,46 @@ def select_top_candidates(
     return [candidate for candidate, _score in ordered[:selected_count]]
 
 
+def select_diverse_top_candidates(
+    scored_candidates: Sequence[tuple[CandidateConfig, EvaluationScore]],
+    *,
+    top_fraction: float = 0.20,
+    max_per_family: int = 1,
+) -> list[CandidateConfig]:
+    """Return top candidates after consolidating similar candidate families.
+
+    The family signature ignores random seed so repeated evaluations of the same
+    configuration do not occupy multiple parent slots in phase 2.
+    """
+
+    if not scored_candidates:
+        return []
+    selected_count = max(1, int(len(scored_candidates) * top_fraction))
+    family_limit = max(1, int(max_per_family))
+    ordered = sorted(
+        scored_candidates,
+        key=lambda item: (
+            item[1].score_total,
+            item[1].score_directional_precision,
+            item[1].score_coverage,
+        ),
+        reverse=True,
+    )
+    selected: list[CandidateConfig] = []
+    family_counts: dict[str, int] = {}
+    for candidate, _score in ordered:
+        family_key = candidate_family_key(
+            candidate.architecture, candidate.hyperparameters
+        )
+        if family_counts.get(family_key, 0) >= family_limit:
+            continue
+        selected.append(candidate)
+        family_counts[family_key] = family_counts.get(family_key, 0) + 1
+        if len(selected) >= selected_count:
+            break
+    return selected
+
+
 def mutate_top_candidates(
     top_candidates: Sequence[CandidateConfig],
     *,
@@ -341,6 +381,38 @@ def _candidate_from_parts(
     )
 
 
+def candidate_family_key(
+    architecture: Mapping[str, Any], hyperparameters: Mapping[str, Any]
+) -> str:
+    """Stable key for consolidating nearly identical neural candidates.
+
+    The key keeps architecture and training knobs that define the model family,
+    but intentionally ignores ``random_seed`` and early-stopping bookkeeping.
+    """
+
+    family_payload = {
+        "architecture": {
+            "type": architecture.get("type", "mlp"),
+            "hidden_units": [
+                int(item) for item in architecture.get("hidden_units", [])
+            ],
+            "batch_norm": bool(architecture.get("batch_norm", False)),
+        },
+        "hyperparameters": {
+            "batch_size": _optional_int(hyperparameters.get("batch_size")),
+            "class_weight": str(hyperparameters.get("class_weight", "none")),
+            "dropout_rate": _rounded_float(hyperparameters.get("dropout_rate"), 4),
+            "epochs": _optional_int(hyperparameters.get("epochs")),
+            "learning_rate": _rounded_float(hyperparameters.get("learning_rate"), 6),
+        },
+    }
+    return hashlib.sha256(
+        json.dumps(family_payload, sort_keys=True, separators=(",", ":")).encode(
+            "utf-8"
+        )
+    ).hexdigest()
+
+
 def candidate_hash(
     architecture: Mapping[str, Any], hyperparameters: Mapping[str, Any]
 ) -> str:
@@ -429,3 +501,15 @@ def _number(value: Any) -> float | None:
     if isinstance(value, (int, float)):
         return float(value)
     return None
+
+
+def _optional_int(value: Any) -> int | None:
+    if value is None:
+        return None
+    return int(value)
+
+
+def _rounded_float(value: Any, digits: int) -> float | None:
+    if value is None:
+        return None
+    return round(float(value), digits)
