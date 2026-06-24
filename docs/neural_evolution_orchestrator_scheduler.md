@@ -5,7 +5,7 @@ Este runbook descreve como acionar a Cloud Function HTTP `neural_evolution_orche
 ## O que a função faz
 
 1. Lê o snapshot completo mais recente de `cotacao_intraday.neural_eod_training_dataset`, com splits `train`, `validation` e `test`, salvo quando `dataset_snapshot` é enviado no payload.
-2. Gera candidatos conforme a estratégia: `deterministic_phase1` cria novas arquiteturas determinísticas; `deterministic_phase2` lê candidatos mantidos no leaderboard e gera mutações/repetições controladas para a próxima avaliação.
+2. Gera candidatos conforme a estratégia: `deterministic_phase1` cria novas arquiteturas determinísticas; `deterministic_phase2` lê candidatos mantidos no leaderboard, consolida famílias semelhantes antes de selecionar pais e gera mutações/repetições controladas para a próxima avaliação.
 3. Grava a rodada em `neural_evolution_runs`.
 4. Grava as configurações em `neural_candidate_configs`.
 5. Chama `neural_training` uma vez por candidato.
@@ -73,6 +73,7 @@ gcloud run services add-iam-policy-binding neural_evolution_orchestrator \
   "phase2": {
     "top_fraction": 1.0,
     "parent_limit": 10,
+    "max_parents_per_family": 1,
     "include_seed_repeats": false
   }
 }
@@ -174,6 +175,7 @@ Quando a versão do MCP que expõe a tool `neural_evolution_daily_scheduler_appl
       "phase2": {
         "top_fraction": 1.0,
         "parent_limit": 10,
+        "max_parents_per_family": 1,
         "include_seed_repeats": false
       },
       "pause_weekly": true
@@ -226,7 +228,7 @@ gcloud scheduler jobs create http neural-evolution-daily \
   --http-method=POST \
   --attempt-deadline=1800s \
   --headers='Content-Type=application/json' \
-  --message-body='{"strategy":"deterministic_phase2","budget":{"max_trials":1,"max_runtime_minutes":45,"max_parameter_count":150000,"max_layers":4,"random_seed":20260621},"phase2":{"top_fraction":1.0,"parent_limit":10,"include_seed_repeats":false}}'
+  --message-body='{"strategy":"deterministic_phase2","budget":{"max_trials":1,"max_runtime_minutes":45,"max_parameter_count":150000,"max_layers":4,"random_seed":20260621},"phase2":{"top_fraction":1.0,"parent_limit":10,"max_parents_per_family":1,"include_seed_repeats":false}}'
 ```
 
 Para alterar o job existente sem OIDC:
@@ -241,7 +243,7 @@ gcloud scheduler jobs update http neural-evolution-daily \
   --http-method=POST \
   --attempt-deadline=1800s \
   --update-headers='Content-Type=application/json' \
-  --message-body='{"strategy":"deterministic_phase2","budget":{"max_trials":1,"max_runtime_minutes":45,"max_parameter_count":150000,"max_layers":4,"random_seed":20260621},"phase2":{"top_fraction":1.0,"parent_limit":10,"include_seed_repeats":false}}'
+  --message-body='{"strategy":"deterministic_phase2","budget":{"max_trials":1,"max_runtime_minutes":45,"max_parameter_count":150000,"max_layers":4,"random_seed":20260621},"phase2":{"top_fraction":1.0,"parent_limit":10,"max_parents_per_family":1,"include_seed_repeats":false}}'
 ```
 
 ## Configuração do Cloud Scheduler com OIDC
@@ -258,7 +260,7 @@ gcloud scheduler jobs create http neural-evolution-daily \
   --http-method=POST \
   --attempt-deadline=1800s \
   --headers='Content-Type=application/json' \
-  --message-body='{"strategy":"deterministic_phase2","budget":{"max_trials":1,"max_runtime_minutes":45,"max_parameter_count":150000,"max_layers":4,"random_seed":20260621},"phase2":{"top_fraction":1.0,"parent_limit":10,"include_seed_repeats":false}}' \
+  --message-body='{"strategy":"deterministic_phase2","budget":{"max_trials":1,"max_runtime_minutes":45,"max_parameter_count":150000,"max_layers":4,"random_seed":20260621},"phase2":{"top_fraction":1.0,"parent_limit":10,"max_parents_per_family":1,"include_seed_repeats":false}}' \
   --oidc-service-account-email='sa-scheduler-invoker@ingestaokraken.iam.gserviceaccount.com' \
   --oidc-token-audience='https://us-east1-ingestaokraken.cloudfunctions.net/neural_evolution_orchestrator'
 ```
@@ -275,7 +277,7 @@ gcloud scheduler jobs update http neural-evolution-daily \
   --http-method=POST \
   --attempt-deadline=1800s \
   --update-headers='Content-Type=application/json' \
-  --message-body='{"strategy":"deterministic_phase2","budget":{"max_trials":1,"max_runtime_minutes":45,"max_parameter_count":150000,"max_layers":4,"random_seed":20260621},"phase2":{"top_fraction":1.0,"parent_limit":10,"include_seed_repeats":false}}' \
+  --message-body='{"strategy":"deterministic_phase2","budget":{"max_trials":1,"max_runtime_minutes":45,"max_parameter_count":150000,"max_layers":4,"random_seed":20260621},"phase2":{"top_fraction":1.0,"parent_limit":10,"max_parents_per_family":1,"include_seed_repeats":false}}' \
   --oidc-service-account-email='sa-scheduler-invoker@ingestaokraken.iam.gserviceaccount.com' \
   --oidc-token-audience='https://us-east1-ingestaokraken.cloudfunctions.net/neural_evolution_orchestrator'
 ```

@@ -1,5 +1,6 @@
 from sisacao8.neural_evolution import (
     EvolutionBudget,
+    candidate_family_key,
     candidate_hash,
     estimate_parameter_count,
     generate_deterministic_candidates,
@@ -44,6 +45,28 @@ def test_candidate_hash_changes_with_hyperparameters():
     assert first != second
 
 
+def test_candidate_family_key_ignores_seed_but_keeps_model_knobs():
+    architecture = {"type": "mlp", "hidden_units": [64, 32], "batch_norm": False}
+    base_hp = {
+        "learning_rate": 0.001,
+        "dropout_rate": 0.15,
+        "batch_size": 256,
+        "epochs": 40,
+        "class_weight": "balanced",
+        "random_seed": 20260621,
+    }
+
+    repeated_hp = {**base_hp, "random_seed": 20260701}
+    changed_hp = {**base_hp, "dropout_rate": 0.25}
+
+    assert candidate_family_key(architecture, base_hp) == candidate_family_key(
+        architecture, repeated_hp
+    )
+    assert candidate_family_key(architecture, base_hp) != candidate_family_key(
+        architecture, changed_hp
+    )
+
+
 def test_estimate_parameter_count_for_dense_mlp():
     assert estimate_parameter_count((32,), feature_count=18, classes=3) == 707
 
@@ -79,6 +102,7 @@ def test_select_top_mutate_and_repeat_finalists():
         mutate_top_candidates,
         penalized_score,
         repeat_finalists_with_seeds,
+        select_diverse_top_candidates,
         select_top_candidates,
     )
 
@@ -107,6 +131,7 @@ def test_select_top_mutate_and_repeat_finalists():
     ]
 
     top = select_top_candidates(scored, top_fraction=0.20)
+    diverse_top = select_diverse_top_candidates(scored, top_fraction=0.20)
     mutations = mutate_top_candidates(
         top,
         evolution_run_id="run-2",
@@ -136,6 +161,7 @@ def test_select_top_mutate_and_repeat_finalists():
     )
 
     assert len(top) == 1
+    assert len(diverse_top) == 1
     assert len(mutations) == 3
     assert {candidate.candidate_source for candidate in mutations} == {"mutation"}
     assert all(candidate.training_request["early_stopping"] for candidate in mutations)

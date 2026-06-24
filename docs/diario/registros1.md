@@ -1061,3 +1061,19 @@
 - Registrado que comandos com `--oidc-service-account-email` só devem ser sugeridos após validar existência da service account, `roles/run.invoker`, `roles/iam.serviceAccountUser` para a conta que executa o `gcloud` e permissões de Cloud Scheduler.
 - Registrado que, para funções públicas, o caminho preferencial é atualizar/criar o Scheduler sem OIDC, e que `NOT_FOUND` no `gcloud scheduler jobs update http` deve levar a checagem de conta ativa, projeto, location e permissões antes de concluir que o job não existe.
 - Comandos usados: `sed -n '1,260p' AGENTS.md`, edição de `AGENTS.md` e atualização deste diário.
+
+## 2026-06-23 — Orientação sobre mutações semelhantes na evolução neural
+
+- Verificado no frontend publicado que o funil atual possui 42 redes no estoque, 23 avaliações materializadas no leaderboard, 9 mantidas e 14 rejeitadas, confirmando o cenário relatado de crescimento da lista de mantidas.
+- Revisado o fluxo de Fase 2: a estratégia `deterministic_phase2` lê candidatos não rejeitados, ordena por score e precisão direcional, gera mutações controladas e pode repetir finalistas por seeds para medir estabilidade.
+- Orientação operacional: quando mutações ficam muito semelhantes e aumentam a lista de mantidas, o próximo passo é não promover automaticamente; deve-se consolidar por família/assinatura, comparar diversidade real de hiperparâmetros, repetir os melhores com seeds diferentes e só então avançar para shadow/paper trading.
+- Comandos usados: `python` com `urllib.request` para consultar `http://34.194.252.70/api/ops/neural/training-runs` e `http://34.194.252.70/api/ops/neural/evolution/leaderboard`, `rg -n "select_top_candidates|mutate_top_candidates|repeat_finalists_with_seeds|mutation|include_seed_repeats|decision|score_total|leaderboard|deterministic_phase2|phase2|parent" sisacao8 functions tests docs infra -S --glob '!**/__pycache__/**'`, e `nl -ba` em `sisacao8/neural_evolution.py`, `functions/neural_evolution_orchestrator/main.py`, `docs/neural_evolution_orchestrator_scheduler.md` e `docs/planejamento/diagnostico-evolucao-redes-neurais-eod.md`.
+
+## 2026-06-24 — Consolidação de famílias na Fase 2 neural
+
+- Implementada a recomendação operacional para evitar que mutações semelhantes inflem a lista de redes mantidas sem ganho real de diversidade.
+- Adicionada assinatura de família em `sisacao8/neural_evolution.py`, ignorando `random_seed` e metadados de early stopping, mas preservando arquitetura, `learning_rate`, `dropout_rate`, `batch_size`, `epochs` e `class_weight` para consolidar configurações equivalentes.
+- Atualizada a seleção da estratégia `deterministic_phase2` no `neural_evolution_orchestrator` para usar pais diversos com `max_parents_per_family` configurável, padrão `1`, antes de gerar mutações e repetições.
+- Atualizado o runbook do Scheduler para documentar `max_parents_per_family: 1` no payload recomendado e nos comandos `gcloud`.
+- Adicionados testes unitários para garantir que a chave de família ignora apenas seed e que a Fase 2 descarta pais repetidos da mesma família ao escolher candidatos para mutação.
+- Comandos usados: `git status --short`, `find .. -name AGENTS.md -print`, `sed -n` para leitura de `AGENTS.md`, `sisacao8/neural_evolution.py`, `functions/neural_evolution_orchestrator/main.py` e testes, edição dos arquivos, `python -m black sisacao8/neural_evolution.py functions/neural_evolution_orchestrator/main.py tests/test_neural_evolution.py tests/test_neural_evolution_orchestrator_function.py`, `python -m pytest tests/test_neural_evolution.py tests/test_neural_evolution_orchestrator_function.py` e `python -m flake8 sisacao8/neural_evolution.py functions/neural_evolution_orchestrator/main.py tests/test_neural_evolution.py tests/test_neural_evolution_orchestrator_function.py`.
