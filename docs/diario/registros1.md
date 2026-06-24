@@ -1089,3 +1089,8 @@
 - Elaborado plano técnico para evolução das redes neurais aplicadas a sinais EOD de mercado financeiro, com foco em validação fora da amostra, métricas financeiras, controle de vazamento, walk-forward, score composto, paper trading e promoção controlada.
 - Criado o documento `docs/planejamento/plano-evolucao-redes-neurais-mercado-financeiro.md` para orientar as próximas etapas de pesquisa, seleção e operação das redes candidatas.
 - Comandos utilizados para registrar o trabalho e inspecionar contexto: `pwd`, `find .. -name AGENTS.md -print`, `sed -n '1,220p' AGENTS.md`, `sed -n '1,220p' docs/diario/registros1.md`, `rg --files docs` e `TZ=America/Sao_Paulo date '+%Y-%m-%d %H:%M:%S UTC-3'`.
+
+## 2026-06-24 00:53:49 UTC-3
+- Revisado o plano de evolução das redes neurais para torná-lo genérico e reutilizável, removendo o foco excessivo na situação atual do painel e estruturando o processo para qualquer família de modelos financeiros.
+- O documento agora separa regras centrais de evolução neural de análises específicas de rodadas/modelos, orientando que casos concretos sejam registrados em relatórios anexos.
+- Comandos utilizados: `sed -n '1,340p' docs/planejamento/plano-evolucao-redes-neurais-mercado-financeiro.md` e `TZ=America/Sao_Paulo date '+%Y-%m-%d %H:%M:%S UTC-3'`.
