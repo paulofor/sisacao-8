@@ -162,3 +162,139 @@ JOIN `ingestaokraken.cotacao_intraday.neural_candidate_configs` AS config
   USING (candidate_id)
 LEFT JOIN latest_run AS run
   USING (evolution_run_id);
+
+-- MUEN v1 — tabelas normativas para trials, folds, retornos diários, famílias e gates.
+CREATE TABLE IF NOT EXISTS `ingestaokraken.cotacao_intraday.neural_protocols`
+(
+  protocol_version STRING NOT NULL,
+  hypothesis_id STRING NOT NULL,
+  protocol_json JSON NOT NULL,
+  status STRING NOT NULL,
+  created_at TIMESTAMP NOT NULL,
+  frozen_at TIMESTAMP
+)
+PARTITION BY DATE(created_at)
+CLUSTER BY protocol_version, status
+OPTIONS (
+  description = "Protocolos MUEN versionados para dados, validação, custos e gates neurais EOD"
+);
+
+CREATE TABLE IF NOT EXISTS `ingestaokraken.cotacao_intraday.neural_trials`
+(
+  trial_id STRING NOT NULL,
+  protocol_version STRING NOT NULL,
+  dataset_snapshot STRING NOT NULL,
+  candidate_family_hash STRING NOT NULL,
+  candidate_id STRING NOT NULL,
+  fold_id STRING NOT NULL,
+  seed INT64 NOT NULL,
+  code_commit STRING NOT NULL,
+  state STRING NOT NULL,
+  idempotency_key_json JSON NOT NULL,
+  training_request_json JSON NOT NULL,
+  artifact_uri STRING,
+  error_message STRING,
+  created_at TIMESTAMP NOT NULL,
+  updated_at TIMESTAMP NOT NULL
+)
+PARTITION BY DATE(created_at)
+CLUSTER BY protocol_version, dataset_snapshot, candidate_family_hash, state
+OPTIONS (
+  description = "Unidades idempotentes de execução MUEN no nível candidato x fold x seed"
+);
+
+CREATE TABLE IF NOT EXISTS `ingestaokraken.cotacao_intraday.neural_fold_metrics`
+(
+  trial_id STRING NOT NULL,
+  protocol_version STRING NOT NULL,
+  dataset_snapshot STRING NOT NULL,
+  candidate_family_hash STRING NOT NULL,
+  fold_id STRING NOT NULL,
+  seed INT64 NOT NULL,
+  cost_multiplier FLOAT64 NOT NULL,
+  trades INT64 NOT NULL,
+  coverage FLOAT64 NOT NULL,
+  expectancy_net FLOAT64 NOT NULL,
+  median_net_return FLOAT64 NOT NULL,
+  total_net_return FLOAT64 NOT NULL,
+  profit_factor FLOAT64 NOT NULL,
+  max_drawdown FLOAT64 NOT NULL,
+  positive_trade_ratio FLOAT64 NOT NULL,
+  delta_expectancy_vs_champion FLOAT64 NOT NULL,
+  metrics_json JSON NOT NULL,
+  created_at TIMESTAMP NOT NULL
+)
+PARTITION BY DATE(created_at)
+CLUSTER BY protocol_version, dataset_snapshot, candidate_family_hash, fold_id
+OPTIONS (
+  description = "Métricas econômicas líquidas por fold externo, seed e cenário de custo"
+);
+
+CREATE TABLE IF NOT EXISTS `ingestaokraken.cotacao_intraday.neural_daily_returns`
+(
+  protocol_version STRING NOT NULL,
+  dataset_snapshot STRING NOT NULL,
+  candidate_family_hash STRING NOT NULL,
+  trial_id STRING NOT NULL,
+  fold_id STRING NOT NULL,
+  seed INT64 NOT NULL,
+  reference_date DATE NOT NULL,
+  model_net_return FLOAT64 NOT NULL,
+  champion_net_return FLOAT64 NOT NULL,
+  delta_net_return FLOAT64 NOT NULL,
+  exposure FLOAT64 NOT NULL,
+  trades INT64 NOT NULL,
+  cost_multiplier FLOAT64 NOT NULL,
+  created_at TIMESTAMP NOT NULL
+)
+PARTITION BY reference_date
+CLUSTER BY protocol_version, dataset_snapshot, candidate_family_hash, fold_id
+OPTIONS (
+  description = "Retornos diários pareados para comparação contra champion e controle de múltiplos testes"
+);
+
+CREATE TABLE IF NOT EXISTS `ingestaokraken.cotacao_intraday.neural_family_evaluations`
+(
+  protocol_version STRING NOT NULL,
+  dataset_snapshot STRING NOT NULL,
+  candidate_family_hash STRING NOT NULL,
+  folds INT64 NOT NULL,
+  seeds INT64 NOT NULL,
+  median_delta_expectancy_vs_champion FLOAT64 NOT NULL,
+  mean_delta_expectancy_vs_champion FLOAT64 NOT NULL,
+  worst_fold_delta_expectancy_vs_champion FLOAT64 NOT NULL,
+  positive_folds INT64 NOT NULL,
+  positive_fold_ratio FLOAT64 NOT NULL,
+  median_expectancy_net FLOAT64 NOT NULL,
+  max_drawdown FLOAT64 NOT NULL,
+  total_trades INT64 NOT NULL,
+  stable_across_seeds BOOL NOT NULL,
+  cost_multipliers ARRAY<FLOAT64> NOT NULL,
+  metrics_json JSON NOT NULL,
+  created_at TIMESTAMP NOT NULL
+)
+PARTITION BY DATE(created_at)
+CLUSTER BY protocol_version, dataset_snapshot, candidate_family_hash
+OPTIONS (
+  description = "Agregação MUEN por família de candidatos, folds, seeds e cenários de custo"
+);
+
+CREATE TABLE IF NOT EXISTS `ingestaokraken.cotacao_intraday.neural_gate_decisions`
+(
+  decision_id STRING NOT NULL,
+  protocol_version STRING NOT NULL,
+  dataset_snapshot STRING NOT NULL,
+  candidate_family_hash STRING NOT NULL,
+  gate_name STRING NOT NULL,
+  decision_status STRING NOT NULL,
+  passed BOOL NOT NULL,
+  failed_criteria ARRAY<STRING>,
+  metrics_json JSON NOT NULL,
+  gate_engine_version STRING NOT NULL,
+  decided_at TIMESTAMP NOT NULL
+)
+PARTITION BY DATE(decided_at)
+CLUSTER BY protocol_version, gate_name, decision_status, candidate_family_hash
+OPTIONS (
+  description = "Decisões auditáveis do gate engine MUEN; leaderboard ordena, gate decide"
+);
