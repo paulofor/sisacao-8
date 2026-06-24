@@ -83,7 +83,7 @@ def _dataset() -> pd.DataFrame:
                     "label_class": "up" if idx % 2 else "neutral",
                     "dataset_snapshot": "snapshot_2026",
                     "feature_version": "feature_eod_tabular_v1",
-                    "label_version": "label_eod_barrier_v1",
+                    "label_version": "label_eod_barrier_v2",
                     **{column: 1.0 for column in module.FEATURE_COLUMNS},
                 }
             )

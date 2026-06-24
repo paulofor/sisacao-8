@@ -3,8 +3,11 @@ import datetime as dt
 import numpy as np
 import pandas as pd
 
-from sisacao8.neural_inference import (NeuralInferenceConfig,
-                                       predict_neural_eod, suggested_action)
+from sisacao8.neural_inference import (
+    NeuralInferenceConfig,
+    predict_neural_eod,
+    suggested_action,
+)
 from sisacao8.neural_training import FEATURE_COLUMNS
 
 
@@ -45,7 +48,7 @@ def _manifest():
         "model_id": "neural_eod_mlp",
         "model_version": "neural_eod_mlp_v1_20260618",
         "feature_version": "feature_eod_tabular_v1",
-        "label_version": "label_eod_barrier_v1",
+        "label_version": "label_eod_barrier_v2",
         "scaler": {
             "feature_columns": list(FEATURE_COLUMNS),
             "means": [0.0] * len(FEATURE_COLUMNS),

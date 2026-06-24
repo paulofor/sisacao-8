@@ -32,7 +32,7 @@ class _FakeClient:
         if "ANY_VALUE(feature_version)" in query:
             return _FakeQueryJob([{"value": "feature_eod_tabular_v1"}])
         if "ANY_VALUE(label_version)" in query:
-            return _FakeQueryJob([{"value": "label_eod_barrier_v1"}])
+            return _FakeQueryJob([{"value": "label_eod_barrier_v2"}])
         if "SELECT dedupe_hash" in query:
             return _FakeQueryJob([])
         if (

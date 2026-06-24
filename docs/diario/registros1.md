@@ -1101,3 +1101,14 @@
 - Atualizado o método unificado para apontar para a execução registrada da Fase 0.
 - Próximo passo autorizado: iniciar a Fase 1 com o `label_eod_barrier_v2` e o motor de trade stateful único compartilhado por labels, backtest, paper e produção.
 - Comandos usados: `pwd`, `rg --files -g 'AGENTS.md' -g 'docs/planejamento/metodo-unificado-evolucao-neural-sisacao.md' -g 'docs/diario/registros1.md'`, `cat AGENTS.md`, `sed -n` para leitura do método MUEN, `tail -80 docs/diario/registros1.md`, `rg -n "neural_eod_protocol|hypothesis_id|Hipótese econômica|Fase 0|eod_barrier" docs sisacao8 functions tests infra -S`, criação/edição dos documentos via shell/Python e `TZ=America/Sao_Paulo date '+%Y-%m-%d %H:%M:%S UTC-3'`.
+
+## 2026-06-24 15:40:23 UTC-3 — Execução da Fase 1 do MUEN v1
+
+- Executada a Fase 1 do documento `docs/planejamento/metodo-unificado-evolucao-neural-sisacao.md`, substituindo o label EOD neural por `label_eod_barrier_v2` baseado em motor de trade stateful único.
+- Criado `sisacao8/trade_engine.py` com a política versionada `execution_eod_barrier_v2_conservative_daily`, estados de entrada pendente/posição aberta/saídas, tratamento conservador de target e stop no mesmo candle diário, expiração sem fill e expiração com marcação a mercado.
+- Atualizado `sisacao8/neural_dataset.py` para gerar labels BUY/SELL via motor compartilhado, manter posição após fill até target, stop ou expiração e expor campos operacionais (`trade_side`, `entry_date`, `exit_reason`, `net_return`, excursões e versão da política).
+- Atualizado `sisacao8/backtest.py` para simular sinais usando o mesmo motor de execução, preservando nomes legados de `NO_FILL`/`EXPIRE` na API de backtest.
+- Sincronizadas as cópias embarcadas em `functions/neural_training_dataset/sisacao8/` e `functions/backtest_daily/` para evitar divergência em deploy.
+- Criado `docs/implementacao/fase1-muen-label-motor-execucao.md` e atualizado o método MUEN para apontar para a execução registrada da Fase 1.
+- Adicionado teste de paridade semântica do label v2 confirmando que uma entrada preenchida permanece aberta até target em candle posterior, além de validar os testes existentes de backtest.
+- Comandos usados: `pwd`, `find .. -name AGENTS.md -print`, `sed -n` para leitura de `AGENTS.md`, do método MUEN e dos módulos `sisacao8/neural_dataset.py`/`sisacao8/backtest.py`, `rg -n "label_eod|barrier|_evaluate_side|neural_dataset|backtest|trade"`, criação/edição de código e docs via shell/Python, `python -m black ...`, `python -m pytest tests/test_neural_dataset.py tests/test_backtest_engine.py -q` e `TZ=America/Sao_Paulo date '+%Y-%m-%d %H:%M:%S UTC-3'`.

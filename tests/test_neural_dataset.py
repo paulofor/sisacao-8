@@ -44,7 +44,7 @@ def test_build_training_dataset_creates_features_labels_and_splits() -> None:
     assert not dataset.empty
     assert set(dataset["label_class"]).issubset({"up", "down", "neutral"})
     assert dataset["feature_version"].eq("feature_eod_tabular_v1").all()
-    assert dataset["label_version"].eq("label_eod_barrier_v1").all()
+    assert dataset["label_version"].eq("label_eod_barrier_v2").all()
     assert dataset["valid_for"].gt(dataset["reference_date"]).all()
     assert dataset["return_20d"].notna().any()
     assert dataset["dataset_split"].isin(["train", "validation", "test"]).any()
@@ -72,3 +72,40 @@ def test_assign_temporal_splits_caps_embargo_for_short_windows() -> None:
     assert splits.eq("validation").sum() == 7
     assert splits.eq("test").sum() == 7
     assert splits.isna().sum() > 0
+
+
+def test_label_v2_keeps_trade_open_after_entry_until_later_target() -> None:
+    rows = []
+    start = dt.date(2024, 1, 1)
+    for day in range(25):
+        rows.append(
+            {
+                "ticker": "TEST3",
+                "data_pregao": start + dt.timedelta(days=day),
+                "open": 100.0,
+                "high": 101.0,
+                "low": 99.0,
+                "close": 100.0,
+                "volume": 1000,
+            }
+        )
+    rows[20].update({"low": 98.0, "high": 100.0, "close": 99.0})
+    rows[21].update({"low": 98.5, "high": 105.0, "close": 104.0})
+
+    dataset = build_training_dataset(
+        pd.DataFrame(rows),
+        label_config=BarrierLabelConfig(
+            entry_pct=0.02, target_pct=0.05, stop_pct=0.05, horizon_days=3
+        ),
+        min_history_days=20,
+    )
+    row = dataset[dataset["reference_date"].eq(dt.date(2024, 1, 20))].iloc[0]
+
+    assert row["label_version"] == "label_eod_barrier_v2"
+    assert row["label_class"] == "up"
+    assert bool(row["entry_filled"]) is True
+    assert row["exit_reason"] == "TARGET"
+    assert row["holding_sessions"] == 2
+    assert (
+        row["execution_policy_version"] == "execution_eod_barrier_v2_conservative_daily"
+    )
