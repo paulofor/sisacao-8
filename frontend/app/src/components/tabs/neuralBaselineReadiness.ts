@@ -16,6 +16,8 @@ export interface NeuralBaselineReadiness {
   champion: NeuralTrainingRun | undefined
   bestChallenger: NeuralEvolutionLeaderboardEntry | undefined
   formalComparisonReady: boolean
+  gateChecklist: Array<{ label: string; ready: boolean; detail: string }>
+  blockerSummary: string
   summary: string
   countLabel: string
   nextStep: string
@@ -45,6 +47,40 @@ export const buildNeuralBaselineReadiness = (
   const champion = trainingRuns.find((run) => run.status?.toLowerCase() === 'approved')
   const bestChallenger = leaderboard[0]
   const formalComparisonReady = Boolean(bestEconomicBaseline && champion && bestChallenger)
+  const gateChecklist = [
+    {
+      label: 'Baseline econômico medido',
+      ready: Boolean(bestEconomicBaseline),
+      detail: bestEconomicBaseline
+        ? `${bestEconomicBaseline.strategyId} lidera por expectancy líquida.`
+        : 'Ainda falta baseline econômico com expectancy carregada.',
+    },
+    {
+      label: 'Champion aprovado',
+      ready: Boolean(champion),
+      detail: champion
+        ? `${champion.modelVersion} está aprovado como champion.`
+        : 'Nenhum treino neural está com status approved; todos continuam sem champion.',
+    },
+    {
+      label: 'Challenger avaliada',
+      ready: Boolean(bestChallenger),
+      detail: bestChallenger
+        ? `${bestChallenger.modelVersion} é a challenger líder no leaderboard.`
+        : 'Ainda falta challenger avaliada no leaderboard.',
+    },
+    {
+      label: 'Gate econômico persistido',
+      ready: formalComparisonReady,
+      detail: formalComparisonReady
+        ? 'A comparação já pode ser registrada antes do holdout.'
+        : 'Falta gravar a comparação formal por fold, seed e gate econômico.',
+    },
+  ]
+  const blockerSummary = gateChecklist
+    .filter((item) => !item.ready)
+    .map((item) => item.label)
+    .join(' · ')
   const status: NeuralBaselineJourneyStatus = formalComparisonReady
     ? 'done'
     : baselinesWithEconomicMetrics > 0
@@ -75,6 +111,8 @@ export const buildNeuralBaselineReadiness = (
     champion,
     bestChallenger,
     formalComparisonReady,
+    gateChecklist,
+    blockerSummary,
     summary,
     countLabel: `${formatNumber(strategies.length)} regras · ${formatNumber(baselinesWithTrades)} com trades`,
     nextStep,

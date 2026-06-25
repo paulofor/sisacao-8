@@ -1,4 +1,5 @@
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
+import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline'
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined'
 import PendingOutlinedIcon from '@mui/icons-material/PendingOutlined'
 import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline'
@@ -48,6 +49,8 @@ interface JourneyStepModel {
   title: string
   state: JourneyState
   evidence: string[]
+  visualChecklist?: Array<{ label: string; ready: boolean; detail: string }>
+  blockerSummary?: string
   interpretation: {
     objective: string
     entryCriteria: string
@@ -162,6 +165,8 @@ const buildJourneySteps = (
       title: 'Passo 4 — Baselines',
       state: baselineReadiness.status,
       evidence: baselineReadiness.evidence,
+      visualChecklist: baselineReadiness.gateChecklist,
+      blockerSummary: baselineReadiness.blockerSummary,
       interpretation: {
         objective: 'Garantir que a rede neural supere referências simples e robustas.',
         entryCriteria: 'Heurística, logística, boosting ou MLP simples disponíveis no mesmo protocolo.',
@@ -324,6 +329,11 @@ const NeuralJourneyTab: FC<NeuralJourneyTabProps> = ({
                       {step.evidence.map((item) => (
                         <Typography key={item} variant="body2" color="text.secondary">• {item}</Typography>
                       ))}
+                      {step.blockerSummary ? (
+                        <Alert severity="warning" icon={<ErrorOutlineIcon fontSize="inherit" />} sx={{ py: 0.75 }}>
+                          Falta para concluir: {step.blockerSummary}.
+                        </Alert>
+                      ) : null}
                       <Button size="small" variant="outlined" onClick={() => setActiveStep(index)} sx={{ alignSelf: 'flex-start' }}>
                         Como interpretar
                       </Button>
@@ -342,6 +352,31 @@ const NeuralJourneyTab: FC<NeuralJourneyTabProps> = ({
               <Typography variant="h6" fontWeight={900}>{selectedStep.title}</Typography>
               <Chip size="small" color={stateMeta[selectedStep.state].color} label={stateMeta[selectedStep.state].label} sx={{ alignSelf: 'flex-start' }} />
             </Stack>
+            {selectedStep.visualChecklist ? (
+              <Box sx={{ display: 'grid', gridTemplateColumns: '1fr', gap: 1 }}>
+                {selectedStep.visualChecklist.map((item) => (
+                  <Box
+                    key={item.label}
+                    sx={{
+                      display: 'grid',
+                      gridTemplateColumns: 'auto 1fr',
+                      gap: 1,
+                      p: 1.25,
+                      border: '1px solid',
+                      borderColor: item.ready ? 'success.light' : 'warning.light',
+                      borderRadius: 2,
+                      bgcolor: item.ready ? 'rgba(46, 125, 50, 0.08)' : 'rgba(237, 108, 2, 0.08)',
+                    }}
+                  >
+                    {item.ready ? <CheckCircleIcon color="success" fontSize="small" /> : <ErrorOutlineIcon color="warning" fontSize="small" />}
+                    <Box>
+                      <Typography variant="subtitle2" fontWeight={900}>{item.label}</Typography>
+                      <Typography variant="caption" color="text.secondary">{item.detail}</Typography>
+                    </Box>
+                  </Box>
+                ))}
+              </Box>
+            ) : null}
             <Stack spacing={1.25}>
               <Box>
                 <Typography variant="subtitle2" fontWeight={800}>Objetivo</Typography>

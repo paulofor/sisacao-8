@@ -1232,3 +1232,12 @@
 - Registrado como próximo passo atual fazer o treino/evaluador produzir `metrics_json.muen_economics` reais por fold/seed, permitindo que o orquestrador persista métricas por fold/família e emita Gate Research real sem depender de payload sintético.
 - Atualizado `AGENTS.md` para tornar obrigatório manter `docs/diario/proximo-passo-redes.md` sempre que o ponto de parada ou próximo passo das redes neurais mudar, além de continuar registrando todo trabalho em `docs/diario/registros1.md`.
 - Comandos usados: `git status --short`, `sed -n '1,80p' AGENTS.md`, `tail -20 docs/diario/registros1.md`, criação/edição via shell/Python, `python -m flake8`, `python -m pytest -q`, `git diff --check` e `TZ=America/Sao_Paulo date '+%Y-%m-%d %H:%M:%S UTC-3'`.
+
+## 2026-06-25 00:02:22 UTC-3 — Clareza visual do bloqueio em Baselines neurais
+- Atendida a necessidade operacional de o usuário entender visualmente na tela o que falta no passo `Baselines` da jornada neural.
+- Evoluído o helper `neuralBaselineReadiness` para expor uma checklist visual do gate com quatro itens: baseline econômico medido, champion aprovado, challenger avaliada e gate econômico persistido.
+- Atualizada a tela `Redes neurais — Jornada passo a passo` para mostrar, no próprio stepper, um alerta "Falta para concluir" e, no painel `Como interpretar`, cards com ícones verdes/amarelos indicando quais requisitos já existem e quais bloqueiam a conclusão.
+- O próximo passo operacional das redes não mudou: segue necessário produzir/persistir econômicas MUEN reais por fold/seed e emitir gate econômico real; a alteração atual apenas torna esse bloqueio compreensível visualmente para o usuário.
+- Screenshot não foi gerada porque as instruções do projeto orientam não gerar/versionar screenshots de frontend salvo pedido explícito do usuário.
+- Validação local executada com `npm --prefix frontend/app run lint` e `npm --prefix frontend/app run build`; ambas passaram. O build manteve apenas o aviso conhecido do Vite sobre chunk acima de 500 kB.
+- Comandos usados: `cat AGENTS.md`, `nl -ba frontend/app/src/components/tabs/NeuralJourneyTab.tsx`, `nl -ba frontend/app/src/components/tabs/neuralBaselineReadiness.ts`, edição via Python, `npm --prefix frontend/app run lint`, `npm --prefix frontend/app run build` e `TZ=America/Sao_Paulo date '+%Y-%m-%d %H:%M:%S UTC-3'`.
