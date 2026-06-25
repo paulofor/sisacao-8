@@ -1,6 +1,8 @@
 import RefreshIcon from '@mui/icons-material/Refresh'
 import AssessmentIcon from '@mui/icons-material/Assessment'
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
+import AccountTreeIcon from '@mui/icons-material/AccountTree'
+import AltRouteIcon from '@mui/icons-material/AltRoute'
 import BarChartIcon from '@mui/icons-material/BarChart'
 import ChecklistIcon from '@mui/icons-material/Checklist'
 import DashboardIcon from '@mui/icons-material/Dashboard'
@@ -35,6 +37,8 @@ import ColetasTab from './components/tabs/ColetasTab'
 import IncidentesTab from './components/tabs/IncidentesTab'
 import OperacaoTab from './components/tabs/OperacaoTab'
 import QuantPhase0Tab from './components/tabs/QuantPhase0Tab'
+import NeuralJourneyTab from './components/tabs/NeuralJourneyTab'
+import NeuralOverviewTab from './components/tabs/NeuralOverviewTab'
 import NeuralTrainingDataTab from './components/tabs/NeuralTrainingDataTab'
 import NeuralEvolutionTab from './components/tabs/NeuralEvolutionTab'
 import NeuralTrainingRunsTab from './components/tabs/NeuralTrainingRunsTab'
@@ -99,6 +103,8 @@ type TabValue =
   | 'incidentes'
   | 'backtest'
   | 'quant-roadmap'
+  | 'neural-overview'
+  | 'neural-journey'
   | 'neural-training-data'
   | 'neural-training-runs'
   | 'neural-evolution'
@@ -124,6 +130,8 @@ const menuGroups: Array<{ title: string; items: MenuItem[] }> = [
   {
     title: 'Redes neurais',
     items: [
+      { label: 'Visão geral', value: 'neural-overview', icon: AccountTreeIcon },
+      { label: 'Jornada passo a passo', value: 'neural-journey', icon: AltRouteIcon },
       { label: 'Dados de treino', value: 'neural-training-data', icon: ScienceIcon },
       { label: 'Treinos', value: 'neural-training-runs', icon: ModelTrainingIcon },
       { label: 'Evolução', value: 'neural-evolution', icon: TimelineIcon },
@@ -204,6 +212,8 @@ function App() {
     ] as QueryResult[],
     operacao: [opsOverviewQuery, opsPipelineQuery, opsDqLatestQuery] as QueryResult[],
     'quant-fase0': [quantInventorySummaryQuery, quantTickerCoverageQuery, quantDataQualityIncidentsQuery] as QueryResult[],
+    'neural-overview': [neuralTrainingDataAllocationQuery, neuralTrainingRunsQuery, neuralEvolutionLeaderboardQuery] as QueryResult[],
+    'neural-journey': [neuralTrainingDataAllocationQuery, neuralTrainingRunsQuery, neuralEvolutionLeaderboardQuery] as QueryResult[],
     'neural-training-data': [neuralTrainingDataAllocationQuery] as QueryResult[],
     'neural-training-runs': [neuralTrainingRunsQuery] as QueryResult[],
     'neural-evolution': [neuralEvolutionLeaderboardQuery] as QueryResult[],
@@ -367,6 +377,35 @@ function App() {
             incidents={quantDataQualityIncidentsQuery.data ?? []}
             incidentsError={quantDataQualityIncidentsQuery.error}
             incidentsLoading={quantDataQualityIncidentsQuery.isLoading && (quantDataQualityIncidentsQuery.data ?? []).length === 0}
+          />
+        ) : null}
+
+        {activeTab === 'neural-overview' ? (
+          <NeuralOverviewTab
+            allocation={neuralTrainingDataAllocationQuery.data ?? []}
+            allocationError={neuralTrainingDataAllocationQuery.error}
+            allocationLoading={neuralTrainingDataAllocationQuery.isLoading && (neuralTrainingDataAllocationQuery.data ?? []).length === 0}
+            trainingRuns={neuralTrainingRunsQuery.data ?? []}
+            trainingRunsError={neuralTrainingRunsQuery.error}
+            trainingRunsLoading={neuralTrainingRunsQuery.isLoading && (neuralTrainingRunsQuery.data ?? []).length === 0}
+            leaderboard={neuralEvolutionLeaderboardQuery.data ?? []}
+            leaderboardError={neuralEvolutionLeaderboardQuery.error}
+            leaderboardLoading={neuralEvolutionLeaderboardQuery.isLoading && (neuralEvolutionLeaderboardQuery.data ?? []).length === 0}
+            onNavigate={setActiveTab}
+          />
+        ) : null}
+
+        {activeTab === 'neural-journey' ? (
+          <NeuralJourneyTab
+            allocation={neuralTrainingDataAllocationQuery.data ?? []}
+            allocationError={neuralTrainingDataAllocationQuery.error}
+            allocationLoading={neuralTrainingDataAllocationQuery.isLoading && (neuralTrainingDataAllocationQuery.data ?? []).length === 0}
+            trainingRuns={neuralTrainingRunsQuery.data ?? []}
+            trainingRunsError={neuralTrainingRunsQuery.error}
+            trainingRunsLoading={neuralTrainingRunsQuery.isLoading && (neuralTrainingRunsQuery.data ?? []).length === 0}
+            leaderboard={neuralEvolutionLeaderboardQuery.data ?? []}
+            leaderboardError={neuralEvolutionLeaderboardQuery.error}
+            leaderboardLoading={neuralEvolutionLeaderboardQuery.isLoading && (neuralEvolutionLeaderboardQuery.data ?? []).length === 0}
           />
         ) : null}
 
