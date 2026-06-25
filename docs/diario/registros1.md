@@ -1156,3 +1156,32 @@
 - Adicionados testes unitários em `tests/test_neural_muen.py` cobrindo idempotência do trial, avaliação econômica BUY/SELL, rejeição por hard gates, aprovação de família estável com stress de custo e serialização BigQuery-ready de decisão de gate.
 - Limitação restante: esta entrega cria as bases de código/schema para os gates e métricas econômicas, mas ainda não converte o orquestrador síncrono em Cloud Tasks/Pub/Sub/Cloud Run Jobs nem liga automaticamente cada treino ao pipeline completo `trial -> fold metrics -> family evaluation -> gate decision`; isso deve ser a próxima etapa de integração operacional.
 - Comandos usados: `sed -n` em `sisacao8/neural_training.py` e testes existentes, criação/edição de `sisacao8/neural_muen.py`, cópia para pacotes vendorizados das Functions, atualização de `infra/bq/21_neural_evolution.sql` e `infra/bq/README.md`, `python -m black ...`, `python -m pytest tests/test_neural_muen.py tests/test_neural_training.py -q`, `python -m flake8 ...` e `TZ=America/Sao_Paulo date '+%Y-%m-%d %H:%M:%S UTC-3'`.
+
+## 2026-06-24 21:27:06 UTC-3 — Fase UI 1 do plano de telas da evolução neural
+
+- Iniciada a primeira entrega recomendada do documento `docs/planejamento/plano-telas-evolucao-neural.md`, criando a tela `Visão geral` no grupo `Redes neurais` sem alterar o backend.
+- Adicionado `frontend/app/src/components/tabs/NeuralOverviewTab.tsx` para consolidar dados atuais de dataset, treinos e leaderboard em uma jornada MUEN passo a passo, com cards de estoque, famílias, mantidas/rejeitadas, champion, melhor challenger, explicação de que score não aprova e painéis determinísticos de contexto/próximo passo.
+- Atualizado `frontend/app/src/App.tsx` para incluir a nova entrada de menu `Visão geral`, carregar as queries existentes necessárias e permitir navegação rápida para Dados de treino, Treinos, Evolução e Advisor IA.
+- Validação local executada com `npm --prefix frontend/app run build` e `npm --prefix frontend/app run lint`; ambos passaram. O build manteve apenas o aviso já esperado do Vite sobre chunk acima de 500 kB.
+- Screenshot não foi gerada porque o container não possui navegador Chromium/Chrome disponível para captura local; a ausência foi confirmada com `which chromium || which chromium-browser || which google-chrome || true`.
+- Comandos usados: `find .. -name AGENTS.md -print`, `rg --files`, `sed -n` para leitura de `App.tsx`, abas/hooks/APIs neurais e do plano de telas, criação/edição de arquivos via shell/Python, `npm --prefix frontend/app run build`, `npm --prefix frontend/app run lint`, `which chromium || which chromium-browser || which google-chrome || true`, `git diff` e `TZ=America/Sao_Paulo date '+%Y-%m-%d %H:%M:%S UTC-3'`.
+
+## 2026-06-24 21:31:16 UTC-3 — Fase UI 2 parcial: famílias no leaderboard neural
+
+- Avançada a próxima etapa do plano de telas da evolução neural, aproximando a aba `Evolução` do destino `Famílias e leaderboard` previsto no documento `docs/planejamento/plano-telas-evolucao-neural.md`.
+- Atualizado `frontend/app/src/components/tabs/NeuralEvolutionTab.tsx` para exibir famílias antes de execuções individuais, agrupando candidatos por arquitetura e hiperparâmetros com remoção de campos de seed quando presentes na configuração.
+- Renomeado o score visual para `Índice de ordenação` e incluído aviso explícito de que a ordenação não aprova shadow, paper ou operação.
+- Traduzidas decisões técnicas como `keep_candidate`, `shadow_candidate`, `paper_candidate` e `reject` para linguagem operacional consistente: `Mantida para pesquisa`, `Elegível ao gate de shadow`, `Elegível ao gate de paper` e `Rejeitada nesta etapa`.
+- Adicionada tabela de famílias com execuções, mantidas, rejeitadas, índice mediano, melhor índice, precisão direcional, cobertura, estabilidade e próximo passo determinístico, mantendo a tabela de execuções individuais como detalhe técnico abaixo.
+- Validação local executada com `npm --prefix frontend/app run build` e `npm --prefix frontend/app run lint`; ambos passaram. O build manteve apenas o aviso conhecido do Vite sobre chunk acima de 500 kB.
+- Comandos usados: `git status --short`, `git log -3 --oneline`, `find .. -name AGENTS.md -print`, `sed -n` em `NeuralOverviewTab.tsx` e `NeuralEvolutionTab.tsx`, edição de `NeuralEvolutionTab.tsx` via shell, `npm --prefix frontend/app run build`, `npm --prefix frontend/app run lint` e `TZ=America/Sao_Paulo date '+%Y-%m-%d %H:%M:%S UTC-3'`.
+
+## 2026-06-24 21:35:08 UTC-3 — Fase UI 1/2: tela Jornada passo a passo neural
+
+- Implementada a tela `Jornada passo a passo` no grupo `Redes neurais`, seguindo a Tela 2 do plano `docs/planejamento/plano-telas-evolucao-neural.md` para ensinar e acompanhar o MUEN como fluxo navegável.
+- Criado `frontend/app/src/components/tabs/NeuralJourneyTab.tsx` com Stepper vertical não linear e painel lateral `Como interpretar`, cobrindo Hipótese, Dados, Labels, Baselines, Experimentos, Walk-forward, Holdout, Shadow, Paper e Promoção.
+- A nova tela reutiliza dados atuais de alocação do dataset, treinos e leaderboard para preencher evidências determinísticas de cada etapa, incluindo distribuição de labels, artefatos registrados, avaliações, candidatas mantidas e bloqueios de holdout/shadow/paper/promoção.
+- Atualizado `frontend/app/src/App.tsx` para incluir a entrada de menu `Jornada passo a passo`, carregar as mesmas queries da visão geral e renderizar o novo componente sem alterar backend.
+- Validação local executada com `npm --prefix frontend/app run build` e `npm --prefix frontend/app run lint`; ambos passaram. O build manteve apenas o aviso conhecido do Vite sobre chunk acima de 500 kB.
+- Screenshot não foi gerada porque o container não possui Chromium/Chrome disponível; a ausência foi confirmada com `which chromium || which chromium-browser || which google-chrome || true`.
+- Comandos usados: `git status --short`, `sed -n` no plano de telas e `App.tsx`, criação/edição de arquivos via shell/Python, `npm --prefix frontend/app run build`, `npm --prefix frontend/app run lint`, `which chromium || which chromium-browser || which google-chrome || true` e `TZ=America/Sao_Paulo date '+%Y-%m-%d %H:%M:%S UTC-3'`.
