@@ -54,3 +54,13 @@ Foi definido o processo operacional em `docs/implementacao/processo-aprovacao-ch
 ## Implementação parcial do processo — 2026-06-25 07:42 UTC-3
 
 A rotina `functions/neural_champion_approval` implementa `approve_if_passed` e `audit_current_champion`. O modo `evaluate_candidate` permanece bloqueado explicitamente até ser conectado ao avaliador econômico real, evitando aprovação baseada em payload incompleto.
+
+## Deploy do orquestrador — 2026-06-25
+
+A falha de deploy do `neural_evolution_orchestrator` na revisão Cloud Run `neural-evolution-orchestrator-00026-duh` foi diagnosticada como erro de inicialização por dependência runtime ausente. O `requirements.txt` da função declarava apenas `google-cloud-bigquery`, mas o entrypoint importa `sisacao8.neural_muen`, que depende de `numpy` e `pandas`.
+
+### Próxima ação imediata
+
+1. Executar novamente o workflow/deploy da Cloud Function `neural_evolution_orchestrator` com o pacote atualizado.
+2. Confirmar que a nova revisão fica pronta no Cloud Run e passa a servir tráfego.
+3. Depois do deploy saudável, retomar o próximo passo operacional principal: conectar `evaluate_candidate` ao avaliador econômico real para produzir `muen_economics` por `fold`, `seed` e cenário de custo.
