@@ -1,7 +1,7 @@
 # Próximo passo — Redes neurais MUEN
 
-**Última atualização:** 2026-06-24 23:30 UTC-3  
-**Protocolo:** `neural_eod_protocol_v1`  
+**Última atualização:** 2026-06-25 00:02 UTC-3
+**Protocolo:** `neural_eod_protocol_v1`
 **Status:** ponto de parada operacional registrado
 
 ## Próximo passo atual
@@ -38,3 +38,7 @@ O próximo ponto de parada será alcançado quando uma execução de teste do or
 - O leaderboard continua sendo ordenação; o gate econômico decide avanço.
 - Atualizar este arquivo sempre que o próximo passo das redes neurais mudar.
 - Continuar registrando o trabalho executado em `docs/diario/registros1.md`.
+
+## Nota de interface — 2026-06-25 00:02 UTC-3
+
+A tela `Redes neurais — Jornada passo a passo` agora explica visualmente o bloqueio do passo `Baselines` com uma checklist de gate: baseline econômico medido, champion aprovado, challenger avaliada e gate econômico persistido. O próximo passo operacional acima permanece o mesmo; a mudança foi de clareza visual para evitar que métricas de baseline sejam interpretadas como aprovação.
