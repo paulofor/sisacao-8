@@ -1,0 +1,225 @@
+from __future__ import annotations
+
+import functions.neural_champion_approval.main as function_module
+from sisacao8.neural_champion_approval import (
+    ChampionApprovalRequest,
+    audit_approved_champions,
+    champion_approval_plan,
+)
+
+
+class _FakeQueryJob:
+    def __init__(self, rows):
+        self._rows = rows
+
+    def result(self):
+        return list(self._rows)
+
+
+class _FakeClient:
+    def __init__(self):
+        self.registry = {}
+        self.gates = {}
+        self.updates = []
+        self.queries = []
+
+    def query(self, query, job_config=None):
+        self.queries.append((query, job_config))
+        if query.strip().startswith("UPDATE"):
+            self.updates.append((query, job_config))
+            return _FakeQueryJob([])
+        if "FROM `ingestaokraken.cotacao_intraday.neural_model_registry`" in query:
+            if "WHERE status = @status" in query:
+                return _FakeQueryJob(
+                    [
+                        row
+                        for row in self.registry.values()
+                        if row["status"] == "approved"
+                    ]
+                )
+            return _FakeQueryJob(list(self.registry.values())[:1])
+        if "FROM `ingestaokraken.cotacao_intraday.neural_gate_decisions`" in query:
+            return _FakeQueryJob(list(self.gates.values())[:1])
+        raise AssertionError(query)
+
+
+class _Request:
+    def __init__(self, body):
+        self._body = body
+
+    def get_json(self, silent=True):
+        return self._body
+
+
+def _passed_gate():
+    return {
+        "decision_id": "gate_passed_1",
+        "protocol_version": "neural_eod_protocol_v1",
+        "dataset_snapshot": "snapshot_2026",
+        "candidate_family_hash": "family_hash",
+        "gate_name": "research_walk_forward",
+        "decision_status": "passed",
+        "passed": True,
+        "failed_criteria": [],
+        "decided_at": "2026-06-25T10:00:00+00:00",
+    }
+
+
+def _registry(status="candidate"):
+    return {
+        "model_id": "neural_eod_mlp",
+        "model_version": "model_v1",
+        "status": status,
+        "feature_version": "feature_eod_tabular_v1",
+        "label_version": "label_eod_barrier_v2",
+        "training_dataset_snapshot": "snapshot_2026",
+        "artifact_uri": "gs://bucket/model_v1/model.keras",
+        "notes": "",
+    }
+
+
+def test_champion_approval_plan_allows_passed_gate_candidate():
+    request = ChampionApprovalRequest(
+        model_version="model_v1",
+        decision_id="gate_passed_1",
+        approved_by="operador",
+        approval_ticket="TICKET-1",
+        dry_run=True,
+    )
+
+    plan = champion_approval_plan(
+        request,
+        registry_row=_registry(),
+        gate_decision_row=_passed_gate(),
+    )
+
+    assert plan.approved is True
+    assert plan.update_allowed is True
+    assert plan.failed_checks == ()
+    assert "decision_id=gate_passed_1" in (plan.approval_note or "")
+
+
+def test_champion_approval_plan_blocks_missing_economics_gate():
+    gate = _passed_gate() | {
+        "decision_status": "blocked",
+        "passed": False,
+        "failed_criteria": ["muen_economics_missing"],
+    }
+    request = ChampionApprovalRequest(
+        model_version="model_v1",
+        decision_id="gate_passed_1",
+        approved_by="operador",
+        approval_ticket="TICKET-1",
+    )
+
+    plan = champion_approval_plan(
+        request,
+        registry_row=_registry(),
+        gate_decision_row=gate,
+    )
+
+    assert plan.approved is False
+    assert "gate_status_nao_passou" in plan.failed_checks
+    assert "muen_economics_missing" in plan.failed_checks
+    assert plan.update_allowed is False
+
+
+def test_champion_approval_plan_is_idempotent_for_already_approved_model():
+    request = ChampionApprovalRequest(
+        model_version="model_v1",
+        decision_id="gate_passed_1",
+        approved_by="operador",
+        approval_ticket="TICKET-1",
+    )
+
+    plan = champion_approval_plan(
+        request,
+        registry_row=_registry(status="approved"),
+        gate_decision_row=_passed_gate(),
+    )
+
+    assert plan.approved is True
+    assert plan.already_approved is True
+    assert plan.update_allowed is False
+    assert plan.warnings == ("modelo_ja_aprovado",)
+
+
+def test_audit_approved_champions_flags_duplicates():
+    rows = [
+        _registry(status="approved"),
+        _registry(status="approved") | {"model_version": "model_v2"},
+        _registry(status="candidate") | {"model_version": "model_v3"},
+    ]
+
+    audit = audit_approved_champions(rows)
+
+    assert audit.approved_count == 2
+    assert audit.model_versions == ("model_v1", "model_v2")
+    assert audit.warnings
+    assert audit.warnings[0].startswith("champions_duplicados:")
+
+
+def test_function_approve_if_passed_dry_run_does_not_update(monkeypatch):
+    fake_client = _FakeClient()
+    fake_client.registry["model_v1"] = _registry()
+    fake_client.gates["gate_passed_1"] = _passed_gate()
+    monkeypatch.setattr(function_module, "_BQ_CLIENT", fake_client)
+
+    response, status = function_module.neural_champion_approval(
+        _Request(
+            {
+                "mode": "approve_if_passed",
+                "model_version": "model_v1",
+                "decision_id": "gate_passed_1",
+                "approved_by": "operador",
+                "approval_ticket": "TICKET-1",
+                "dry_run": True,
+            }
+        )
+    )
+
+    assert status == 200
+    assert response["plan"]["approved"] is True
+    assert response["plan"]["update_allowed"] is True
+    assert fake_client.updates == []
+
+
+def test_function_approve_if_passed_updates_when_not_dry_run(monkeypatch):
+    fake_client = _FakeClient()
+    fake_client.registry["model_v1"] = _registry()
+    fake_client.gates["gate_passed_1"] = _passed_gate()
+    monkeypatch.setattr(function_module, "_BQ_CLIENT", fake_client)
+
+    response, status = function_module.neural_champion_approval(
+        _Request(
+            {
+                "mode": "approve_if_passed",
+                "model_version": "model_v1",
+                "decision_id": "gate_passed_1",
+                "approved_by": "operador",
+                "approval_ticket": "TICKET-1",
+                "dry_run": False,
+            }
+        )
+    )
+
+    assert status == 200
+    assert response["plan"]["approved"] is True
+    assert len(fake_client.updates) == 1
+    assert "SET status = @status" in fake_client.updates[0][0]
+
+
+def test_function_evaluate_candidate_is_explicitly_blocked(monkeypatch):
+    fake_client = _FakeClient()
+    monkeypatch.setattr(function_module, "_BQ_CLIENT", fake_client)
+
+    response, status = function_module.neural_champion_approval(
+        _Request({"mode": "evaluate_candidate"})
+    )
+
+    assert status == 409
+    assert response["status"] == "blocked"
+    assert (
+        response["reason"]
+        == "evaluate_candidate_requires_economic_evaluator_integration"
+    )

@@ -15,4 +15,5 @@ Cada subdiretório contém uma função ou job HTTP com `main.py` e `requirement
 - `neural_eod_predictions`: gera predições neurais EOD em shadow mode e grava somente em `neural_eod_predictions`, sem criar sinais operacionais.
 - `neural_training_dataset`: materializa o dataset supervisionado neural EOD em `neural_eod_training_dataset` para alimentar treino, auditoria e a tela de dados de treino.
 - `neural_training`: treina o baseline neural EOD a partir de `neural_eod_training_dataset`, publica o artefato do modelo e registra a execução em `neural_model_registry`.
+- `neural_champion_approval`: valida decisões `research_walk_forward` aprovadas, executa `approve_if_passed` para promover `neural_model_registry.status` para `approved` com trilha auditável e oferece auditoria dos champions atuais.
 - `neural_evolution_orchestrator`: orquestra rodadas determinísticas de evolução neural, gera candidatos, chama `neural_training` e grava `neural_evolution_runs`, `neural_candidate_configs` e `neural_candidate_evaluations` para alimentar o leaderboard operacional.

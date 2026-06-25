@@ -85,6 +85,13 @@ jobs:
             memory: 512Mi
             timeout: 3600s
             env: BQ_INTRADAY_DATASET=cotacao_intraday,BQ_NEURAL_TRAINING_DATASET_TABLE=neural_eod_training_dataset,BQ_NEURAL_MODEL_REGISTRY_TABLE=neural_model_registry,BQ_NEURAL_EVOLUTION_RUNS_TABLE=neural_evolution_runs,BQ_NEURAL_CANDIDATE_CONFIGS_TABLE=neural_candidate_configs,BQ_NEURAL_CANDIDATE_EVALUATIONS_TABLE=neural_candidate_evaluations,BQ_LOCATION=us-east1,NEURAL_TRAINING_URL=https://us-east1-ingestaokraken.cloudfunctions.net/neural_training,NEURAL_EVOLUTION_MAX_TRIALS=10
+          - name: neural_champion_approval
+            entry_point: neural_champion_approval
+            source: functions/neural_champion_approval
+            service_account: sa-neural-evolution-orchestrator@ingestaokraken.iam.gserviceaccount.com
+            memory: 512Mi
+            timeout: 600s
+            env: BQ_INTRADAY_DATASET=cotacao_intraday,BQ_NEURAL_MODEL_REGISTRY_TABLE=neural_model_registry,BQ_NEURAL_GATE_DECISIONS_TABLE=neural_gate_decisions,BQ_LOCATION=us-east1
     steps:
       - uses: actions/checkout@v4
       - name: Auth GCP
