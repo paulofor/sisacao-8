@@ -212,8 +212,8 @@ function App() {
     ] as QueryResult[],
     operacao: [opsOverviewQuery, opsPipelineQuery, opsDqLatestQuery] as QueryResult[],
     'quant-fase0': [quantInventorySummaryQuery, quantTickerCoverageQuery, quantDataQualityIncidentsQuery] as QueryResult[],
-    'neural-overview': [neuralTrainingDataAllocationQuery, neuralTrainingRunsQuery, neuralEvolutionLeaderboardQuery] as QueryResult[],
-    'neural-journey': [neuralTrainingDataAllocationQuery, neuralTrainingRunsQuery, neuralEvolutionLeaderboardQuery] as QueryResult[],
+    'neural-overview': [neuralTrainingDataAllocationQuery, neuralTrainingRunsQuery, neuralEvolutionLeaderboardQuery, quantBaselineStrategiesQuery] as QueryResult[],
+    'neural-journey': [neuralTrainingDataAllocationQuery, neuralTrainingRunsQuery, neuralEvolutionLeaderboardQuery, quantBaselineStrategiesQuery] as QueryResult[],
     'neural-training-data': [neuralTrainingDataAllocationQuery] as QueryResult[],
     'neural-training-runs': [neuralTrainingRunsQuery] as QueryResult[],
     'neural-evolution': [neuralEvolutionLeaderboardQuery] as QueryResult[],
@@ -255,6 +255,13 @@ function App() {
 
   const handleRefresh = () => {
     void Promise.all(activeQueries.map((query) => query.refetch()))
+  }
+
+  const handleNeuralNavigate = (target: TabValue) => {
+    if (target === 'quant-roadmap') {
+      setSelectedRoadmapKey('baseline')
+    }
+    setActiveTab(target)
   }
 
   const handleMenuClick = (item: MenuItem) => {
@@ -391,7 +398,10 @@ function App() {
             leaderboard={neuralEvolutionLeaderboardQuery.data ?? []}
             leaderboardError={neuralEvolutionLeaderboardQuery.error}
             leaderboardLoading={neuralEvolutionLeaderboardQuery.isLoading && (neuralEvolutionLeaderboardQuery.data ?? []).length === 0}
-            onNavigate={setActiveTab}
+            quantBaselineStrategies={quantBaselineStrategiesQuery.data ?? []}
+            quantBaselineStrategiesError={quantBaselineStrategiesQuery.error}
+            quantBaselineStrategiesLoading={quantBaselineStrategiesQuery.isLoading && (quantBaselineStrategiesQuery.data ?? []).length === 0}
+            onNavigate={handleNeuralNavigate}
           />
         ) : null}
 
@@ -406,6 +416,9 @@ function App() {
             leaderboard={neuralEvolutionLeaderboardQuery.data ?? []}
             leaderboardError={neuralEvolutionLeaderboardQuery.error}
             leaderboardLoading={neuralEvolutionLeaderboardQuery.isLoading && (neuralEvolutionLeaderboardQuery.data ?? []).length === 0}
+            quantBaselineStrategies={quantBaselineStrategiesQuery.data ?? []}
+            quantBaselineStrategiesError={quantBaselineStrategiesQuery.error}
+            quantBaselineStrategiesLoading={quantBaselineStrategiesQuery.isLoading && (quantBaselineStrategiesQuery.data ?? []).length === 0}
           />
         ) : null}
 

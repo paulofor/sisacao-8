@@ -22,6 +22,16 @@ from sisacao8.neural_evolution import (
     repeat_finalists_with_seeds,
     select_diverse_top_candidates,
 )
+from sisacao8.neural_muen import (
+    FamilyEvaluation,
+    FoldEconomicMetrics,
+    GateDecision,
+    aggregate_family_evaluation,
+    family_evaluation_row,
+    fold_metrics_row,
+    gate_decision_row,
+    research_gate_decision,
+)
 
 PROJECT_ID = os.environ.get("GCP_PROJECT", "ingestaokraken")
 BQ_DATASET = os.environ.get("BQ_INTRADAY_DATASET", "cotacao_intraday")
@@ -37,6 +47,15 @@ CANDIDATE_EVALUATIONS_TABLE = os.environ.get(
 )
 MODEL_REGISTRY_TABLE = os.environ.get(
     "BQ_NEURAL_MODEL_REGISTRY_TABLE", "neural_model_registry"
+)
+GATE_DECISIONS_TABLE = os.environ.get(
+    "BQ_NEURAL_GATE_DECISIONS_TABLE", "neural_gate_decisions"
+)
+FOLD_METRICS_TABLE = os.environ.get(
+    "BQ_NEURAL_FOLD_METRICS_TABLE", "neural_fold_metrics"
+)
+FAMILY_EVALUATIONS_TABLE = os.environ.get(
+    "BQ_NEURAL_FAMILY_EVALUATIONS_TABLE", "neural_family_evaluations"
 )
 TRAINING_DATASET_TABLE = os.environ.get(
     "BQ_NEURAL_TRAINING_DATASET_TABLE", "neural_eod_training_dataset"
@@ -142,6 +161,9 @@ def neural_evolution_orchestrator(request_obj: Any) -> tuple[Dict[str, Any], int
 
     training_results: list[dict[str, Any]] = []
     evaluation_rows: list[dict[str, Any]] = []
+    gate_decision_rows: list[dict[str, Any]] = []
+    fold_metric_rows: list[dict[str, Any]] = []
+    family_evaluation_rows: list[dict[str, Any]] = []
     failures: list[dict[str, Any]] = []
 
     for candidate in candidates:
@@ -151,16 +173,26 @@ def neural_evolution_orchestrator(request_obj: Any) -> tuple[Dict[str, Any], int
                 registry_row = _fetch_registry_row(client, candidate.model_version)
             else:
                 registry_row = _fetch_registry_row(client, candidate.model_version)
+            metrics = _metrics_from_registry(registry_row)
             score = _score_registry_row(candidate.architecture, registry_row)
             evaluation_rows.append(
                 _evaluation_row(
                     candidate_id=candidate.candidate_id,
                     model_version=candidate.model_version,
                     dataset_snapshot=dataset_snapshot,
-                    metrics=_metrics_from_registry(registry_row),
+                    metrics=metrics,
                     score=score,
                 )
             )
+            muen_rows = _muen_economic_rows_from_metrics(
+                dataset_snapshot=dataset_snapshot,
+                candidate=candidate,
+                metrics=metrics,
+                score=score,
+            )
+            fold_metric_rows.extend(muen_rows["fold_metrics"])
+            family_evaluation_rows.extend(muen_rows["family_evaluations"])
+            gate_decision_rows.extend(muen_rows["gate_decisions"])
         except (
             Exception
         ) as exc:  # noqa: BLE001 - persist per-candidate failure and continue.
@@ -171,6 +203,14 @@ def neural_evolution_orchestrator(request_obj: Any) -> tuple[Dict[str, Any], int
 
     if evaluation_rows and not dry_run:
         _append_rows(client, _table_id(CANDIDATE_EVALUATIONS_TABLE), evaluation_rows)
+    if fold_metric_rows and not dry_run:
+        _append_rows(client, _table_id(FOLD_METRICS_TABLE), fold_metric_rows)
+    if family_evaluation_rows and not dry_run:
+        _append_rows(
+            client, _table_id(FAMILY_EVALUATIONS_TABLE), family_evaluation_rows
+        )
+    if gate_decision_rows and not dry_run:
+        _append_rows(client, _table_id(GATE_DECISIONS_TABLE), gate_decision_rows)
 
     status = "completed" if not failures else "completed_with_errors"
     if len(failures) == len(candidates):
@@ -180,6 +220,9 @@ def neural_evolution_orchestrator(request_obj: Any) -> tuple[Dict[str, Any], int
         "trained_count": len(training_results),
         "evaluated_count": len(evaluation_rows),
         "failed_count": len(failures),
+        "gate_decision_count": len(gate_decision_rows),
+        "fold_metric_count": len(fold_metric_rows),
+        "family_evaluation_count": len(family_evaluation_rows),
         "failures": failures,
     }
     if not dry_run:
@@ -193,6 +236,9 @@ def neural_evolution_orchestrator(request_obj: Any) -> tuple[Dict[str, Any], int
         "trained_count": len(training_results),
         "evaluated_count": len(evaluation_rows),
         "failed_count": len(failures),
+        "gate_decision_count": len(gate_decision_rows),
+        "fold_metric_count": len(fold_metric_rows),
+        "family_evaluation_count": len(family_evaluation_rows),
         "dry_run": dry_run,
         "candidates": [candidate.model_version for candidate in candidates],
         "failures": failures,
@@ -531,6 +577,177 @@ def _evaluation_row(
         "decision_reasons_json": list(score.decision_reasons),
         "created_at": _utcnow().isoformat(),
     }
+
+
+def _muen_economic_rows_from_metrics(
+    *,
+    dataset_snapshot: str,
+    candidate: CandidateConfig,
+    metrics: Mapping[str, Any],
+    score: EvaluationScore,
+) -> dict[str, list[dict[str, Any]]]:
+    """Build MUEN persistence rows from registry metrics when available."""
+
+    economics = metrics.get("muen_economics")
+    if not isinstance(economics, Mapping):
+        return {
+            "fold_metrics": [],
+            "family_evaluations": [],
+            "gate_decisions": [
+                _research_gate_missing_economics_row(
+                    dataset_snapshot=dataset_snapshot,
+                    candidate=candidate,
+                    score=score,
+                )
+            ],
+        }
+
+    protocol_version = str(
+        economics.get("protocol_version") or "neural_eod_protocol_v1"
+    )
+    family_hash = str(
+        economics.get("candidate_family_hash")
+        or candidate.dedupe_hash
+        or candidate.candidate_id
+    )
+    seed_count = int(economics.get("seed_count") or 1)
+    fold_metrics = [
+        _fold_metric_from_mapping(item)
+        for item in _json_list(economics.get("fold_metrics"))
+    ]
+    family = _family_evaluation_from_mapping(economics.get("family_evaluation"))
+    if family is None and fold_metrics:
+        family = aggregate_family_evaluation(
+            family_hash, fold_metrics, seed_count=seed_count
+        )
+    if family is None:
+        return {
+            "fold_metrics": [],
+            "family_evaluations": [],
+            "gate_decisions": [
+                _research_gate_missing_economics_row(
+                    dataset_snapshot=dataset_snapshot,
+                    candidate=candidate,
+                    score=score,
+                )
+            ],
+        }
+
+    fold_rows = [
+        fold_metrics_row(
+            protocol_version=protocol_version,
+            dataset_snapshot=dataset_snapshot,
+            candidate_family_hash=family_hash,
+            trial_id=str(
+                getattr(metric, "trial_id", "")
+                or _trial_id_for_metric(candidate, metric, index)
+            ),
+            seed=int(getattr(metric, "seed", economics.get("seed") or 0) or 0),
+            metrics=metric,
+        )
+        for index, metric in enumerate(fold_metrics, start=1)
+    ]
+    family_row = family_evaluation_row(
+        protocol_version=protocol_version,
+        dataset_snapshot=dataset_snapshot,
+        family=family,
+    )
+    decision = research_gate_decision(family)
+    gate_row = gate_decision_row(
+        protocol_version=protocol_version,
+        dataset_snapshot=dataset_snapshot,
+        candidate_family_hash=family_hash,
+        decision=decision,
+    )
+    return {
+        "fold_metrics": fold_rows,
+        "family_evaluations": [family_row],
+        "gate_decisions": [gate_row],
+    }
+
+
+def _fold_metric_from_mapping(value: Any) -> FoldEconomicMetrics:
+    data = _json_mapping(value)
+    return FoldEconomicMetrics(
+        fold_id=str(data.get("fold_id")),
+        trades=int(data.get("trades") or 0),
+        coverage=float(data.get("coverage") or 0.0),
+        expectancy_net=float(data.get("expectancy_net") or 0.0),
+        median_net_return=float(data.get("median_net_return") or 0.0),
+        total_net_return=float(data.get("total_net_return") or 0.0),
+        profit_factor=float(data.get("profit_factor") or 0.0),
+        max_drawdown=float(data.get("max_drawdown") or 0.0),
+        positive_trade_ratio=float(data.get("positive_trade_ratio") or 0.0),
+        delta_expectancy_vs_champion=float(
+            data.get("delta_expectancy_vs_champion") or 0.0
+        ),
+        cost_multiplier=float(data.get("cost_multiplier") or 1.0),
+    )
+
+
+def _family_evaluation_from_mapping(value: Any) -> FamilyEvaluation | None:
+    if not isinstance(value, Mapping):
+        return None
+    data = _json_mapping(value)
+    return FamilyEvaluation(
+        candidate_family_hash=str(data.get("candidate_family_hash")),
+        folds=int(data.get("folds") or 0),
+        seeds=int(data.get("seeds") or 1),
+        median_delta_expectancy_vs_champion=float(
+            data.get("median_delta_expectancy_vs_champion") or 0.0
+        ),
+        mean_delta_expectancy_vs_champion=float(
+            data.get("mean_delta_expectancy_vs_champion") or 0.0
+        ),
+        worst_fold_delta_expectancy_vs_champion=float(
+            data.get("worst_fold_delta_expectancy_vs_champion") or 0.0
+        ),
+        positive_folds=int(data.get("positive_folds") or 0),
+        positive_fold_ratio=float(data.get("positive_fold_ratio") or 0.0),
+        median_expectancy_net=float(data.get("median_expectancy_net") or 0.0),
+        max_drawdown=float(data.get("max_drawdown") or 0.0),
+        total_trades=int(data.get("total_trades") or 0),
+        stable_across_seeds=bool(data.get("stable_across_seeds")),
+        cost_multipliers=tuple(
+            float(item) for item in _json_list(data.get("cost_multipliers"))
+        ),
+    )
+
+
+def _trial_id_for_metric(
+    candidate: CandidateConfig, metric: FoldEconomicMetrics, index: int
+) -> str:
+    cost = str(metric.cost_multiplier).replace(".", "_")
+    return f"{candidate.candidate_id}_{metric.fold_id}_{index}_{cost}"
+
+
+def _research_gate_missing_economics_row(
+    *,
+    dataset_snapshot: str,
+    candidate: CandidateConfig,
+    score: EvaluationScore,
+) -> dict[str, Any]:
+    """Emit an auditable blocked gate when economic fold evidence is absent."""
+
+    decision = GateDecision(
+        gate_name="research_walk_forward",
+        decision_status="blocked",
+        passed=False,
+        failed_criteria=("muen_economics_missing",),
+        metrics={
+            "candidate_id": candidate.candidate_id,
+            "model_version": candidate.model_version,
+            "score_total": score.score_total,
+            "decision": score.decision,
+            "reason": "neural_fold_metrics/neural_family_evaluations not persisted yet",
+        },
+    )
+    return gate_decision_row(
+        protocol_version="neural_eod_protocol_v1",
+        dataset_snapshot=dataset_snapshot,
+        candidate_family_hash=candidate.dedupe_hash or candidate.candidate_id,
+        decision=decision,
+    )
 
 
 def _append_rows(

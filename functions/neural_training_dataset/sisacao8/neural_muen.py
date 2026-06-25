@@ -246,6 +246,139 @@ def research_gate_decision(
     )
 
 
+def fold_metrics_row(
+    *,
+    protocol_version: str,
+    dataset_snapshot: str,
+    candidate_family_hash: str,
+    trial_id: str,
+    seed: int,
+    metrics: FoldEconomicMetrics,
+    created_at: str | None = None,
+) -> dict[str, Any]:
+    """Return a BigQuery-ready row for ``neural_fold_metrics``."""
+
+    return {
+        "trial_id": trial_id,
+        "protocol_version": protocol_version,
+        "dataset_snapshot": dataset_snapshot,
+        "candidate_family_hash": candidate_family_hash,
+        "fold_id": metrics.fold_id,
+        "seed": int(seed),
+        "cost_multiplier": metrics.cost_multiplier,
+        "trades": metrics.trades,
+        "coverage": metrics.coverage,
+        "expectancy_net": metrics.expectancy_net,
+        "median_net_return": metrics.median_net_return,
+        "total_net_return": metrics.total_net_return,
+        "profit_factor": metrics.profit_factor,
+        "max_drawdown": metrics.max_drawdown,
+        "positive_trade_ratio": metrics.positive_trade_ratio,
+        "delta_expectancy_vs_champion": metrics.delta_expectancy_vs_champion,
+        "metrics_json": metrics.to_json_dict(),
+        "created_at": created_at or _utc_now_iso(),
+    }
+
+
+def family_evaluation_row(
+    *,
+    protocol_version: str,
+    dataset_snapshot: str,
+    family: FamilyEvaluation,
+    created_at: str | None = None,
+) -> dict[str, Any]:
+    """Return a BigQuery-ready row for ``neural_family_evaluations``."""
+
+    return {
+        "protocol_version": protocol_version,
+        "dataset_snapshot": dataset_snapshot,
+        "candidate_family_hash": family.candidate_family_hash,
+        "folds": family.folds,
+        "seeds": family.seeds,
+        "median_delta_expectancy_vs_champion": (
+            family.median_delta_expectancy_vs_champion
+        ),
+        "mean_delta_expectancy_vs_champion": family.mean_delta_expectancy_vs_champion,
+        "worst_fold_delta_expectancy_vs_champion": (
+            family.worst_fold_delta_expectancy_vs_champion
+        ),
+        "positive_folds": family.positive_folds,
+        "positive_fold_ratio": family.positive_fold_ratio,
+        "median_expectancy_net": family.median_expectancy_net,
+        "max_drawdown": family.max_drawdown,
+        "total_trades": family.total_trades,
+        "stable_across_seeds": family.stable_across_seeds,
+        "cost_multipliers": list(family.cost_multipliers),
+        "metrics_json": family.to_json_dict(),
+        "created_at": created_at or _utc_now_iso(),
+    }
+
+
+def daily_return_rows(
+    frame: pd.DataFrame,
+    *,
+    protocol_version: str,
+    dataset_snapshot: str,
+    candidate_family_hash: str,
+    trial_id: str,
+    fold_id: str,
+    seed: int,
+    prediction_column: str = "predicted_label",
+    reference_date_column: str = "reference_date",
+    champion_return_column: str | None = "champion_net_return",
+    cost_multiplier: float = 1.0,
+    created_at: str | None = None,
+) -> list[dict[str, Any]]:
+    """Return BigQuery-ready paired daily rows for ``neural_daily_returns``."""
+
+    required = {
+        prediction_column,
+        reference_date_column,
+        "buy_net_return",
+        "sell_net_return",
+    }
+    missing = required.difference(frame.columns)
+    if missing:
+        raise ValueError(f"Missing daily return columns: {sorted(missing)}")
+
+    decisions = frame[prediction_column].fillna("neutral").astype(str)
+    buy_returns = pd.to_numeric(frame["buy_net_return"], errors="coerce").fillna(0.0)
+    sell_returns = pd.to_numeric(frame["sell_net_return"], errors="coerce").fillna(0.0)
+    model_returns = np.where(decisions.eq("up"), buy_returns, 0.0)
+    model_returns = np.where(decisions.eq("down"), sell_returns, model_returns)
+    model_returns = pd.Series(model_returns, index=frame.index, dtype="float64")
+    champion_returns = _champion_returns(frame, champion_return_column)
+    reference_dates = pd.to_datetime(frame[reference_date_column], errors="coerce")
+    row_created_at = created_at or _utc_now_iso()
+
+    rows: list[dict[str, Any]] = []
+    for index, reference_date in reference_dates.items():
+        if pd.isna(reference_date):
+            continue
+        model_return = float(model_returns.loc[index])
+        champion_return = float(champion_returns.loc[index])
+        is_trade = decisions.loc[index] in {"up", "down"}
+        rows.append(
+            {
+                "protocol_version": protocol_version,
+                "dataset_snapshot": dataset_snapshot,
+                "candidate_family_hash": candidate_family_hash,
+                "trial_id": trial_id,
+                "fold_id": fold_id,
+                "seed": int(seed),
+                "reference_date": reference_date.date().isoformat(),
+                "model_net_return": model_return,
+                "champion_net_return": champion_return,
+                "delta_net_return": model_return - champion_return,
+                "exposure": 1.0 if is_trade else 0.0,
+                "trades": 1 if is_trade else 0,
+                "cost_multiplier": float(cost_multiplier),
+                "created_at": row_created_at,
+            }
+        )
+    return rows
+
+
 def gate_decision_row(
     *,
     protocol_version: str,
@@ -270,6 +403,10 @@ def gate_decision_row(
         "gate_engine_version": decision.gate_engine_version,
         "decided_at": decision.decided_at,
     }
+
+
+def _utc_now_iso() -> str:
+    return dt.datetime.now(dt.timezone.utc).isoformat()
 
 
 def _decision_id(
