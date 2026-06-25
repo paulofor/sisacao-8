@@ -23,7 +23,9 @@ import type {
   NeuralEvolutionLeaderboardEntry,
   NeuralTrainingDataAllocation,
   NeuralTrainingRun,
+  QuantBaselineStrategy,
 } from '../../api/ops'
+import { buildNeuralBaselineReadiness } from './neuralBaselineReadiness'
 
 interface NeuralJourneyTabProps {
   allocation: NeuralTrainingDataAllocation[]
@@ -32,6 +34,9 @@ interface NeuralJourneyTabProps {
   leaderboard: NeuralEvolutionLeaderboardEntry[]
   leaderboardError?: Error | null
   leaderboardLoading: boolean
+  quantBaselineStrategies: QuantBaselineStrategy[]
+  quantBaselineStrategiesError?: Error | null
+  quantBaselineStrategiesLoading: boolean
   trainingRuns: NeuralTrainingRun[]
   trainingRunsError?: Error | null
   trainingRunsLoading: boolean
@@ -84,6 +89,7 @@ const buildJourneySteps = (
   allocation: NeuralTrainingDataAllocation[],
   trainingRuns: NeuralTrainingRun[],
   leaderboard: NeuralEvolutionLeaderboardEntry[],
+  quantBaselineStrategies: QuantBaselineStrategy[],
 ): JourneyStepModel[] => {
   const totalRows = allocation.reduce((total, row) => total + row.rowsCount, 0)
   const tickers = allocation.reduce((total, row) => Math.max(total, row.tickersCount), 0)
@@ -99,6 +105,7 @@ const buildJourneySteps = (
   const shadowReady = leaderboard.some((entry) => ['shadow_candidate', 'paper_candidate'].includes(entry.decision?.toLowerCase() ?? ''))
   const paperReady = leaderboard.some((entry) => entry.decision?.toLowerCase() === 'paper_candidate')
   const latestRun = trainingRuns[0]
+  const baselineReadiness = buildNeuralBaselineReadiness(quantBaselineStrategies, trainingRuns, leaderboard)
 
   return [
     {
@@ -153,17 +160,14 @@ const buildJourneySteps = (
     },
     {
       title: 'Passo 4 — Baselines',
-      state: 'waiting',
-      evidence: [
-        'Tela dedicada de baselines neurais ainda não foi conectada.',
-        'Champion econômico deve ser comparado antes de qualquer promoção.',
-      ],
+      state: baselineReadiness.status,
+      evidence: baselineReadiness.evidence,
       interpretation: {
         objective: 'Garantir que a rede neural supere referências simples e robustas.',
         entryCriteria: 'Heurística, logística, boosting ou MLP simples disponíveis no mesmo protocolo.',
-        exitCriteria: 'Modelo neural demonstra valor incremental líquido contra o champion.',
+        exitCriteria: 'Baselines econômicos carregados e modelo neural demonstra valor incremental líquido contra o champion.',
         risks: 'Promover complexidade sem ganho econômico real.',
-        nextStep: 'Conectar baselines econômicos ao ciclo neural quando os endpoints estiverem prontos.',
+        nextStep: baselineReadiness.nextStep,
       },
     },
     {
@@ -269,18 +273,21 @@ const NeuralJourneyTab: FC<NeuralJourneyTabProps> = ({
   leaderboard,
   leaderboardError,
   leaderboardLoading,
+  quantBaselineStrategies,
+  quantBaselineStrategiesError,
+  quantBaselineStrategiesLoading,
   trainingRuns,
   trainingRunsError,
   trainingRunsLoading,
 }) => {
   const [activeStep, setActiveStep] = useState(0)
   const steps = useMemo(
-    () => buildJourneySteps(allocation, trainingRuns, leaderboard),
-    [allocation, trainingRuns, leaderboard],
+    () => buildJourneySteps(allocation, trainingRuns, leaderboard, quantBaselineStrategies),
+    [allocation, trainingRuns, leaderboard, quantBaselineStrategies],
   )
   const selectedStep = steps[activeStep]
-  const loading = allocationLoading || leaderboardLoading || trainingRunsLoading
-  const hasError = allocationError || leaderboardError || trainingRunsError
+  const loading = allocationLoading || leaderboardLoading || trainingRunsLoading || quantBaselineStrategiesLoading
+  const hasError = allocationError || leaderboardError || trainingRunsError || quantBaselineStrategiesError
 
   return (
     <Stack spacing={3}>
