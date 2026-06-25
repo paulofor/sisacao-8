@@ -1226,3 +1226,9 @@
 - Adicionado teste cobrindo o cenário com `muen_economics.fold_metrics`, validando persistência em `neural_fold_metrics`, `neural_family_evaluations` e `neural_gate_decisions` sem o motivo bloqueante `muen_economics_missing`.
 - Ponto de parada alcançado: o orquestrador já sabe alternar entre bloqueio por ausência de econômicas e gate real quando o registry trouxer folds; a próxima etapa é fazer o treino/evaluador produzir `muen_economics` reais por fold/seed em vez de depender de payload sintético no registry.
 - Comandos usados: `python -m black functions/neural_evolution_orchestrator/main.py`, `python -m pytest tests/test_neural_evolution_orchestrator_function.py -q`, edição via Python, `python -m black tests/test_neural_evolution_orchestrator_function.py`, `python -m flake8`, `python -m pytest -q`, `npm --prefix frontend/app run lint`, `npm --prefix frontend/app run build`, `git diff --check` e `TZ=America/Sao_Paulo date '+%Y-%m-%d %H:%M:%S UTC-3'`.
+
+## 2026-06-24 23:29:13 UTC-3 — Documento permanente de próximo passo das redes
+- Criado `docs/diario/proximo-passo-redes.md` para manter o próximo passo operacional das redes neurais MUEN em um local único e fácil de consultar.
+- Registrado como próximo passo atual fazer o treino/evaluador produzir `metrics_json.muen_economics` reais por fold/seed, permitindo que o orquestrador persista métricas por fold/família e emita Gate Research real sem depender de payload sintético.
+- Atualizado `AGENTS.md` para tornar obrigatório manter `docs/diario/proximo-passo-redes.md` sempre que o ponto de parada ou próximo passo das redes neurais mudar, além de continuar registrando todo trabalho em `docs/diario/registros1.md`.
+- Comandos usados: `git status --short`, `sed -n '1,80p' AGENTS.md`, `tail -20 docs/diario/registros1.md`, criação/edição via shell/Python, `python -m flake8`, `python -m pytest -q`, `git diff --check` e `TZ=America/Sao_Paulo date '+%Y-%m-%d %H:%M:%S UTC-3'`.
