@@ -22,9 +22,11 @@ import type {
   NeuralEvolutionLeaderboardEntry,
   NeuralTrainingDataAllocation,
   NeuralTrainingRun,
+  QuantBaselineStrategy,
 } from '../../api/ops'
+import { buildNeuralBaselineReadiness } from './neuralBaselineReadiness'
 
-type NeuralNavigationTarget = 'neural-training-data' | 'neural-training-runs' | 'neural-evolution' | 'ai-advisor'
+type NeuralNavigationTarget = 'neural-training-data' | 'neural-training-runs' | 'neural-evolution' | 'ai-advisor' | 'quant-roadmap'
 
 interface NeuralOverviewTabProps {
   allocation: NeuralTrainingDataAllocation[]
@@ -34,6 +36,9 @@ interface NeuralOverviewTabProps {
   leaderboardError?: Error | null
   leaderboardLoading: boolean
   onNavigate: (target: NeuralNavigationTarget) => void
+  quantBaselineStrategies: QuantBaselineStrategy[]
+  quantBaselineStrategiesError?: Error | null
+  quantBaselineStrategiesLoading: boolean
   trainingRuns: NeuralTrainingRun[]
   trainingRunsError?: Error | null
   trainingRunsLoading: boolean
@@ -112,6 +117,7 @@ const buildJourney = (
   allocation: NeuralTrainingDataAllocation[],
   runs: NeuralTrainingRun[],
   leaderboard: NeuralEvolutionLeaderboardEntry[],
+  quantBaselineStrategies: QuantBaselineStrategy[],
 ): JourneyStage[] => {
   const totalRows = allocation.reduce((total, row) => total + row.rowsCount, 0)
   const evaluatedCount = leaderboard.length
@@ -119,12 +125,13 @@ const buildJourney = (
   const shadowReady = leaderboard.some((entry) => ['shadow_candidate', 'paper_candidate'].includes(entry.decision?.toLowerCase() ?? ''))
   const hasData = totalRows > 0
   const hasRuns = runs.length > 0
+  const baselineReadiness = buildNeuralBaselineReadiness(quantBaselineStrategies, runs, leaderboard)
 
   return [
     { label: 'Hipótese', status: 'done', summary: 'MUEN v1 registrado como contrato de evolução neural EOD.', countLabel: '1 protocolo' },
     { label: 'Dados', status: hasData ? 'done' : 'waiting', summary: hasData ? 'Snapshot de treino disponível para inspeção.' : 'Aguardando materialização do snapshot.', countLabel: `${formatNumber(totalRows)} linhas` },
     { label: 'Labels', status: hasData ? 'done' : 'waiting', summary: hasData ? 'Distribuição BUY/SELL/NEUTRAL disponível nos dados atuais.' : 'Labels dependem do snapshot.', countLabel: `${formatNumber(allocation.length)} splits` },
-    { label: 'Baselines', status: 'waiting', summary: 'Baselines econômicos ainda não aparecem como tela dedicada.', countLabel: 'pendente UI' },
+    { label: 'Baselines', status: baselineReadiness.status, summary: baselineReadiness.summary, countLabel: baselineReadiness.countLabel },
     { label: 'Experimentos', status: hasRuns ? 'running' : 'waiting', summary: hasRuns ? 'Artefatos treinados já existem para acompanhamento.' : 'Nenhum treino carregado.', countLabel: `${formatNumber(runs.length)} redes` },
     { label: 'Walk-forward', status: evaluatedCount > 0 ? 'running' : 'waiting', summary: evaluatedCount > 0 ? 'Leaderboard atual consolida avaliações disponíveis.' : 'Aguardando avaliações da evolução.', countLabel: `${formatNumber(evaluatedCount)} avaliações` },
     { label: 'Holdout', status: keptCount > 0 ? 'waiting' : 'blocked', summary: keptCount > 0 ? 'Há candidatas mantidas, mas holdout segue governado.' : 'Sem família elegível para abertura.', countLabel: `${formatNumber(keptCount)} mantidas` },
@@ -142,18 +149,22 @@ const NeuralOverviewTab: FC<NeuralOverviewTabProps> = ({
   leaderboardError,
   leaderboardLoading,
   onNavigate,
+  quantBaselineStrategies,
+  quantBaselineStrategiesError,
+  quantBaselineStrategiesLoading,
   trainingRuns,
   trainingRunsError,
   trainingRunsLoading,
 }) => {
-  const loading = allocationLoading || leaderboardLoading || trainingRunsLoading
-  const hasError = allocationError || leaderboardError || trainingRunsError
+  const loading = allocationLoading || leaderboardLoading || trainingRunsLoading || quantBaselineStrategiesLoading
+  const hasError = allocationError || leaderboardError || trainingRunsError || quantBaselineStrategiesError
   const totalRows = allocation.reduce((total, row) => total + row.rowsCount, 0)
   const familiesCount = new Set(leaderboard.map(familyKey)).size
   const kept = leaderboard.filter((entry) => entry.decision !== 'reject').length
   const rejected = leaderboard.filter((entry) => entry.decision === 'reject').length
-  const champion = trainingRuns.find((run) => run.status?.toLowerCase() === 'approved')
-  const bestChallenger = leaderboard[0]
+  const baselineReadiness = buildNeuralBaselineReadiness(quantBaselineStrategies, trainingRuns, leaderboard)
+  const champion = baselineReadiness.champion
+  const bestChallenger = baselineReadiness.bestChallenger
   const runningTrials = statusCount(trainingRuns, ['running', 'training', 'in_progress'])
   const latestUpdate = [
     ...trainingRuns.map((run) => run.trainedAt ?? run.createdAt),
@@ -161,7 +172,7 @@ const NeuralOverviewTab: FC<NeuralOverviewTabProps> = ({
   ]
     .filter((value): value is string => Boolean(value))
     .sort((left, right) => dayjs(right).valueOf() - dayjs(left).valueOf())[0]
-  const journey = buildJourney(allocation, trainingRuns, leaderboard)
+  const journey = buildJourney(allocation, trainingRuns, leaderboard, quantBaselineStrategies)
 
   const nowText = leaderboard.length > 0
     ? `O SisAção tem ${formatNumber(familiesCount)} famílias/configurações avaliadas no leaderboard atual. A melhor challenger é ${bestChallenger?.modelVersion ?? '—'} e ${formatNumber(kept)} candidatas permanecem mantidas para pesquisa.`
@@ -227,12 +238,13 @@ const NeuralOverviewTab: FC<NeuralOverviewTabProps> = ({
         <SummaryCard title="Linhas no snapshot" value={formatNumber(totalRows)} helper="dados e labels carregados" />
         <SummaryCard title="Redes no estoque" value={formatNumber(trainingRuns.length)} helper="artefatos registrados em Treinos" />
         <SummaryCard title="Famílias avaliadas" value={formatNumber(familiesCount)} helper="configurações distintas no leaderboard" />
+        <SummaryCard title="Baselines econômicos" value={formatNumber(baselineReadiness.baselineCount)} helper={`${formatNumber(baselineReadiness.baselinesWithEconomicMetrics)} com métrica · ${formatNumber(baselineReadiness.positiveBaselines)} positivos`} tone={baselineReadiness.formalComparisonReady ? 'success' : 'warning'} />
         <SummaryCard title="Mantidas" value={formatNumber(kept)} helper="mantidas para pesquisa, não aprovadas" tone="success" />
         <SummaryCard title="Rejeitadas" value={formatNumber(rejected)} helper="bloqueadas nesta etapa" tone={rejected > 0 ? 'error' : 'default'} />
         <SummaryCard title="Trials em execução" value={formatNumber(runningTrials)} helper="running/training/in_progress" tone={runningTrials > 0 ? 'warning' : 'default'} />
       </Stack>
 
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr' }, gap: 2 }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: 'repeat(3, 1fr)' }, gap: 2 }}>
         <Paper elevation={0} sx={{ p: 2.5, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
           <Stack spacing={1.25}>
             <Typography variant="h6" fontWeight={900}>Champion atual</Typography>
@@ -245,6 +257,21 @@ const NeuralOverviewTab: FC<NeuralOverviewTabProps> = ({
             ) : (
               <Typography variant="body2" color="text.secondary">Nenhum champion aprovado foi encontrado nos dados atuais.</Typography>
             )}
+          </Stack>
+        </Paper>
+        <Paper elevation={0} sx={{ p: 2.5, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+          <Stack spacing={1.25}>
+            <Typography variant="h6" fontWeight={900}>Baseline econômico líder</Typography>
+            {baselineReadiness.bestEconomicBaseline ? (
+              <>
+                <Typography variant="h5" fontWeight={900}>{baselineReadiness.bestEconomicBaseline.strategyId}</Typography>
+                <Typography variant="body2" color="text.secondary">Expectancy líquida: {formatScore(baselineReadiness.bestEconomicBaseline.expectancyNetPct)}% · trades: {formatNumber(baselineReadiness.bestEconomicBaseline.trades)}</Typography>
+                <Typography variant="caption" color="text.secondary">Status: {baselineReadiness.bestEconomicBaseline.computedStatus ?? baselineReadiness.bestEconomicBaseline.configuredStatus ?? '—'} · robustez: {formatScore(baselineReadiness.bestEconomicBaseline.robustnessScore)}</Typography>
+              </>
+            ) : (
+              <Typography variant="body2" color="text.secondary">Nenhum baseline econômico com expectancy carregada ainda.</Typography>
+            )}
+            <Typography variant="caption" color="text.secondary">{baselineReadiness.nextStep}</Typography>
           </Stack>
         </Paper>
         <Paper elevation={0} sx={{ p: 2.5, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
@@ -285,6 +312,7 @@ const NeuralOverviewTab: FC<NeuralOverviewTabProps> = ({
             <Tooltip title="Ver snapshot, distribuição e qualidade dos dados de treino."><Button variant="outlined" onClick={() => onNavigate('neural-training-data')}>Dados e protocolo</Button></Tooltip>
             <Tooltip title="Abrir artefatos treinados e métricas por execução."><Button variant="outlined" onClick={() => onNavigate('neural-training-runs')}>Treinos</Button></Tooltip>
             <Tooltip title="Abrir ranking atual, mantendo a leitura de score apenas como ordenação."><Button variant="outlined" onClick={() => onNavigate('neural-evolution')}>Famílias e leaderboard</Button></Tooltip>
+            <Tooltip title="Abrir a tela quantitativa com baselines econômicos já disponíveis."><Button variant="outlined" onClick={() => onNavigate('quant-roadmap')}>Baselines econômicos</Button></Tooltip>
             <Tooltip title="Solicitar sugestões sem delegar decisão de promoção ao advisor."><Button variant="outlined" onClick={() => onNavigate('ai-advisor')}>Advisor IA</Button></Tooltip>
           </Stack>
         </Stack>

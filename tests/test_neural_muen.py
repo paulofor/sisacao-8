@@ -10,7 +10,10 @@ from sisacao8.neural_muen import (
     MuenTrialKey,
     aggregate_family_evaluation,
     build_trial_id,
+    daily_return_rows,
     evaluate_fold_economics,
+    family_evaluation_row,
+    fold_metrics_row,
     gate_decision_row,
     research_gate_decision,
 )
@@ -145,3 +148,72 @@ def test_gate_decision_row_is_bigquery_ready() -> None:
     assert row["gate_engine_version"] == GATE_ENGINE_VERSION
     assert row["metrics_json"]["candidate_family_hash"] == "family_a"
     assert isinstance(row["failed_criteria"], list)
+
+
+def test_fold_and_family_rows_are_bigquery_ready() -> None:
+    frame = pd.DataFrame(
+        {
+            "predicted_label": ["up", "down", "neutral"],
+            "buy_net_return": [0.03, -0.01, 0.0],
+            "sell_net_return": [-0.03, 0.02, 0.0],
+            "champion_net_return": [0.01, 0.01, 0.0],
+        }
+    )
+    metrics = evaluate_fold_economics(frame, fold_id="fold_01", cost_multiplier=1.5)
+    family = aggregate_family_evaluation("family_a", [metrics], seed_count=1)
+
+    fold_row = fold_metrics_row(
+        protocol_version="neural_eod_protocol_v1",
+        dataset_snapshot="snapshot_a",
+        candidate_family_hash="family_a",
+        trial_id="trial_a",
+        seed=7,
+        metrics=metrics,
+        created_at="2026-06-24T00:00:00+00:00",
+    )
+    family_row = family_evaluation_row(
+        protocol_version="neural_eod_protocol_v1",
+        dataset_snapshot="snapshot_a",
+        family=family,
+        created_at="2026-06-24T00:00:00+00:00",
+    )
+
+    assert fold_row["trial_id"] == "trial_a"
+    assert fold_row["fold_id"] == "fold_01"
+    assert fold_row["metrics_json"]["cost_multiplier"] == 1.5
+    assert family_row["candidate_family_hash"] == "family_a"
+    assert family_row["cost_multipliers"] == [1.5]
+    assert family_row["metrics_json"]["total_trades"] == metrics.trades
+
+
+def test_daily_return_rows_pair_model_and_champion_returns() -> None:
+    frame = pd.DataFrame(
+        {
+            "reference_date": ["2026-06-22", "2026-06-23", "invalid"],
+            "predicted_label": ["up", "neutral", "down"],
+            "buy_net_return": [0.03, 0.01, -0.02],
+            "sell_net_return": [-0.03, -0.01, 0.04],
+            "champion_net_return": [0.01, 0.02, 0.03],
+        }
+    )
+
+    rows = daily_return_rows(
+        frame,
+        protocol_version="neural_eod_protocol_v1",
+        dataset_snapshot="snapshot_a",
+        candidate_family_hash="family_a",
+        trial_id="trial_a",
+        fold_id="fold_01",
+        seed=7,
+        cost_multiplier=1.5,
+        created_at="2026-06-24T00:00:00+00:00",
+    )
+
+    assert len(rows) == 2
+    assert rows[0]["reference_date"] == "2026-06-22"
+    assert rows[0]["model_net_return"] == 0.03
+    assert rows[0]["champion_net_return"] == 0.01
+    assert rows[0]["delta_net_return"] == 0.019999999999999997
+    assert rows[0]["trades"] == 1
+    assert rows[1]["model_net_return"] == 0.0
+    assert rows[1]["exposure"] == 0.0

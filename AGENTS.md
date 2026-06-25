@@ -1,4 +1,5 @@
 **Todo trabalho realizado nesse projeto deve ser registrado em : /docs/diario/registros1.md**
+**O próximo passo operacional das redes neurais deve ser mantido em: /docs/diario/proximo-passo-redes.md. Sempre que o ponto de parada ou próximo passo das redes mudar, atualize esse arquivo além do diário principal.**
 
 ## Descrição dos principais arquivos e pastas
 
