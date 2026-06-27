@@ -1,12 +1,12 @@
 # Próximo passo — Redes neurais MUEN
 
-**Última atualização:** 2026-06-27 09:42 UTC-3
+**Última atualização:** 2026-06-27 14:55 UTC-3
 **Protocolo:** `neural_eod_protocol_v1`
 **Status:** ponto de parada operacional registrado
 
 ## Próximo passo atual
 
-Executar `evaluate_candidate` em uma candidata real que já tenha `metrics_json.muen_economics` no registry, validar a persistência em `neural_fold_metrics`, `neural_daily_returns` quando houver payload diário, `neural_family_evaluations` e `neural_gate_decisions`, e então chamar `approve_if_passed` primeiro em dry-run e depois em modo efetivo apenas se o Gate Research retornar `passed`.
+Publicar a versão atual de `functions/neural_champion_approval` antes da validação produtiva: a função publicada ainda responde `evaluate_candidate_requires_economic_evaluator_integration`, enquanto o código versionado já materializa `metrics_json.muen_economics`. Depois do deploy, selecionar uma candidata real com `metrics_json.muen_economics`, executar `evaluate_candidate` com `dry_run=false`, validar a persistência em `neural_fold_metrics`, `neural_daily_returns` quando houver payload diário, `neural_family_evaluations` e `neural_gate_decisions`, e então chamar `approve_if_passed` primeiro em dry-run e depois em modo efetivo apenas se o Gate Research retornar `passed`.
 
 ## Objetivo
 
@@ -67,3 +67,10 @@ A implementação local avançou o modo `evaluate_candidate` em `functions/neura
 ## Execução do próximo passo no código — 2026-06-27 09:42 UTC-3
 
 `functions/neural_champion_approval` passou a executar `evaluate_candidate` sobre evidência econômica MUEN já presente no registry. A próxima ação operacional é acionar essa função contra uma candidata real com `dry_run=false`, validar as linhas persistidas no BigQuery e usar o `decision_id` retornado no modo `approve_if_passed` se o gate passar.
+
+
+## Diagnóstico de execução — 2026-06-27 14:55 UTC-3
+
+Foi tentada a execução do próximo passo contra a Cloud Function publicada `neural_champion_approval` usando `evaluate_candidate` para `neural_eod_mlp_evo2_20260624_mutation_01`. A função publicada retornou `status=blocked` com `reason=evaluate_candidate_requires_economic_evaluator_integration`, indicando que o deploy em produção ainda está anterior à implementação local que lê `metrics_json.muen_economics`. Também foi tentada consulta via MCP HTTP/JSON-RPC para localizar candidatas com `muen_economics`, mas o endpoint alternou `503`/timeout e sessão inválida; a API publicada de treinos mostrou candidatos com `metricsJson` básico de treino/teste, sem evidência econômica MUEN no payload retornado.
+
+**Ponto de parada atualizado:** antes de resolver o baseline/champion em produção, falta publicar a função `neural_champion_approval` atual e garantir pelo menos uma candidata com `metrics_json.muen_economics.fold_metrics`; sem esses dois itens, o gate econômico não consegue materializar decisão auditável nem aprovar champion.
