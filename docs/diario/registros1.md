@@ -1262,3 +1262,22 @@
 - Hipótese confirmada localmente recriando um ambiente isolado apenas com `functions/neural_evolution_orchestrator/requirements.txt` e importando o entrypoint com `PYTHONPATH=functions/neural_evolution_orchestrator`: o container não iniciaria porque `sisacao8.neural_muen` importa `pandas`/`numpy`, mas essas dependências não estavam no `requirements.txt` da função. O erro reproduzido foi `ModuleNotFoundError: No module named 'pandas'`.
 - Correção aplicada: adicionadas dependências runtime explícitas `numpy>=1.24,<3` e `pandas>=2.0,<3` ao `requirements.txt` do `neural_evolution_orchestrator`, mantendo `google-cloud-bigquery>=3.12`.
 - Validação local executada após a correção em ambiente virtual limpo: instalação das dependências da função e import do módulo `main` retornaram `IMPORT_OK`.
+
+
+## 2026-06-27 09:17:17 UTC-3 — Orientação sobre espera por dados para champion aprovado
+- Respondida a dúvida operacional sobre se basta aguardar mais coleta de dados para surgir um champion aprovado.
+- Conclusão: a espera por dados brutos/cotação pode melhorar amostra futura, mas não muda sozinha o status de champion; a promoção continua bloqueada até conectar `evaluate_candidate` ao avaliador econômico real, persistir `muen_economics` por fold/seed/custo, gravar o Gate Research aprovado e executar `approve_if_passed` com autorização.
+- Tentada validação operacional via MCP JSON-RPC em HTTP conforme regra do projeto: `initialize` e `tools/list` funcionaram, mas a consulta `bigquery_query` ao `neural_model_registry` falhou por erro de credencial no runtime do MCP (`gcloud crashed (AttributeError): 'Credentials' object has no attribute 'private_key_id'`); portanto a orientação foi baseada no estado versionado do processo e da implementação local.
+- O próximo passo operacional das redes não mudou; `docs/diario/proximo-passo-redes.md` foi mantido como fonte do bloqueio atual.
+- Comandos usados: `find .. -name AGENTS.md -print`, `git status --short`, `cat AGENTS.md`, `sed -n '1,220p' docs/diario/proximo-passo-redes.md`, `tail -80 docs/diario/registros1.md`, `curl` JSON-RPC para MCP HTTP, `rg -n "evaluate_candidate|approve_if_passed|muen_economics_missing|approved|neuralBaselineReadiness|Champion aprovado|Gate econômico" functions/neural_champion_approval sisacao8 docs frontend/app/src -S` e `TZ=America/Sao_Paulo date '+%Y-%m-%d %H:%M:%S UTC-3'`.
+
+
+## 2026-06-27 09:42:00 UTC-3 — Execução do próximo passo: evaluate_candidate MUEN
+- Executado o próximo passo operacional no código: o modo `evaluate_candidate` da Cloud Function `functions/neural_champion_approval` deixou de ser apenas um bloqueio fixo e passou a consumir `metrics_json.muen_economics` do `neural_model_registry`.
+- A rotina agora materializa linhas BigQuery-ready para `neural_fold_metrics`, `neural_family_evaluations`, `neural_gate_decisions` e, quando o payload trouxer retornos diários já calculados, `neural_daily_returns`; em seguida retorna `decision_id`, status do gate e contagens persistidas.
+- O bloqueio conservador permanece quando `model_version`, registry, `muen_economics` ou `fold_metrics` estão ausentes, evitando promoção sem evidência econômica.
+- Adicionado `sisacao8/neural_muen.py` ao pacote vendorizado da função e declaradas dependências runtime `numpy`/`pandas` no `requirements.txt` da função.
+- Atualizados testes unitários para cobrir o bloqueio por `muen_economics_missing` e o caminho efetivo que persiste fold/família/gate sem o critério bloqueante.
+- Atualizado `docs/diario/proximo-passo-redes.md`: o próximo passo agora é executar a função em uma candidata real com `dry_run=false`, validar BigQuery e chamar `approve_if_passed` se o gate retornar `passed`.
+- Comandos usados: `git status --short`, `git log --oneline -3`, `find .. -name AGENTS.md -print`, leituras com `sed`/`rg`, cópia de `sisacao8/neural_muen.py`, edição via `apply_patch`/Python, `python -m black functions/neural_champion_approval/main.py tests/test_neural_champion_approval.py functions/neural_champion_approval/sisacao8/neural_muen.py`, `python -m pytest tests/test_neural_champion_approval.py -q` e `TZ=America/Sao_Paulo date`.
+- Validação local completa executada depois da implementação: `python -m flake8`, `python -m pytest -q`, `git diff --check`, `npm --prefix frontend/app run lint` e `npm --prefix frontend/app run build` passaram; o build manteve apenas o aviso conhecido do Vite sobre chunk acima de 500 kB.
