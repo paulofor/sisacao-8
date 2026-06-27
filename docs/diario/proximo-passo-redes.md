@@ -1,38 +1,38 @@
 # Próximo passo — Redes neurais MUEN
 
-**Última atualização:** 2026-06-25 07:42 UTC-3
+**Última atualização:** 2026-06-27 09:42 UTC-3
 **Protocolo:** `neural_eod_protocol_v1`
 **Status:** ponto de parada operacional registrado
 
 ## Próximo passo atual
 
-Conectar a rotina `evaluate_candidate` ao avaliador econômico real para produzir `muen_economics` por `fold`, `seed` e cenário de custo; a rotina `approve_if_passed` já existe para promover `approved` somente após Gate Research aprovado.
+Executar `evaluate_candidate` em uma candidata real que já tenha `metrics_json.muen_economics` no registry, validar a persistência em `neural_fold_metrics`, `neural_daily_returns` quando houver payload diário, `neural_family_evaluations` e `neural_gate_decisions`, e então chamar `approve_if_passed` primeiro em dry-run e depois em modo efetivo apenas se o Gate Research retornar `passed`.
 
 ## Objetivo
 
-Gerar evidência econômica completa para cada candidata neural, persistir o Gate Research MUEN real e permitir que uma candidata aprovada seja promovida de `candidate` para `approved` com trilha auditável.
+Fechar a primeira promoção governada de champion neural com evidência econômica MUEN persistida, decisão de Gate Research auditável e alteração de `neural_model_registry.status` para `approved` somente após autorização.
 
 ## Entregáveis esperados
 
-1. Criar rotina `evaluate_candidate` para executar avaliações por `fold_id`, `seed` e `cost_multiplier`.
-2. Produzir `metrics_json.muen_economics` real no registry ou payload equivalente consumido pelo orquestrador, com no mínimo:
+1. Selecionar uma candidata real com `metrics_json.muen_economics.fold_metrics` preenchido por `fold_id`, `seed` e `cost_multiplier`.
+2. Confirmar que o payload `metrics_json.muen_economics` no registry contém no mínimo:
    - `protocol_version`;
    - `candidate_family_hash`;
    - `seed_count`;
    - `fold_metrics[]` compatível com `FoldEconomicMetrics`;
    - `family_evaluation`, quando a agregação já vier pronta.
 3. Garantir que cada fold tenha comparação pareada contra champion neural vigente ou baseline econômico líder quando ainda não existir champion.
-4. Validar que o orquestrador persiste:
+4. Validar que `evaluate_candidate` e/ou o orquestrador persistem:
    - `neural_fold_metrics`;
-   - `neural_daily_returns`;
+   - `neural_daily_returns`, quando houver payload diário;
    - `neural_family_evaluations`;
    - `neural_gate_decisions` com `passed` ou `rejected` real.
-5. Usar a rotina `approve_if_passed` implementada em `functions/neural_champion_approval` para alterar `neural_model_registry.status` para `approved` somente com `decision_id` aprovado e autorização registrada.
-6. Manter o fallback `muen_economics_missing` somente para execuções antigas ou incompletas.
+5. Usar a rotina `evaluate_candidate` implementada em `functions/neural_champion_approval` para materializar as linhas MUEN e obter o `decision_id` do Gate Research.
+6. Usar `approve_if_passed` para alterar `neural_model_registry.status` para `approved` somente com `decision_id` aprovado e autorização registrada; manter `muen_economics_missing` como bloqueio para execuções antigas ou incompletas.
 
 ## Critério de parada
 
-O próximo ponto de parada será alcançado quando uma execução real selecionar uma candidata `keep_candidate`, produzir `muen_economics` real por fold/seed/custo, persistir métricas por fold/família/retorno diário, emitir decisão de Gate Research sem `muen_economics_missing` e então executar `approve_if_passed` em dry-run e modo efetivo.
+O próximo ponto de parada será alcançado quando uma execução real de `evaluate_candidate` para uma candidata `keep_candidate` persistir métricas por fold/família/retorno diário quando disponível, emitir decisão de Gate Research sem `muen_economics_missing` e então executar `approve_if_passed` em dry-run e modo efetivo se o gate passar.
 
 ## Observações operacionais
 
@@ -53,14 +53,17 @@ Foi definido o processo operacional em `docs/implementacao/processo-aprovacao-ch
 
 ## Implementação parcial do processo — 2026-06-25 07:42 UTC-3
 
-A rotina `functions/neural_champion_approval` implementa `approve_if_passed` e `audit_current_champion`. O modo `evaluate_candidate` permanece bloqueado explicitamente até ser conectado ao avaliador econômico real, evitando aprovação baseada em payload incompleto.
+A rotina `functions/neural_champion_approval` implementa `evaluate_candidate`, `approve_if_passed` e `audit_current_champion`. O modo `evaluate_candidate` lê `metrics_json.muen_economics` do registry, materializa métricas MUEN e emite Gate Research; se o payload econômico estiver ausente, continua bloqueando com `muen_economics_missing`.
 
-## Deploy do orquestrador — 2026-06-25
+## Nota histórica: deploy do orquestrador — 2026-06-25
 
 A falha de deploy do `neural_evolution_orchestrator` na revisão Cloud Run `neural-evolution-orchestrator-00026-duh` foi diagnosticada como erro de inicialização por dependência runtime ausente. O `requirements.txt` da função declarava apenas `google-cloud-bigquery`, mas o entrypoint importa `sisacao8.neural_muen`, que depende de `numpy` e `pandas`.
 
-### Próxima ação imediata
+### Situação após 2026-06-27
 
-1. Executar novamente o workflow/deploy da Cloud Function `neural_evolution_orchestrator` com o pacote atualizado.
-2. Confirmar que a nova revisão fica pronta no Cloud Run e passa a servir tráfego.
-3. Depois do deploy saudável, retomar o próximo passo operacional principal: conectar `evaluate_candidate` ao avaliador econômico real para produzir `muen_economics` por `fold`, `seed` e cenário de custo.
+A implementação local avançou o modo `evaluate_candidate` em `functions/neural_champion_approval`. A ação operacional atual está no topo deste arquivo: executar essa função contra candidata real com evidência `muen_economics`, validar BigQuery e só então chamar `approve_if_passed` se o gate passar.
+
+
+## Execução do próximo passo no código — 2026-06-27 09:42 UTC-3
+
+`functions/neural_champion_approval` passou a executar `evaluate_candidate` sobre evidência econômica MUEN já presente no registry. A próxima ação operacional é acionar essa função contra uma candidata real com `dry_run=false`, validar as linhas persistidas no BigQuery e usar o `decision_id` retornado no modo `approve_if_passed` se o gate passar.

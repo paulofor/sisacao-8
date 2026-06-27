@@ -3,7 +3,7 @@
 **Data:** 2026-06-25
 **Protocolo:** `neural_eod_protocol_v1`
 **Objetivo:** transformar uma candidata neural mantida no leaderboard em `champion` aprovado somente depois de evidência econômica MUEN real, auditável e persistida.
-**Implementação atual:** `functions/neural_champion_approval` executa `approve_if_passed` e `audit_current_champion`; `evaluate_candidate` ainda deve ser conectado ao avaliador econômico real.
+**Implementação atual:** `functions/neural_champion_approval` executa `evaluate_candidate`, `approve_if_passed` e `audit_current_champion`; `evaluate_candidate` materializa `metrics_json.muen_economics` já produzido pelo avaliador/treino e bloqueia quando essa evidência ainda está ausente.
 
 ## 1. Estado de partida
 
@@ -202,10 +202,10 @@ Entrada:
 
 Responsabilidade:
 
-- carregar artefato e dataset;
-- executar folds/seeds/custos;
-- gerar `muen_economics`;
-- persistir métricas e gate.
+- carregar `metrics_json.muen_economics` do registry para a `model_version`;
+- validar que existem métricas por fold/seed/custo;
+- materializar `neural_fold_metrics`, `neural_daily_returns` quando houver payload diário, `neural_family_evaluations` e `neural_gate_decisions`;
+- retornar o `decision_id` para o modo `approve_if_passed` quando o gate passar.
 
 ### `approve_if_passed`
 
