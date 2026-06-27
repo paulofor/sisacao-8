@@ -19,6 +19,11 @@ import numpy as np
 import pandas as pd
 
 from sisacao8.neural_dataset import FEATURE_VERSION, LABEL_VERSION
+from sisacao8.neural_muen import (
+    PROTOCOL_VERSION as MUEN_PROTOCOL_VERSION,
+    aggregate_family_evaluation,
+    evaluate_fold_economics,
+)
 
 LABEL_CLASSES: tuple[str, ...] = ("down", "neutral", "up")
 MODEL_ID = "neural_eod_mlp"
@@ -183,13 +188,17 @@ def train_baseline_mlp(
         callbacks=callbacks,
         class_weight=_class_weight(y_by_split["train"], config.class_weight),
     )
-    metrics = evaluate_probabilities_by_split(
-        y_by_split,
-        {
-            split: model.predict(values, verbose=0)
-            for split, values in x_by_split.items()
-        },
+    probabilities_by_split = {
+        split: model.predict(values, verbose=0) for split, values in x_by_split.items()
+    }
+    metrics = evaluate_probabilities_by_split(y_by_split, probabilities_by_split)
+    muen_economics = build_muen_economics_from_predictions(
+        dataset,
+        probabilities_by_split,
+        config=config,
     )
+    if muen_economics["fold_metrics"]:
+        metrics["muen_economics"] = muen_economics
     output_dir = Path(artifact_dir) / config.model_version
     output_dir.mkdir(parents=True, exist_ok=True)
     model_path = output_dir / "model.keras"
@@ -210,6 +219,74 @@ def train_baseline_mlp(
         json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8"
     )
     return manifest
+
+
+def build_muen_economics_from_predictions(
+    dataset: pd.DataFrame,
+    probabilities_by_split: dict[str, np.ndarray],
+    *,
+    config: BaselineMlpConfig,
+    cost_multipliers: tuple[float, ...] = (1.0, 1.5),
+) -> dict[str, object]:
+    """Build MUEN economic evidence from split predictions and realized returns.
+
+    The payload is intentionally limited to non-train, non-holdout splits so the
+    champion approval flow receives auditable research evidence without touching
+    locked holdout data. It is persisted inside ``metrics_json.muen_economics``
+    and later materialized by ``neural_champion_approval.evaluate_candidate``.
+    """
+
+    required = {"dataset_split", "buy_net_return", "sell_net_return"}
+    if missing := required.difference(dataset.columns):
+        raise ValueError(f"Missing MUEN economics columns: {sorted(missing)}")
+
+    materialized = dataset.dropna(subset=["dataset_split"]).copy()
+    dataset_snapshot = _dataset_snapshot(materialized)
+    fold_metrics = []
+    eligible_splits = {"validation", "test", "research"}
+    blocked_splits = {"train", "locked_holdout", "holdout"}
+
+    for split_name, split_frame in materialized.groupby("dataset_split", sort=False):
+        split = str(split_name)
+        if split in blocked_splits or split not in probabilities_by_split:
+            continue
+        if eligible_splits and split not in eligible_splits:
+            continue
+        probabilities = probabilities_by_split[split]
+        if len(probabilities) != len(split_frame):
+            raise ValueError(
+                "probability rows must match split rows for "
+                f"{split}: got {len(probabilities)} and {len(split_frame)}"
+            )
+        predictions = probabilities.argmax(axis=1)
+        evaluation_frame = split_frame.copy()
+        evaluation_frame["predicted_label"] = [
+            LABEL_CLASSES[int(i)] for i in predictions
+        ]
+        for cost_multiplier in cost_multipliers:
+            metrics = evaluate_fold_economics(
+                evaluation_frame,
+                fold_id=f"{split}_cost_{str(cost_multiplier).replace('.', '_')}",
+                cost_multiplier=cost_multiplier,
+            )
+            fold_metrics.append(metrics)
+
+    payload: dict[str, object] = {
+        "protocol_version": MUEN_PROTOCOL_VERSION,
+        "dataset_snapshot": dataset_snapshot,
+        "candidate_family_hash": config.model_version,
+        "seed_count": 1,
+        "seed": int(config.random_seed),
+        "cost_multipliers": list(cost_multipliers),
+        "fold_metrics": [metric.to_json_dict() for metric in fold_metrics],
+    }
+    if fold_metrics:
+        payload["family_evaluation"] = aggregate_family_evaluation(
+            config.model_version,
+            fold_metrics,
+            seed_count=1,
+        ).to_json_dict()
+    return payload
 
 
 def evaluate_probabilities_by_split(
