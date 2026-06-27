@@ -11,6 +11,7 @@ from sisacao8.neural_training import (
     BaselineMlpConfig,
     FeatureScaler,
     build_artifact_manifest,
+    build_muen_economics_from_predictions,
     encode_labels,
     evaluate_predictions,
     prepare_training_arrays,
@@ -104,3 +105,74 @@ def test_class_weight_balances_and_boosts_directional_classes() -> None:
     up_index = 2
     assert balanced[up_index] > balanced[neutral_index]
     assert directional[up_index] > balanced[up_index]
+
+
+def test_build_muen_economics_from_predictions_uses_non_train_splits() -> None:
+    dataset = pd.DataFrame(
+        [
+            {
+                "dataset_split": "train",
+                "reference_date": dt.date(2026, 1, 1),
+                "ticker": "AAA3",
+                "label_class": "up",
+                "buy_net_return": 0.10,
+                "sell_net_return": -0.02,
+            },
+            {
+                "dataset_split": "validation",
+                "reference_date": dt.date(2026, 1, 2),
+                "ticker": "AAA3",
+                "label_class": "up",
+                "buy_net_return": 0.08,
+                "sell_net_return": -0.03,
+            },
+            {
+                "dataset_split": "validation",
+                "reference_date": dt.date(2026, 1, 3),
+                "ticker": "BBB4",
+                "label_class": "down",
+                "buy_net_return": -0.01,
+                "sell_net_return": 0.04,
+            },
+            {
+                "dataset_split": "test",
+                "reference_date": dt.date(2026, 1, 4),
+                "ticker": "AAA3",
+                "label_class": "neutral",
+                "buy_net_return": -0.02,
+                "sell_net_return": -0.01,
+            },
+        ]
+    )
+    probabilities = {
+        "train": np.array([[0.1, 0.1, 0.8]]),
+        "validation": np.array([[0.1, 0.1, 0.8], [0.8, 0.1, 0.1]]),
+        "test": np.array([[0.1, 0.8, 0.1]]),
+    }
+    config = BaselineMlpConfig(model_version="model_v1", random_seed=123)
+
+    economics = build_muen_economics_from_predictions(
+        dataset,
+        probabilities,
+        config=config,
+    )
+
+    assert economics["protocol_version"] == "neural_eod_protocol_v1"
+    assert economics["candidate_family_hash"] == "model_v1"
+    assert economics["seed"] == 123
+    assert len(economics["fold_metrics"]) == 4
+    fold_ids = {item["fold_id"] for item in economics["fold_metrics"]}
+    assert fold_ids == {
+        "validation_cost_1_0",
+        "validation_cost_1_5",
+        "test_cost_1_0",
+        "test_cost_1_5",
+    }
+    validation = next(
+        item
+        for item in economics["fold_metrics"]
+        if item["fold_id"] == "validation_cost_1_0"
+    )
+    assert validation["trades"] == 2
+    assert validation["expectancy_net"] == 0.06
+    assert economics["family_evaluation"]["total_trades"] == 4
