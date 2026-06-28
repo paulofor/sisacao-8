@@ -16,6 +16,7 @@ from sisacao8.neural_evolution import (
     CandidateConfig,
     EvaluationScore,
     EvolutionBudget,
+    generate_architecture_variant_candidates,
     generate_deterministic_candidates,
     mutate_top_candidates,
     penalized_score,
@@ -337,8 +338,22 @@ def _generate_phase2_candidates(
         )
     if not candidates:
         logging.warning(
-            "Phase-2 mutation grid exhausted; generating fresh seed repeats "
+            "Phase-2 mutation grid exhausted; generating architecture variants "
             "for %s selected parents",
+            len(top_candidates),
+        )
+        candidates = generate_architecture_variant_candidates(
+            top_candidates,
+            evolution_run_id=evolution_run_id,
+            dataset_snapshot=dataset_snapshot,
+            budget=budget,
+            existing_hashes=existing_hashes,
+            model_version_prefix=f"{model_version_prefix}_arch",
+        )
+    if not candidates:
+        logging.warning(
+            "Phase-2 architecture variants exhausted; generating fresh seed "
+            "repeats for %s selected parents",
             len(top_candidates),
         )
         candidates = repeat_finalists_with_fresh_seeds(

@@ -255,6 +255,94 @@ def mutate_top_candidates(
     return candidates
 
 
+def generate_architecture_variant_candidates(
+    finalists: Sequence[CandidateConfig],
+    *,
+    evolution_run_id: str,
+    dataset_snapshot: str,
+    budget: EvolutionBudget,
+    existing_hashes: Iterable[str] | None = None,
+    model_version_prefix: str = "neural_eod_mlp_evo2_arch",
+) -> list[CandidateConfig]:
+    """Return new candidates by changing finalist hidden-layer topologies.
+
+    This is the preferred fallback when Phase 2 has exhausted ordinary
+    hyperparameter mutations: keep the best economic families as parents, but
+    explore wider, narrower, deeper and shallower MLP shapes before resorting
+    to pure seed repeats.
+    """
+
+    seen = set(existing_hashes or [])
+    candidates: list[CandidateConfig] = []
+    seed_offset = 0
+    for parent in finalists:
+        parent_hidden = tuple(int(item) for item in parent.architecture["hidden_units"])
+        for hidden_units in _architecture_variant_space(parent_hidden):
+            if len(candidates) >= budget.max_trials:
+                return candidates
+            if len(hidden_units) > budget.max_layers:
+                continue
+            if estimate_parameter_count(hidden_units) > budget.max_parameter_count:
+                continue
+            architecture = dict(parent.architecture)
+            architecture["hidden_units"] = list(hidden_units)
+            hyperparameters = dict(parent.hyperparameters)
+            hyperparameters["random_seed"] = (
+                int(budget.random_seed) + 20_000 + seed_offset
+            )
+            hyperparameters["early_stopping"] = True
+            hyperparameters.setdefault("early_stopping_patience", 8)
+            seed_offset += 1
+            dedupe_hash = candidate_hash(architecture, hyperparameters)
+            if dedupe_hash in seen:
+                continue
+            seen.add(dedupe_hash)
+            index = len(candidates) + 1
+            candidates.append(
+                _candidate_from_parts(
+                    evolution_run_id=evolution_run_id,
+                    dataset_snapshot=dataset_snapshot,
+                    model_version=f"{model_version_prefix}_{index:02d}",
+                    candidate_source="architecture_variant",
+                    architecture=architecture,
+                    hyperparameters=hyperparameters,
+                    dedupe_hash=dedupe_hash,
+                    notes=(
+                        f"Fase 2 arquitetura alternativa de {parent.model_version}; "
+                        f"hidden_units={list(hidden_units)}; candidate_index={index}"
+                    ),
+                )
+            )
+    return candidates
+
+
+def _architecture_variant_space(
+    hidden_units: Sequence[int],
+) -> tuple[tuple[int, ...], ...]:
+    base = tuple(int(item) for item in hidden_units if int(item) > 0)
+    if not base:
+        return ()
+    variants: list[tuple[int, ...]] = []
+
+    def add(candidate: Sequence[int]) -> None:
+        normalized = tuple(max(16, min(256, int(item))) for item in candidate)
+        if normalized != base and normalized not in variants:
+            variants.append(normalized)
+
+    add(tuple(unit * 2 for unit in base))
+    add(tuple(max(16, unit // 2) for unit in base))
+    if len(base) > 1:
+        add(base[:-1])
+    add((*base, max(16, base[-1] // 2)))
+    if len(base) == 1:
+        add((base[0], max(16, base[0] // 2)))
+    else:
+        add((base[0], max(16, min(base[0], base[-1])), max(16, base[-1] // 2)))
+    add(tuple(sorted(base, reverse=True)))
+
+    return tuple(variants)
+
+
 def repeat_finalists_with_fresh_seeds(
     finalists: Sequence[CandidateConfig],
     *,

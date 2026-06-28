@@ -277,7 +277,7 @@ def test_orchestrator_phase2_consolidates_similar_parent_families(monkeypatch):
     assert not any("neural_eod_mlp_evo1_01_seed" in notes for notes in parent_notes)
 
 
-def test_orchestrator_phase2_falls_back_to_fresh_seed_repeats_when_grid_exhausted(
+def test_orchestrator_phase2_falls_back_to_architecture_variants_when_grid_exhausted(
     monkeypatch,
 ):
     fake_client = _FakeClient()
@@ -343,10 +343,15 @@ def test_orchestrator_phase2_falls_back_to_fresh_seed_repeats_when_grid_exhauste
 
     assert len(candidates) == 2
     assert {candidate.candidate_source for candidate in candidates} == {
-        "seed_repeat_fresh"
+        "architecture_variant"
     }
     assert all(
-        candidate.model_version.startswith("evo2_test_seed_fresh_")
+        candidate.model_version.startswith("evo2_test_arch_")
+        for candidate in candidates
+    )
+    assert all(
+        candidate.architecture["hidden_units"]
+        != parent["architecture_json"]["hidden_units"]
         for candidate in candidates
     )
     assert not (

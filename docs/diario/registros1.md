@@ -1485,3 +1485,11 @@ A leitura da tela `Redes neurais — Treinos` indicou 86 redes em estágio `Cand
 - Adicionados testes unitários cobrindo o helper de seeds inéditas e o fallback da Fase 2 quando as mutações disponíveis já foram consumidas.
 - Próximo passo operacional: publicar a Cloud Function `neural_evolution_orchestrator` corrigida e disparar/aguardar o Scheduler para confirmar que novas decisões MUEN voltam a ser persistidas.
 - Comandos usados: `sed -n` em `functions/neural_evolution_orchestrator/main.py`, `sisacao8/neural_evolution.py`, `functions/neural_evolution_orchestrator/sisacao8/neural_evolution.py` e testes; edição via Python; `python -m black ...`; `python -m pytest tests/test_neural_evolution.py tests/test_neural_evolution_orchestrator_function.py -q`; `python -m flake8`; `python -m pytest -q`; `TZ=America/Sao_Paulo date '+%Y-%m-%d %H:%M:%S UTC-3'`.
+
+## 2026-06-28 16:27:30 UTC-3 — Fallback passa a priorizar novas arquiteturas
+- Revisada a correção anterior após a pergunta operacional sobre gerar redes com outras arquiteturas em vez de apenas repetir seeds.
+- Implementado `generate_architecture_variant_candidates` em `sisacao8.neural_evolution` e no pacote vendorizado da Cloud Function; o helper cria variações MLP mais largas, mais estreitas, mais profundas e mais rasas a partir de finalistas, respeitando `max_layers`, `max_parameter_count` e `existing_hashes`.
+- Atualizado `functions/neural_evolution_orchestrator/main.py` para priorizar variantes de arquitetura quando o grid de mutações da Fase 2 esgotar; repetições com seeds inéditas ficam como segunda linha de fallback, apenas se as variantes arquiteturais também não gerarem candidatos.
+- Atualizados testes para validar geração de arquiteturas alternativas e o novo fallback da Fase 2 com `candidate_source=architecture_variant`.
+- Próximo passo operacional: publicar o orquestrador com a correção e acompanhar se as próximas decisões MUEN mostram famílias arquiteturalmente diferentes antes de recorrer a seed repeats.
+- Comandos usados: `rg -n`, `sed -n` em treino/orquestrador/evolução neural, edição via Python, `python -m black ...`, `python -m pytest tests/test_neural_evolution.py tests/test_neural_evolution_orchestrator_function.py -q`, `python -m flake8`, `python -m pytest -q` e `TZ=America/Sao_Paulo date '+%Y-%m-%d %H:%M:%S UTC-3'`.
