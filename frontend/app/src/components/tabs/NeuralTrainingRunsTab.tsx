@@ -17,12 +17,15 @@ import {
 import dayjs from 'dayjs'
 import type { FC } from 'react'
 
-import type { NeuralTrainingRun } from '../../api/ops'
+import type { NeuralGateDecisionAttempt, NeuralTrainingRun } from '../../api/ops'
 
 interface NeuralTrainingRunsTabProps {
   runs: NeuralTrainingRun[]
   runsError?: Error | null
   runsLoading: boolean
+  gateDecisions?: NeuralGateDecisionAttempt[]
+  gateDecisionsError?: Error | null
+  gateDecisionsLoading?: boolean
 }
 
 interface NeuralSplitMetrics {
@@ -115,6 +118,31 @@ const statusLabel = (status: string | null) => {
   return status
 }
 
+
+const gateStatusColor = (attempt: NeuralGateDecisionAttempt) => {
+  const normalized = attempt.decisionStatus?.toLowerCase()
+  if (attempt.passed || normalized === 'passed') return 'success'
+  if (normalized === 'rejected') return 'error'
+  return 'default'
+}
+
+const gateStatusLabel = (attempt: NeuralGateDecisionAttempt) => {
+  const normalized = attempt.decisionStatus?.toLowerCase()
+  if (attempt.passed || normalized === 'passed') return 'Aprovado'
+  if (normalized === 'rejected') return 'Rejeitado'
+  if (normalized === 'blocked') return 'Bloqueado'
+  return attempt.decisionStatus ?? 'Sem decisão'
+}
+
+const formatCriteria = (value: string | null | undefined) => {
+  if (!value) return '—'
+  return value
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .join(' · ') || '—'
+}
+
 const latestRun = (runs: NeuralTrainingRun[]) => runs[0]
 
 const bestTestAccuracy = (runs: NeuralTrainingRun[]) => {
@@ -160,6 +188,9 @@ const NeuralTrainingRunsTab: FC<NeuralTrainingRunsTabProps> = ({
   runs,
   runsError,
   runsLoading,
+  gateDecisions = [],
+  gateDecisionsError,
+  gateDecisionsLoading = false,
 }) => {
   const latest = latestRun(runs)
   const approvedCount = runs.filter(
@@ -168,6 +199,9 @@ const NeuralTrainingRunsTab: FC<NeuralTrainingRunsTabProps> = ({
   const candidateCount = runs.filter((run) => run.status?.toLowerCase() === 'candidate').length
   const activeTrainingCount = runs.filter((run) => ['running', 'training', 'in_progress'].includes(run.status?.toLowerCase() ?? '')).length
   const rejectedCount = runs.filter((run) => ['rejected', 'reject'].includes(run.status?.toLowerCase() ?? '')).length
+  const rejectedGateDecisions = gateDecisions.filter((attempt) => attempt.decisionStatus?.toLowerCase() === 'rejected' || attempt.passed === false)
+  const passedGateDecisions = gateDecisions.filter((attempt) => attempt.passed || attempt.decisionStatus?.toLowerCase() === 'passed')
+  const latestGateDecisions = gateDecisions.slice(0, 8)
   const latestTrain = latestTrainMetrics(runs)
   const latestTest = latestTestMetrics(runs)
 
@@ -216,6 +250,11 @@ const NeuralTrainingRunsTab: FC<NeuralTrainingRunsTabProps> = ({
               value={formatNumber(approvedCount)}
               helper={`${formatNumber(rejectedCount)} rejeitadas no registro`}
             />
+            <SummaryCard
+              title="Rejeitadas no gate"
+              value={formatNumber(rejectedGateDecisions.length)}
+              helper={`${formatNumber(gateDecisions.length)} decisões MUEN; ${formatNumber(passedGateDecisions.length)} aprovadas`}
+            />
           </Stack>
 
           <Paper elevation={0} sx={{ p: 2.5, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
@@ -226,7 +265,8 @@ const NeuralTrainingRunsTab: FC<NeuralTrainingRunsTabProps> = ({
                   { label: 'Em treino', value: activeTrainingCount, color: 'info' as const, helper: 'ainda executando' },
                   { label: 'Candidata', value: candidateCount, color: 'warning' as const, helper: 'treinada, aguardando governança' },
                   { label: 'Aprovada', value: approvedCount, color: 'success' as const, helper: 'liberada para uso controlado' },
-                  { label: 'Rejeitada', value: rejectedCount, color: 'error' as const, helper: 'não deve ser promovida' },
+                  { label: 'Rejeitada no registro', value: rejectedCount, color: 'error' as const, helper: 'status final no registry' },
+                  { label: 'Rejeitada no gate', value: rejectedGateDecisions.length, color: 'error' as const, helper: 'analisada e bloqueada pelo MUEN' },
                 ].map((stage) => (
                   <Paper key={stage.label} elevation={0} sx={{ p: 2, minWidth: 190, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
                     <Stack spacing={0.75}>
@@ -240,6 +280,64 @@ const NeuralTrainingRunsTab: FC<NeuralTrainingRunsTabProps> = ({
               <Typography variant="caption" color="text.secondary">
                 A tabela abaixo continua detalhando modelo, versão, métricas e artefato; os cards acima explicam a quantidade por estágio.
               </Typography>
+            </Stack>
+          </Paper>
+
+          <Paper elevation={0} sx={{ p: 2.5, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+            <Stack spacing={1.5}>
+              <Stack spacing={0.5}>
+                <Typography variant="h6" fontWeight={800}>Últimas análises do Gate MUEN</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Mostra explicitamente as candidatas que já foram analisadas pelo gate econômico. Assim, uma rede pode continuar como candidata no registry, mas aparecer aqui como rejeitada pelo Gate Research.
+                </Typography>
+              </Stack>
+              {gateDecisionsLoading ? <LinearProgress /> : null}
+              {gateDecisionsError ? <Alert severity="warning">Não foi possível carregar as decisões do Gate MUEN.</Alert> : null}
+              {!gateDecisionsLoading && !gateDecisionsError && latestGateDecisions.length === 0 ? (
+                <Alert severity="info">Ainda não há decisões MUEN registradas para exibir nesta aba.</Alert>
+              ) : null}
+              {latestGateDecisions.length > 0 ? (
+                <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+                  <Table size="small" aria-label="Últimas decisões do Gate MUEN em treinos neurais">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Decisão</TableCell>
+                        <TableCell>Status</TableCell>
+                        <TableCell>Família/candidata</TableCell>
+                        <TableCell>Critérios</TableCell>
+                        <TableCell align="right">Folds +</TableCell>
+                        <TableCell align="right">Δ expectancy</TableCell>
+                        <TableCell align="right">Drawdown</TableCell>
+                        <TableCell>Data</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {latestGateDecisions.map((attempt) => (
+                        <TableRow key={attempt.decisionId} hover>
+                          <TableCell>
+                            <Typography variant="body2" fontWeight={700}>{attempt.decisionId}</Typography>
+                          </TableCell>
+                          <TableCell><Chip size="small" label={gateStatusLabel(attempt)} color={gateStatusColor(attempt)} /></TableCell>
+                          <TableCell>
+                            <Typography variant="caption" sx={{ display: 'block', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {attempt.candidateFamilyHash ?? '—'}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="caption" sx={{ display: 'block', maxWidth: 360 }}>
+                              {formatCriteria(attempt.failedCriteria)}
+                            </Typography>
+                          </TableCell>
+                          <TableCell align="right">{attempt.positiveFolds ?? '—'} / {attempt.folds ?? '—'}</TableCell>
+                          <TableCell align="right">{formatPct(attempt.medianDeltaExpectancyVsChampion)}</TableCell>
+                          <TableCell align="right">{formatPct(attempt.maxDrawdown)}</TableCell>
+                          <TableCell>{formatDateTime(attempt.decidedAt)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              ) : null}
             </Stack>
           </Paper>
 
