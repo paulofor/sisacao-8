@@ -255,6 +255,61 @@ def mutate_top_candidates(
     return candidates
 
 
+def repeat_finalists_with_fresh_seeds(
+    finalists: Sequence[CandidateConfig],
+    *,
+    evolution_run_id: str,
+    dataset_snapshot: str,
+    budget: EvolutionBudget,
+    existing_hashes: Iterable[str] | None = None,
+    model_version_prefix: str = "neural_eod_mlp_evo2_seed_fresh",
+) -> list[CandidateConfig]:
+    """Return seed-repeat candidates that are not already in ``existing_hashes``.
+
+    Phase-2 automation can exhaust the finite mutation grid.  In that state the
+    safest next candidate is a repeat of a strong finalist with a new seed: it
+    preserves the economic hypothesis while producing fresh stability evidence
+    and a new dedupe hash.
+    """
+
+    seen = set(existing_hashes or [])
+    repeated: list[CandidateConfig] = []
+    seed_offset = 0
+    max_attempts = max(budget.max_trials * max(len(finalists), 1) * 50, 50)
+
+    while len(repeated) < budget.max_trials and seed_offset < max_attempts:
+        for finalist_index, finalist in enumerate(finalists, start=1):
+            if len(repeated) >= budget.max_trials:
+                break
+            seed = int(budget.random_seed) + 10_000 + seed_offset
+            seed_offset += 1
+            hyperparameters = {**finalist.hyperparameters, "random_seed": seed}
+            hyperparameters["early_stopping"] = True
+            hyperparameters.setdefault("early_stopping_patience", 8)
+            architecture = dict(finalist.architecture)
+            dedupe_hash = candidate_hash(architecture, hyperparameters)
+            if dedupe_hash in seen:
+                continue
+            seen.add(dedupe_hash)
+            repeated.append(
+                _candidate_from_parts(
+                    evolution_run_id=evolution_run_id,
+                    dataset_snapshot=dataset_snapshot,
+                    model_version=(f"{model_version_prefix}_{len(repeated) + 1:02d}"),
+                    candidate_source="seed_repeat_fresh",
+                    architecture=architecture,
+                    hyperparameters=hyperparameters,
+                    dedupe_hash=dedupe_hash,
+                    notes=(
+                        f"Fase 2 repetição com seed inédita de "
+                        f"{finalist.model_version}; parent_index={finalist_index}"
+                    ),
+                )
+            )
+
+    return repeated
+
+
 def repeat_finalists_with_seeds(
     finalists: Sequence[CandidateConfig],
     *,
