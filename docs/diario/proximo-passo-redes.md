@@ -1,6 +1,6 @@
 # Próximo passo — Redes neurais MUEN
 
-**Última atualização:** 2026-06-27 22:18 UTC-3
+**Última atualização:** 2026-06-27 22:27 UTC-3
 **Protocolo:** `neural_eod_protocol_v1`
 **Status:** ponto de parada operacional registrado
 
@@ -44,7 +44,7 @@ O próximo ponto de parada será alcançado quando uma execução real de `evalu
 
 ## Diagnóstico de schema do dataset v2 — 2026-06-27 22:04 UTC-3
 
-A execução produtiva de `neural_training_dataset` retornou 500 porque a tabela `cotacao_intraday.neural_eod_training_dataset` ainda não tinha todas as colunas v2 geradas pelo código publicado. Os logs via MCP/Cloud Run confirmaram rejeição BigQuery por campos ausentes, incluindo `log_return_1d`, `log_volume` e, após avanço da migração parcial, `trade_side`. O repositório passou a versionar a migração das seis colunas `log_*` e das colunas executáveis do label selecionado em um único `ALTER TABLE` para reduzir operações de atualização de tabela, além da criação de `neural_dataset_manifests`; o próximo passo imediato é aguardar a janela de rate limit se necessário, aplicar esse SQL agrupado no BigQuery e repetir a materialização do snapshot v2.
+A execução produtiva de `neural_training_dataset` retornou 500 porque a tabela `cotacao_intraday.neural_eod_training_dataset` ainda não tinha todas as colunas v2 geradas pelo código publicado. Os logs via MCP/Cloud Run confirmaram rejeição BigQuery por campos ausentes, incluindo `log_return_1d`, `log_volume`, `trade_side` e `exit_price` durante tentativas feitas com a migração parcial. Consulta posterior ao `INFORMATION_SCHEMA` confirmou que as 19 colunas v2 esperadas já existem na tabela produtiva e que `neural_dataset_manifests` também existe; o próximo passo imediato é repetir a materialização com um novo `DATASET_SNAPSHOT` e, se houver novo 500, consultar logs após o horário da nova tentativa para capturar uma causa nova.
 
 ## Nota de interface — 2026-06-25 00:02 UTC-3
 

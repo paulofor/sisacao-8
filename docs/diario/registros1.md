@@ -1363,3 +1363,12 @@
 - Causa operacional: executar muitos `ALTER TABLE` separados na mesma tabela consome rapidamente a cota de operações de atualização de tabela do BigQuery. Separar em mais comandos piora esse erro; a alternativa correta é agrupar as adições em uma única instrução `ALTER TABLE` ou aguardar a janela de cota antes de tentar novamente.
 - Correção aplicada no repositório: consolidado o bloco de migração de `infra/bq/17_neural_eod_training_dataset.sql` em um único `ALTER TABLE ... ADD COLUMN IF NOT EXISTS ..., ADD COLUMN IF NOT EXISTS ...`, reduzindo a migração da tabela principal para uma única operação DDL.
 - Comandos usados: inspeção da imagem enviada pelo usuário, edição via Python, `git diff`, consulta web de sintaxe BigQuery para múltiplos `ADD COLUMN` no mesmo `ALTER TABLE`.
+
+
+## 2026-06-27 22:27:00 UTC-3 — Confirmação do schema produtivo após migração v2
+- Investigado novo 500 reportado após a tentativa de materialização do snapshot neural v2.
+- Consulta de logs via MCP JSON-RPC HTTP mostrou erros históricos em sequência (`log_volume`, `trade_side`, `exit_price`), compatíveis com tentativas executadas enquanto a migração BigQuery ainda estava parcial.
+- Consulta read-only ao `INFORMATION_SCHEMA.COLUMNS` via MCP confirmou que a tabela produtiva `cotacao_intraday.neural_eod_training_dataset` agora contém as 19 colunas v2 esperadas: seis `log_*` e treze colunas executáveis/derivadas do label selecionado, incluindo `exit_price`.
+- Consulta read-only ao `INFORMATION_SCHEMA.TABLES` via MCP confirmou que `cotacao_intraday.neural_dataset_manifests` já existe.
+- Conclusão operacional: o schema necessário parece aplicado; o próximo passo é repetir a chamada da Cloud Function `neural_training_dataset` com um novo `DATASET_SNAPSHOT` e, se houver novo 500, consultar logs apenas após o horário da nova tentativa para capturar uma causa nova.
+- Comandos usados: MCP HTTP/JSON-RPC (`initialize`, `cloud_run_function_logs`, `bigquery_query` em `INFORMATION_SCHEMA.COLUMNS` e `INFORMATION_SCHEMA.TABLES`).
