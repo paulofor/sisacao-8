@@ -1381,3 +1381,12 @@
 - Adicionado teste unitário garantindo que `_load_dataset` descarta colunas inesperadas antes do envio ao BigQuery e preserva `holding_sessions` como inteiro.
 - Próximo passo operacional: publicar `functions/neural_training_dataset` com esse hardening e repetir a materialização do snapshot v2.
 - Comandos usados: `curl` produtivo para `neural_training_dataset`, MCP HTTP/JSON-RPC (`initialize`, `cloud_run_function_logs`), comparação local entre colunas geradas por `build_training_dataset` e o DDL, edição via Python, `python -m black`.
+
+
+## 2026-06-27 22:47:00 UTC-3 — Diagnóstico operacional com retorno JSON de erro
+- Usuário reportou que, mesmo após deploy, `neural_training_dataset` continuou retornando 500 genérico.
+- Tentada investigação via MCP: `cloud_run_function_logs` continuou retornando logs antigos/truncados da migração parcial, e consulta ao `INFORMATION_SCHEMA.JOBS_BY_PROJECT` falhou repetidamente por instabilidade de credencial do MCP/gcloud (`Credentials object has no attribute private_key_id`).
+- Confirmado via `INFORMATION_SCHEMA.COLUMNS` que `neural_dataset_manifests` possui a coluna correta `rows`; consulta ao dataset mostrou que nenhum snapshot `neural_eod_training_dataset_2026-06-18_muen_v2_%` foi gravado, indicando falha antes ou durante a carga principal.
+- Correção aplicada para destravar o diagnóstico: `functions/neural_training_dataset` agora captura exceções no entrypoint, registra stack trace e retorna JSON 500 com `status=error`, `error_type` e `message`, em vez de deixar o Functions Framework devolver apenas `500 Internal Server Error` genérico.
+- Próximo passo operacional: publicar novamente `functions/neural_training_dataset`, repetir o curl e usar o corpo JSON retornado para identificar a causa exata remanescente.
+- Comandos usados: MCP HTTP/JSON-RPC (`initialize`, `tools/list`, `cloud_run_function_logs`, tentativas de `bigquery_query` em `JOBS_BY_PROJECT`, `INFORMATION_SCHEMA.COLUMNS` e snapshots), `curl` produtivo controlado, edição via Python e `python -m black`.

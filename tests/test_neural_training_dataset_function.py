@@ -150,6 +150,22 @@ def test_load_dataset_filters_columns_to_bigquery_contract(monkeypatch):
     assert loaded["holding_sessions"] == 2
 
 
+def test_neural_training_dataset_returns_json_error(monkeypatch):
+    def fail_impl(request):
+        raise RuntimeError("load failed detail")
+
+    monkeypatch.setattr(module, "_neural_training_dataset", fail_impl)
+
+    response, status = module.neural_training_dataset(_Request({}))
+
+    assert status == 500
+    assert response == {
+        "status": "error",
+        "error_type": "RuntimeError",
+        "message": "load failed detail",
+    }
+
+
 def test_request_payload_merges_query_args_and_json_body():
     request = SimpleNamespace(
         args={"start_date": "2024-01-01"},

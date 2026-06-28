@@ -116,6 +116,18 @@ def _get_client() -> bigquery.Client:
 def neural_training_dataset(request: Any) -> tuple[Dict[str, Any], int]:
     """HTTP entrypoint that builds and loads the neural EOD training dataset."""
 
+    try:
+        return _neural_training_dataset(request)
+    except Exception as exc:  # noqa: BLE001
+        logging.exception("neural_training_dataset failed")
+        return {
+            "status": "error",
+            "error_type": type(exc).__name__,
+            "message": str(exc),
+        }, 500
+
+
+def _neural_training_dataset(request: Any) -> tuple[Dict[str, Any], int]:
     payload = _request_payload(request)
     client = _get_client()
     end_date = (
