@@ -14,6 +14,7 @@ import com.sisacao.backend.ops.OpsIncident;
 import com.sisacao.backend.ops.NeuralTrainingDataAllocation;
 import com.sisacao.backend.ops.NeuralTrainingRun;
 import com.sisacao.backend.ops.NeuralEvolutionLeaderboardEntry;
+import com.sisacao.backend.ops.NeuralGateDecisionAttempt;
 import com.sisacao.backend.ops.OpsOverview;
 import com.sisacao.backend.ops.PipelineJobStatus;
 import com.sisacao.backend.ops.QuantDataInventorySummary;
@@ -158,6 +159,39 @@ public class BigQueryOpsClient {
         List<NeuralTrainingRun> rows = new ArrayList<>();
         for (FieldValueList row : result.iterateAll()) {
             rows.add(toNeuralTrainingRun(row));
+        }
+        return Collections.unmodifiableList(rows);
+    }
+
+    public List<NeuralGateDecisionAttempt> fetchNeuralGateDecisions() {
+        String sql = "SELECT "
+                + "d.decision_id, d.protocol_version, d.dataset_snapshot, d.candidate_family_hash, "
+                + "d.gate_name, d.decision_status, d.passed, "
+                + "ARRAY_TO_STRING(d.failed_criteria, ', ') AS failed_criteria, "
+                + "TO_JSON_STRING(d.metrics_json) AS metrics_json, d.gate_engine_version, d.decided_at, "
+                + "f.folds, f.seeds, f.positive_folds, f.positive_fold_ratio, "
+                + "f.median_delta_expectancy_vs_champion, f.median_expectancy_net, "
+                + "f.max_drawdown, f.total_trades, f.stable_across_seeds "
+                + "FROM " + qualifiedQuantView(properties.getNeuralGateDecisionsTable()) + " d "
+                + "LEFT JOIN (SELECT * FROM " + qualifiedQuantView(properties.getNeuralFamilyEvaluationsTable()) + " "
+                + "QUALIFY ROW_NUMBER() OVER (PARTITION BY protocol_version, dataset_snapshot, "
+                + "candidate_family_hash ORDER BY created_at DESC) = 1) f "
+                + "ON f.protocol_version = d.protocol_version "
+                + "AND f.dataset_snapshot = d.dataset_snapshot "
+                + "AND f.candidate_family_hash = d.candidate_family_hash "
+                + "ORDER BY d.decided_at DESC LIMIT 50";
+        TableResult result;
+        try {
+            result = runQuery(sql, Map.of());
+        } catch (OpsDataAccessException ex) {
+            if (isNotFound(ex)) {
+                return List.of();
+            }
+            throw ex;
+        }
+        List<NeuralGateDecisionAttempt> rows = new ArrayList<>();
+        for (FieldValueList row : result.iterateAll()) {
+            rows.add(toNeuralGateDecisionAttempt(row));
         }
         return Collections.unmodifiableList(rows);
     }
@@ -577,6 +611,30 @@ public class BigQueryOpsClient {
                 getTimestamp(row, "trained_at", "trainedAt"),
                 getTimestamp(row, "created_at", "createdAt"),
                 getString(row, "notes"));
+    }
+
+    private NeuralGateDecisionAttempt toNeuralGateDecisionAttempt(FieldValueList row) {
+        return new NeuralGateDecisionAttempt(
+                getString(row, "decision_id", "decisionId"),
+                getString(row, "protocol_version", "protocolVersion"),
+                getString(row, "dataset_snapshot", "datasetSnapshot"),
+                getString(row, "candidate_family_hash", "candidateFamilyHash"),
+                getString(row, "gate_name", "gateName"),
+                getString(row, "decision_status", "decisionStatus"),
+                getBoolean(row, "passed"),
+                getString(row, "failed_criteria", "failedCriteria"),
+                getString(row, "metrics_json", "metricsJson"),
+                getString(row, "gate_engine_version", "gateEngineVersion"),
+                getTimestamp(row, "decided_at", "decidedAt"),
+                getLong(row, "folds"),
+                getLong(row, "seeds"),
+                getLong(row, "positive_folds", "positiveFolds"),
+                getDouble(row, "positive_fold_ratio", "positiveFoldRatio"),
+                getDouble(row, "median_delta_expectancy_vs_champion", "medianDeltaExpectancyVsChampion"),
+                getDouble(row, "median_expectancy_net", "medianExpectancyNet"),
+                getDouble(row, "max_drawdown", "maxDrawdown"),
+                getLong(row, "total_trades", "totalTrades"),
+                getBoolean(row, "stable_across_seeds", "stableAcrossSeeds"));
     }
 
     private QuantDataInventorySummary toQuantDataInventorySummary(FieldValueList row) {

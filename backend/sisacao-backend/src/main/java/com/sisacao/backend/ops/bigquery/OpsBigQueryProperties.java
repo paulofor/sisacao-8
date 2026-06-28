@@ -40,6 +40,8 @@ public class OpsBigQueryProperties {
     private String neuralTrainingDataAllocationView = "vw_neural_eod_training_dataset_quality";
     private String neuralModelRegistryTable = "neural_model_registry";
     private String neuralEvolutionLeaderboardView = "vw_neural_evolution_leaderboard";
+    private String neuralGateDecisionsTable = "neural_gate_decisions";
+    private String neuralFamilyEvaluationsTable = "neural_family_evaluations";
 
     public boolean isEnabled() {
         return enabled;
@@ -360,6 +362,26 @@ public class OpsBigQueryProperties {
     public void setNeuralEvolutionLeaderboardView(String neuralEvolutionLeaderboardView) {
         if (neuralEvolutionLeaderboardView != null && !neuralEvolutionLeaderboardView.isBlank()) {
             this.neuralEvolutionLeaderboardView = neuralEvolutionLeaderboardView;
+        }
+    }
+
+    public String getNeuralGateDecisionsTable() {
+        return neuralGateDecisionsTable;
+    }
+
+    public void setNeuralGateDecisionsTable(String neuralGateDecisionsTable) {
+        if (neuralGateDecisionsTable != null && !neuralGateDecisionsTable.isBlank()) {
+            this.neuralGateDecisionsTable = neuralGateDecisionsTable;
+        }
+    }
+
+    public String getNeuralFamilyEvaluationsTable() {
+        return neuralFamilyEvaluationsTable;
+    }
+
+    public void setNeuralFamilyEvaluationsTable(String neuralFamilyEvaluationsTable) {
+        if (neuralFamilyEvaluationsTable != null && !neuralFamilyEvaluationsTable.isBlank()) {
+            this.neuralFamilyEvaluationsTable = neuralFamilyEvaluationsTable;
         }
     }
 

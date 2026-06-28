@@ -57,6 +57,7 @@ import { useOpsOverview } from './hooks/useOpsOverview'
 import { useOpsPipeline } from './hooks/useOpsPipeline'
 import { useNeuralTrainingDataAllocation } from './hooks/useNeuralTrainingDataAllocation'
 import { useNeuralEvolutionLeaderboard } from './hooks/useNeuralEvolutionLeaderboard'
+import { useNeuralGateDecisions } from './hooks/useNeuralGateDecisions'
 import { useNeuralTrainingRuns } from './hooks/useNeuralTrainingRuns'
 import { useOpsSignalsNext } from './hooks/useOpsSignalsNext'
 import { useQuantDataInventorySummary } from './hooks/useQuantDataInventorySummary'
@@ -180,6 +181,7 @@ function App() {
   const neuralTrainingDataAllocationQuery = useNeuralTrainingDataAllocation()
   const neuralTrainingRunsQuery = useNeuralTrainingRuns()
   const neuralEvolutionLeaderboardQuery = useNeuralEvolutionLeaderboard()
+  const neuralGateDecisionsQuery = useNeuralGateDecisions()
   const quantTickerCoverageQuery = useQuantTickerCoverage(150)
   const quantDataQualityIncidentsQuery = useQuantDataQualityIncidents(150)
   const quantBaselineStrategiesQuery = useQuantBaselineStrategies()
@@ -443,6 +445,9 @@ function App() {
             leaderboard={neuralEvolutionLeaderboardQuery.data ?? []}
             leaderboardError={neuralEvolutionLeaderboardQuery.error}
             leaderboardLoading={neuralEvolutionLeaderboardQuery.isLoading && (neuralEvolutionLeaderboardQuery.data ?? []).length === 0}
+            gateDecisions={neuralGateDecisionsQuery.data ?? []}
+            gateDecisionsError={neuralGateDecisionsQuery.error}
+            gateDecisionsLoading={neuralGateDecisionsQuery.isLoading && (neuralGateDecisionsQuery.data ?? []).length === 0}
             trainingRuns={neuralTrainingRunsQuery.data ?? []}
           />
         ) : null}

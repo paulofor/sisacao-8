@@ -17,12 +17,19 @@ import {
 import dayjs from 'dayjs'
 import { useEffect, useMemo, useState, type FC } from 'react'
 
-import type { NeuralEvolutionLeaderboardEntry, NeuralTrainingRun } from '../../api/ops'
+import type {
+  NeuralEvolutionLeaderboardEntry,
+  NeuralGateDecisionAttempt,
+  NeuralTrainingRun,
+} from '../../api/ops'
 
 interface NeuralEvolutionTabProps {
   leaderboard: NeuralEvolutionLeaderboardEntry[]
   leaderboardError?: Error | null
   leaderboardLoading: boolean
+  gateDecisions?: NeuralGateDecisionAttempt[]
+  gateDecisionsError?: Error | null
+  gateDecisionsLoading?: boolean
   trainingRuns?: NeuralTrainingRun[]
 }
 
@@ -71,6 +78,29 @@ const decisionLabel = (decision: string | null | undefined) => {
   if (normalized === 'paper_candidate') return 'Elegível ao gate de paper'
   if (normalized === 'reject') return 'Rejeitada nesta etapa'
   return decision ?? 'Sem decisão'
+}
+
+const gateStatusColor = (attempt: NeuralGateDecisionAttempt) => {
+  const normalized = attempt.decisionStatus?.toLowerCase()
+  if (attempt.passed || normalized === 'passed') return 'success'
+  if (normalized === 'rejected') return 'error'
+  return 'default'
+}
+
+const gateStatusLabel = (attempt: NeuralGateDecisionAttempt) => {
+  const normalized = attempt.decisionStatus?.toLowerCase()
+  if (attempt.passed || normalized === 'passed') return 'Aprovado'
+  if (normalized === 'rejected') return 'Rejeitado'
+  return attempt.decisionStatus ?? 'Sem decisão'
+}
+
+const formatCriteria = (value: string | null | undefined) => {
+  if (!value) return '—'
+  return value
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .join(' · ') || '—'
 }
 
 const compactJson = (value: string | null | undefined) => {
@@ -161,11 +191,15 @@ const summarizeFamilies = (leaderboard: NeuralEvolutionLeaderboardEntry[]) => {
 
 const LEADERBOARD_ROWS_PER_PAGE = 20
 const FAMILY_ROWS_PER_PAGE = 10
+const GATE_DECISION_ROWS = 8
 
 const NeuralEvolutionTab: FC<NeuralEvolutionTabProps> = ({
   leaderboard,
   leaderboardError,
   leaderboardLoading,
+  gateDecisions = [],
+  gateDecisionsError,
+  gateDecisionsLoading = false,
   trainingRuns = [],
 }) => {
   const [leaderboardPage, setLeaderboardPage] = useState(0)
@@ -192,6 +226,7 @@ const NeuralEvolutionTab: FC<NeuralEvolutionTabProps> = ({
   const waitingEvaluation = Math.max(0, totalCandidates - leaderboard.length)
   const waitingByModelVersion = Math.max(0, totalCandidates - evaluatedModels)
   const bestFamily = families[0]
+  const latestGateDecisions = gateDecisions.slice(0, GATE_DECISION_ROWS)
 
   useEffect(() => {
     setLeaderboardPage(0)
@@ -223,6 +258,83 @@ const NeuralEvolutionTab: FC<NeuralEvolutionTabProps> = ({
           de treinos não entram aqui até serem gravados em
           <strong> neural_candidate_evaluations</strong>.
         </Alert>
+      ) : null}
+
+      {gateDecisionsLoading ? <Skeleton variant="rounded" height={180} /> : null}
+      {gateDecisionsError ? <Alert severity="error">Erro ao carregar as últimas tentativas MUEN.</Alert> : null}
+      {!gateDecisionsLoading && !gateDecisionsError ? (
+        <Paper elevation={0} sx={{ p: 2.5, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+          <Stack spacing={2}>
+            <Stack spacing={0.5}>
+              <Typography variant="h6" fontWeight={800}>Últimas tentativas MUEN</Typography>
+              <Typography variant="body2" color="text.secondary">
+                Linha do tempo auditável dos gates persistidos pelo orquestrador ou pela avaliação manual.
+                Esta seção mostra a decisão, critérios reprovados e métricas agregadas da família.
+              </Typography>
+            </Stack>
+
+            {latestGateDecisions.length === 0 ? (
+              <Alert severity="info">
+                Ainda não há decisões MUEN persistidas em <strong>neural_gate_decisions</strong>.
+                Quando o Scheduler/orquestrador rodar sem <strong>dry_run</strong>, as tentativas aparecerão aqui.
+              </Alert>
+            ) : (
+              <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+                <Table stickyHeader size="small" aria-label="Últimas tentativas MUEN">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Decisão</TableCell>
+                      <TableCell>Status</TableCell>
+                      <TableCell>Família</TableCell>
+                      <TableCell>Critérios reprovados</TableCell>
+                      <TableCell align="right">Folds</TableCell>
+                      <TableCell align="right">Seeds</TableCell>
+                      <TableCell align="right">Folds positivos</TableCell>
+                      <TableCell align="right">Δ expectancy</TableCell>
+                      <TableCell align="right">Drawdown</TableCell>
+                      <TableCell align="right">Trades</TableCell>
+                      <TableCell>Data</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {latestGateDecisions.map((attempt) => (
+                      <TableRow key={attempt.decisionId} hover>
+                        <TableCell>
+                          <Stack spacing={0.25}>
+                            <Typography variant="body2" fontWeight={700}>{attempt.decisionId}</Typography>
+                            <Typography variant="caption" color="text.secondary">{attempt.gateName ?? 'Gate MUEN'}</Typography>
+                          </Stack>
+                        </TableCell>
+                        <TableCell>
+                          <Chip size="small" label={gateStatusLabel(attempt)} color={gateStatusColor(attempt)} />
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="caption" sx={{ display: 'block', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {attempt.candidateFamilyHash ?? '—'}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="caption" sx={{ display: 'block', maxWidth: 320 }}>
+                            {formatCriteria(attempt.failedCriteria)}
+                          </Typography>
+                        </TableCell>
+                        <TableCell align="right">{attempt.folds ?? '—'}</TableCell>
+                        <TableCell align="right">{attempt.seeds ?? '—'}</TableCell>
+                        <TableCell align="right">
+                          {attempt.positiveFolds ?? '—'} / {formatPct(attempt.positiveFoldRatio)}
+                        </TableCell>
+                        <TableCell align="right">{formatPct(attempt.medianDeltaExpectancyVsChampion)}</TableCell>
+                        <TableCell align="right">{formatPct(attempt.maxDrawdown)}</TableCell>
+                        <TableCell align="right">{attempt.totalTrades ?? '—'}</TableCell>
+                        <TableCell>{formatDateTime(attempt.decidedAt)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            )}
+          </Stack>
+        </Paper>
       ) : null}
 
       {leaderboard.length > 0 ? (

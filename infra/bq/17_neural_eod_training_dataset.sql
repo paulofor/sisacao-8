@@ -97,7 +97,8 @@ ADD COLUMN IF NOT EXISTS net_return FLOAT64,
 ADD COLUMN IF NOT EXISTS holding_sessions INT64,
 ADD COLUMN IF NOT EXISTS max_adverse_excursion FLOAT64,
 ADD COLUMN IF NOT EXISTS max_favorable_excursion FLOAT64,
-ADD COLUMN IF NOT EXISTS execution_policy_version STRING;
+ADD COLUMN IF NOT EXISTS execution_policy_version STRING,
+ADD COLUMN IF NOT EXISTS temporal_protocol_json JSON;
 
 CREATE TABLE IF NOT EXISTS `ingestaokraken.cotacao_intraday.neural_dataset_manifests`
 (
