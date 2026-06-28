@@ -101,3 +101,21 @@ O próximo passo foi implementado no código: `sisacao8.neural_training.build_mu
 ## Nota de visibilidade na aba Treinos — 2026-06-28 15:05 UTC-3
 
 A aba `Redes neurais — Treinos` passou a exibir também as decisões recentes do Gate MUEN, incluindo rejeições e critérios reprovados, para deixar claro que candidatas com status `candidate` no registry podem já ter sido analisadas e bloqueadas pelo gate econômico. O próximo passo operacional não mudou: manter a geração recorrente de candidatas via orquestrador/Scheduler e reservar `approve_if_passed` apenas para decisões `passed`.
+
+## Diagnóstico de parada das análises — 2026-06-28 16:03 UTC-3
+
+As análises MUEN não pararam porque o Scheduler deixou de executar. A última decisão persistida visível na tela é de 2026-06-28 08:31:26 UTC (05:31 em America/Sao_Paulo), mas logs posteriores da Cloud Function `neural_evolution_orchestrator` mostram chamadas às 14:30 e 15:30 BRT retornando HTTP 500. A causa confirmada nos logs é `ValueError: No neural evolution candidates were generated`, ou seja, o orquestrador foi acionado, mas não conseguiu gerar uma candidata inédita antes de gravar nova execução/decisão.
+
+Próximo passo imediato: corrigir a estratégia de geração recorrente para lidar com grid esgotado/deduplicação total — por exemplo ampliar o espaço de mutações/seeds, relaxar/fazer reset controlado do filtro de hashes por rodada quando apropriado, ou retornar status controlado sem 500 — e depois disparar nova execução para confirmar que novas linhas aparecem em `neural_gate_decisions`.
+
+## Correção local para grid esgotado — 2026-06-28 16:12 UTC-3
+
+Foi implementado fallback no orquestrador neural para quando a Fase 2 não consegue gerar mutações inéditas porque todos os hashes do grid atual já existem. Nessa situação, o código passa a criar repetições dos finalistas com seeds inéditas, validando contra `existing_hashes`, em vez de abortar a execução com HTTP 500 antes de gravar nova decisão.
+
+Próximo passo imediato: publicar `functions/neural_evolution_orchestrator` com essa correção e disparar/aguardar o Scheduler `neural-evolution-daily`; a validação operacional esperada é observar novas linhas em `neural_gate_decisions` após uma execução bem-sucedida.
+
+## Ajuste do fallback para novas arquiteturas — 2026-06-28 16:27 UTC-3
+
+A correção local foi refinada: quando a Fase 2 esgotar as mutações comuns, o orquestrador agora deve tentar primeiro novas arquiteturas MLP derivadas dos finalistas (mais largas, mais estreitas, mais profundas ou mais rasas), respeitando orçamento de camadas/parâmetros e `existing_hashes`. Repetições com seeds inéditas permanecem como fallback secundário, útil para medir estabilidade, mas não são mais a primeira resposta ao grid esgotado.
+
+Próximo passo imediato: publicar `functions/neural_evolution_orchestrator`, acionar/aguardar o Scheduler e verificar se as novas linhas em `neural_candidate_configs`/`neural_gate_decisions` incluem `candidate_source=architecture_variant` antes de `seed_repeat_fresh`.

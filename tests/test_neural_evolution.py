@@ -99,8 +99,10 @@ def test_score_candidate_keeps_candidate_with_oos_evidence():
 
 def test_select_top_mutate_and_repeat_finalists():
     from sisacao8.neural_evolution import (
+        generate_architecture_variant_candidates,
         mutate_top_candidates,
         penalized_score,
+        repeat_finalists_with_fresh_seeds,
         repeat_finalists_with_seeds,
         select_diverse_top_candidates,
         select_top_candidates,
@@ -139,12 +141,28 @@ def test_select_top_mutate_and_repeat_finalists():
         budget=EvolutionBudget(max_trials=3),
         model_version_prefix="mutation_test",
     )
+    architecture_variants = generate_architecture_variant_candidates(
+        top,
+        evolution_run_id="run-2",
+        dataset_snapshot="snapshot-1",
+        budget=EvolutionBudget(max_trials=2, random_seed=20260621),
+        existing_hashes={candidate.dedupe_hash for candidate in mutations},
+        model_version_prefix="arch_test",
+    )
     repeated = repeat_finalists_with_seeds(
         top,
         evolution_run_id="run-2",
         dataset_snapshot="snapshot-1",
         seeds=(101, 102),
         model_version_prefix="seed_test",
+    )
+    fresh_repeated = repeat_finalists_with_fresh_seeds(
+        top,
+        evolution_run_id="run-2",
+        dataset_snapshot="snapshot-1",
+        budget=EvolutionBudget(max_trials=2, random_seed=20260621),
+        existing_hashes={candidate.dedupe_hash for candidate in repeated},
+        model_version_prefix="seed_fresh_test",
     )
     penalized = penalized_score(
         {
@@ -164,6 +182,14 @@ def test_select_top_mutate_and_repeat_finalists():
     assert len(diverse_top) == 1
     assert len(mutations) == 3
     assert {candidate.candidate_source for candidate in mutations} == {"mutation"}
+    assert len(architecture_variants) == 2
+    assert {candidate.candidate_source for candidate in architecture_variants} == {
+        "architecture_variant"
+    }
+    assert all(
+        candidate.architecture["hidden_units"] != top[0].architecture["hidden_units"]
+        for candidate in architecture_variants
+    )
     assert all(candidate.training_request["early_stopping"] for candidate in mutations)
     assert {candidate.training_request["class_weight"] for candidate in mutations} <= {
         "balanced",
@@ -173,4 +199,12 @@ def test_select_top_mutate_and_repeat_finalists():
         101,
         102,
     ]
+    assert len(fresh_repeated) == 2
+    assert {candidate.candidate_source for candidate in fresh_repeated} == {
+        "seed_repeat_fresh"
+    }
+    assert not (
+        {candidate.dedupe_hash for candidate in fresh_repeated}
+        & {candidate.dedupe_hash for candidate in repeated}
+    )
     assert penalized.score_cost_penalty > 0.0
