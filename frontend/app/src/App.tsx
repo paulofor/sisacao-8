@@ -217,7 +217,7 @@ function App() {
     'neural-overview': [neuralTrainingDataAllocationQuery, neuralTrainingRunsQuery, neuralEvolutionLeaderboardQuery, quantBaselineStrategiesQuery] as QueryResult[],
     'neural-journey': [neuralTrainingDataAllocationQuery, neuralTrainingRunsQuery, neuralEvolutionLeaderboardQuery, quantBaselineStrategiesQuery] as QueryResult[],
     'neural-training-data': [neuralTrainingDataAllocationQuery] as QueryResult[],
-    'neural-training-runs': [neuralTrainingRunsQuery] as QueryResult[],
+    'neural-training-runs': [neuralTrainingRunsQuery, neuralGateDecisionsQuery] as QueryResult[],
     'neural-evolution': [neuralEvolutionLeaderboardQuery] as QueryResult[],
     'ai-advisor': [neuralEvolutionLeaderboardQuery] as QueryResult[],
     sinais: [opsSignalsNextQuery] as QueryResult[],
@@ -437,6 +437,9 @@ function App() {
             runs={neuralTrainingRunsQuery.data ?? []}
             runsError={neuralTrainingRunsQuery.error}
             runsLoading={neuralTrainingRunsQuery.isLoading && (neuralTrainingRunsQuery.data ?? []).length === 0}
+            gateDecisions={neuralGateDecisionsQuery.data ?? []}
+            gateDecisionsError={neuralGateDecisionsQuery.error}
+            gateDecisionsLoading={neuralGateDecisionsQuery.isLoading && (neuralGateDecisionsQuery.data ?? []).length === 0}
           />
         ) : null}
 
