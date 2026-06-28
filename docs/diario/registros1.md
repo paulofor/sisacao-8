@@ -1372,3 +1372,12 @@
 - Consulta read-only ao `INFORMATION_SCHEMA.TABLES` via MCP confirmou que `cotacao_intraday.neural_dataset_manifests` já existe.
 - Conclusão operacional: o schema necessário parece aplicado; o próximo passo é repetir a chamada da Cloud Function `neural_training_dataset` com um novo `DATASET_SNAPSHOT` e, se houver novo 500, consultar logs apenas após o horário da nova tentativa para capturar uma causa nova.
 - Comandos usados: MCP HTTP/JSON-RPC (`initialize`, `cloud_run_function_logs`, `bigquery_query` em `INFORMATION_SCHEMA.COLUMNS` e `INFORMATION_SCHEMA.TABLES`).
+
+
+## 2026-06-27 22:36:00 UTC-3 — Hardening da carga BigQuery do dataset neural
+- Reproduzida chamada controlada da Cloud Function `neural_training_dataset` com snapshot novo `neural_eod_training_dataset_2026-06-18_muen_v2_codex_20260628_012944`, que ainda retornou 500 após o schema produtivo ter sido confirmado.
+- O MCP de logs continuou retornando principalmente stack traces antigos/ordenados do período de migração parcial, impedindo isolar uma mensagem nova de BigQuery após a chamada controlada; como mitigação no código, a carga JSON passou a reindexar o DataFrame para uma lista explícita de colunas do contrato BigQuery antes de chamar `load_table_from_json`.
+- Correção aplicada: `functions/neural_training_dataset/main.py` agora define `TRAINING_DATASET_COLUMNS`, converte `holding_sessions` como inteiro e filtra/remonta as linhas carregadas para impedir que qualquer coluna extra futura gerada pelo builder quebre a carga com `No such field`.
+- Adicionado teste unitário garantindo que `_load_dataset` descarta colunas inesperadas antes do envio ao BigQuery e preserva `holding_sessions` como inteiro.
+- Próximo passo operacional: publicar `functions/neural_training_dataset` com esse hardening e repetir a materialização do snapshot v2.
+- Comandos usados: `curl` produtivo para `neural_training_dataset`, MCP HTTP/JSON-RPC (`initialize`, `cloud_run_function_logs`), comparação local entre colunas geradas por `build_training_dataset` e o DDL, edição via Python, `python -m black`.

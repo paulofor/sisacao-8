@@ -1,6 +1,6 @@
 # Próximo passo — Redes neurais MUEN
 
-**Última atualização:** 2026-06-27 22:27 UTC-3
+**Última atualização:** 2026-06-27 22:36 UTC-3
 **Protocolo:** `neural_eod_protocol_v1`
 **Status:** ponto de parada operacional registrado
 
@@ -44,7 +44,7 @@ O próximo ponto de parada será alcançado quando uma execução real de `evalu
 
 ## Diagnóstico de schema do dataset v2 — 2026-06-27 22:04 UTC-3
 
-A execução produtiva de `neural_training_dataset` retornou 500 porque a tabela `cotacao_intraday.neural_eod_training_dataset` ainda não tinha todas as colunas v2 geradas pelo código publicado. Os logs via MCP/Cloud Run confirmaram rejeição BigQuery por campos ausentes, incluindo `log_return_1d`, `log_volume`, `trade_side` e `exit_price` durante tentativas feitas com a migração parcial. Consulta posterior ao `INFORMATION_SCHEMA` confirmou que as 19 colunas v2 esperadas já existem na tabela produtiva e que `neural_dataset_manifests` também existe; o próximo passo imediato é repetir a materialização com um novo `DATASET_SNAPSHOT` e, se houver novo 500, consultar logs após o horário da nova tentativa para capturar uma causa nova.
+A execução produtiva de `neural_training_dataset` retornou 500 porque a tabela `cotacao_intraday.neural_eod_training_dataset` ainda não tinha todas as colunas v2 geradas pelo código publicado. Os logs via MCP/Cloud Run confirmaram rejeição BigQuery por campos ausentes, incluindo `log_return_1d`, `log_volume`, `trade_side` e `exit_price` durante tentativas feitas com a migração parcial. Consulta posterior ao `INFORMATION_SCHEMA` confirmou que as 19 colunas v2 esperadas já existem na tabela produtiva e que `neural_dataset_manifests` também existe. Uma chamada controlada ainda retornou 500, e os logs disponíveis via MCP permaneceram dominados por stack traces antigos da migração parcial; por isso o próximo passo imediato passa a ser publicar `functions/neural_training_dataset` com o hardening que filtra a carga JSON para o contrato BigQuery (`TRAINING_DATASET_COLUMNS`) e repetir a materialização com um novo `DATASET_SNAPSHOT`.
 
 ## Nota de interface — 2026-06-25 00:02 UTC-3
 
