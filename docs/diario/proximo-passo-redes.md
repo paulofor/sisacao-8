@@ -1,12 +1,12 @@
 # Próximo passo — Redes neurais MUEN
 
-**Última atualização:** 2026-06-27 19:18 UTC-3
+**Última atualização:** 2026-06-27 22:14 UTC-3
 **Protocolo:** `neural_eod_protocol_v1`
 **Status:** ponto de parada operacional registrado
 
 ## Próximo passo atual
 
-O código do treino/evaluador neural agora gera `metrics_json.muen_economics.fold_metrics` para novas candidatas usando predições dos splits não treino contra `buy_net_return`/`sell_net_return` e estresse de custo `1.0`/`1.5`. O próximo passo operacional é publicar a versão atual de `functions/neural_training`, executar um novo treino real para registrar uma candidata com o bloco `muen_economics`, confirmar o payload no `neural_model_registry`, executar `neural_champion_approval` em `mode=evaluate_candidate` com `dry_run=false`, validar a persistência em `neural_fold_metrics`, `neural_daily_returns` quando houver payload diário, `neural_family_evaluations` e `neural_gate_decisions`, e então chamar `approve_if_passed` primeiro em dry-run e depois em modo efetivo apenas se o Gate Research retornar `passed`.
+O código do treino/evaluador neural agora gera `metrics_json.muen_economics.fold_metrics` para novas candidatas usando predições dos splits não treino contra `buy_net_return`/`sell_net_return` e estresse de custo `1.0`/`1.5`. Antes de rodar o novo treino real, é necessário aplicar no BigQuery o schema v2 do dataset neural: as colunas `log_return_1d`, `log_return_5d`, `log_return_10d`, `log_return_20d`, `log_financial_volume` e `log_volume` em `neural_eod_training_dataset`, além da tabela `neural_dataset_manifests`. Depois disso, executar `neural_training_dataset` para gerar um snapshot v2, rodar `neural_training` apontando para esse snapshot, confirmar o payload no `neural_model_registry`, executar `neural_champion_approval` em `mode=evaluate_candidate` com `dry_run=false`, validar a persistência em `neural_fold_metrics`, `neural_daily_returns` quando houver payload diário, `neural_family_evaluations` e `neural_gate_decisions`, e então chamar `approve_if_passed` primeiro em dry-run e depois em modo efetivo apenas se o Gate Research retornar `passed`.
 
 ## Objetivo
 
@@ -40,6 +40,11 @@ O próximo ponto de parada será alcançado quando uma execução real de `evalu
 - O leaderboard continua sendo ordenação; o gate econômico decide avanço.
 - Atualizar este arquivo sempre que o próximo passo das redes neurais mudar.
 - Continuar registrando o trabalho executado em `docs/diario/registros1.md`.
+
+
+## Diagnóstico de schema do dataset v2 — 2026-06-27 22:04 UTC-3
+
+A execução produtiva de `neural_training_dataset` retornou 500 porque a tabela `cotacao_intraday.neural_eod_training_dataset` ainda não tinha todas as colunas v2 geradas pelo código publicado. Os logs via MCP/Cloud Run confirmaram rejeição BigQuery por campos ausentes, incluindo `log_return_1d`, `log_volume` e, após avanço da migração parcial, `trade_side`. O repositório passou a versionar os `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` das seis colunas `log_*`, das colunas executáveis do label selecionado e a criação de `neural_dataset_manifests`; o próximo passo imediato é aplicar esse SQL completo no BigQuery antes de repetir a materialização do snapshot v2.
 
 ## Nota de interface — 2026-06-25 00:02 UTC-3
 
