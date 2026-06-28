@@ -1339,3 +1339,54 @@
 - Adicionado teste unitário cobrindo a geração de folds econômicos por split/custo, validação de `candidate_family_hash`, `seed`, contagem de folds e agregação familiar.
 - Atualizado `docs/diario/proximo-passo-redes.md`: o próximo passo operacional passa a ser publicar `functions/neural_training`, executar novo treino real para criar candidata com `muen_economics`, e então rodar `evaluate_candidate`/`approve_if_passed` conforme gate.
 - Comandos usados: `rg`, `sed -n`, edição via Python, `python -m black sisacao8/neural_training.py functions/neural_training/sisacao8/neural_training.py`, `python -m black tests/test_neural_training.py`, `python -m pytest tests/test_neural_training.py -q`, `python -m pytest tests/test_neural_training.py tests/test_neural_training_function.py tests/test_neural_champion_approval.py -q`, `python -m pytest -q`, `python -m flake8`, `git diff --check` e `TZ=America/Sao_Paulo date '+%Y-%m-%d %H:%M:%S UTC-3'`.
+
+
+## 2026-06-27 22:04:49 UTC-3 — Diagnóstico do 500 na materialização do dataset neural v2
+- Investigado o novo erro 500 reportado na Cloud Function produtiva `neural_training_dataset` após tentativa de materializar snapshot `feature_eod_tabular_v2`/`label_eod_barrier_v2`.
+- Consulta obrigatória ao MCP via JSON-RPC HTTP em `http://mcpserversisacao.shop/mcp` confirmou nos logs da Cloud Run que a carga falha em `_load_dataset`/`load_table_from_json` porque o BigQuery rejeita campos v2 ausentes no schema produtivo: primeiro `log_return_1d` e, após ajuste parcial, `log_volume`.
+- Causa confirmada: o código publicado gera as features v2 (`log_return_1d`, `log_return_5d`, `log_return_10d`, `log_return_20d`, `log_financial_volume`, `log_volume`), mas o script versionado `infra/bq/17_neural_eod_training_dataset.sql` ainda descrevia apenas o schema v1 da tabela principal e não versionava a tabela de manifestos `neural_dataset_manifests`.
+- Correção aplicada no repositório: atualizado `infra/bq/17_neural_eod_training_dataset.sql` para incluir as colunas v2 no `CREATE TABLE`, adicionar `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` idempotentes para ambientes existentes e criar `cotacao_intraday.neural_dataset_manifests` com a coluna escapada `` `rows` `` compatível com o payload atual da função.
+- Próximo passo operacional: aplicar o SQL atualizado no BigQuery, confirmar que as seis colunas `log_*` existem em `neural_eod_training_dataset`, rodar novamente `neural_training_dataset`, treinar uma nova candidata apontando para o snapshot v2 e então executar `neural_champion_approval` em `evaluate_candidate`.
+- Comandos usados: `find .. -name AGENTS.md -print`, `git status --short`, `sed -n` em `AGENTS.md`, `docs/diario/proximo-passo-redes.md`, `infra/bq/17_neural_eod_training_dataset.sql` e `functions/neural_training_dataset/main.py`, scripts Python com `requests` para MCP HTTP/JSON-RPC (`initialize`, `cloud_run_function_logs`, tentativa de `bigquery_query`), `rg -n 'log_return_1d|log_volume|neural_dataset_manifests|rows_count' infra docs functions sisacao8 -S` e edição via Python.
+
+
+## 2026-06-27 22:14:00 UTC-3 — Complemento do schema de labels executáveis no dataset neural
+- Investigado novo 500 da Cloud Function `neural_training_dataset` após reaplicação parcial do schema v2.
+- Logs via MCP JSON-RPC HTTP confirmaram que a carga avançou além das colunas `log_*`, mas passou a falhar por campo ausente `trade_side`, também gerado pelo builder de labels em `sisacao8/neural_dataset.py`.
+- Correção aplicada no schema BigQuery versionado: adicionadas as colunas executáveis derivadas do label selecionado (`trade_side`, `entry_filled`, `entry_date`, `entry_price`, `exit_date`, `exit_price`, `exit_reason`, `gross_return`, `net_return`, `holding_sessions`, `max_adverse_excursion`, `max_favorable_excursion`, `execution_policy_version`) ao `CREATE TABLE` e aos `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`.
+- Próximo passo operacional: executar novamente o SQL completo de migração do `infra/bq/17_neural_eod_training_dataset.sql` no BigQuery antes de repetir a chamada da Cloud Function.
+- Comandos usados: MCP HTTP/JSON-RPC (`initialize`, `cloud_run_function_logs`), `rg -n "trade_side|target_net_return|event_date|label_class|FEATURE_COLUMNS|dataset\[" sisacao8/neural_dataset.py functions/neural_training_dataset/sisacao8/neural_dataset.py infra/bq -S`, `sed -n` em `sisacao8/neural_dataset.py`, edição via Python e `git diff`.
+
+
+## 2026-06-27 22:18:00 UTC-3 — Ajuste da migração BigQuery para evitar rate limit
+- Analisado erro visual reportado no BigQuery Console: `Exceeded rate limits: too many table update operations for this table`.
+- Causa operacional: executar muitos `ALTER TABLE` separados na mesma tabela consome rapidamente a cota de operações de atualização de tabela do BigQuery. Separar em mais comandos piora esse erro; a alternativa correta é agrupar as adições em uma única instrução `ALTER TABLE` ou aguardar a janela de cota antes de tentar novamente.
+- Correção aplicada no repositório: consolidado o bloco de migração de `infra/bq/17_neural_eod_training_dataset.sql` em um único `ALTER TABLE ... ADD COLUMN IF NOT EXISTS ..., ADD COLUMN IF NOT EXISTS ...`, reduzindo a migração da tabela principal para uma única operação DDL.
+- Comandos usados: inspeção da imagem enviada pelo usuário, edição via Python, `git diff`, consulta web de sintaxe BigQuery para múltiplos `ADD COLUMN` no mesmo `ALTER TABLE`.
+
+
+## 2026-06-27 22:27:00 UTC-3 — Confirmação do schema produtivo após migração v2
+- Investigado novo 500 reportado após a tentativa de materialização do snapshot neural v2.
+- Consulta de logs via MCP JSON-RPC HTTP mostrou erros históricos em sequência (`log_volume`, `trade_side`, `exit_price`), compatíveis com tentativas executadas enquanto a migração BigQuery ainda estava parcial.
+- Consulta read-only ao `INFORMATION_SCHEMA.COLUMNS` via MCP confirmou que a tabela produtiva `cotacao_intraday.neural_eod_training_dataset` agora contém as 19 colunas v2 esperadas: seis `log_*` e treze colunas executáveis/derivadas do label selecionado, incluindo `exit_price`.
+- Consulta read-only ao `INFORMATION_SCHEMA.TABLES` via MCP confirmou que `cotacao_intraday.neural_dataset_manifests` já existe.
+- Conclusão operacional: o schema necessário parece aplicado; o próximo passo é repetir a chamada da Cloud Function `neural_training_dataset` com um novo `DATASET_SNAPSHOT` e, se houver novo 500, consultar logs apenas após o horário da nova tentativa para capturar uma causa nova.
+- Comandos usados: MCP HTTP/JSON-RPC (`initialize`, `cloud_run_function_logs`, `bigquery_query` em `INFORMATION_SCHEMA.COLUMNS` e `INFORMATION_SCHEMA.TABLES`).
+
+
+## 2026-06-27 22:36:00 UTC-3 — Hardening da carga BigQuery do dataset neural
+- Reproduzida chamada controlada da Cloud Function `neural_training_dataset` com snapshot novo `neural_eod_training_dataset_2026-06-18_muen_v2_codex_20260628_012944`, que ainda retornou 500 após o schema produtivo ter sido confirmado.
+- O MCP de logs continuou retornando principalmente stack traces antigos/ordenados do período de migração parcial, impedindo isolar uma mensagem nova de BigQuery após a chamada controlada; como mitigação no código, a carga JSON passou a reindexar o DataFrame para uma lista explícita de colunas do contrato BigQuery antes de chamar `load_table_from_json`.
+- Correção aplicada: `functions/neural_training_dataset/main.py` agora define `TRAINING_DATASET_COLUMNS`, converte `holding_sessions` como inteiro e filtra/remonta as linhas carregadas para impedir que qualquer coluna extra futura gerada pelo builder quebre a carga com `No such field`.
+- Adicionado teste unitário garantindo que `_load_dataset` descarta colunas inesperadas antes do envio ao BigQuery e preserva `holding_sessions` como inteiro.
+- Próximo passo operacional: publicar `functions/neural_training_dataset` com esse hardening e repetir a materialização do snapshot v2.
+- Comandos usados: `curl` produtivo para `neural_training_dataset`, MCP HTTP/JSON-RPC (`initialize`, `cloud_run_function_logs`), comparação local entre colunas geradas por `build_training_dataset` e o DDL, edição via Python, `python -m black`.
+
+
+## 2026-06-27 22:47:00 UTC-3 — Diagnóstico operacional com retorno JSON de erro
+- Usuário reportou que, mesmo após deploy, `neural_training_dataset` continuou retornando 500 genérico.
+- Tentada investigação via MCP: `cloud_run_function_logs` continuou retornando logs antigos/truncados da migração parcial, e consulta ao `INFORMATION_SCHEMA.JOBS_BY_PROJECT` falhou repetidamente por instabilidade de credencial do MCP/gcloud (`Credentials object has no attribute private_key_id`).
+- Confirmado via `INFORMATION_SCHEMA.COLUMNS` que `neural_dataset_manifests` possui a coluna correta `rows`; consulta ao dataset mostrou que nenhum snapshot `neural_eod_training_dataset_2026-06-18_muen_v2_%` foi gravado, indicando falha antes ou durante a carga principal.
+- Correção aplicada para destravar o diagnóstico: `functions/neural_training_dataset` agora captura exceções no entrypoint, registra stack trace e retorna JSON 500 com `status=error`, `error_type` e `message`, em vez de deixar o Functions Framework devolver apenas `500 Internal Server Error` genérico.
+- Próximo passo operacional: publicar novamente `functions/neural_training_dataset`, repetir o curl e usar o corpo JSON retornado para identificar a causa exata remanescente.
+- Comandos usados: MCP HTTP/JSON-RPC (`initialize`, `tools/list`, `cloud_run_function_logs`, tentativas de `bigquery_query` em `JOBS_BY_PROJECT`, `INFORMATION_SCHEMA.COLUMNS` e snapshots), `curl` produtivo controlado, edição via Python e `python -m black`.

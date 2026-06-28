@@ -107,6 +107,8 @@ def test_neural_training_dataset_materializes_and_loads_rows(monkeypatch):
     )
     assert any("DELETE FROM" in query for query in fake_client.queries)
     first_row = fake_client.loaded_rows[0]
+    assert set(first_row).issubset(set(module.TRAINING_DATASET_COLUMNS))
+    assert "unexpected_extra_column" not in first_row
     assert first_row["dataset_snapshot"] == "snapshot_test"
     assert first_row["metadata_json"]["builder"].endswith("build_training_dataset")
     assert first_row["metadata_json"]["protocol_version"] == "neural_eod_protocol_v1"
@@ -121,6 +123,47 @@ def test_neural_training_dataset_materializes_and_loads_rows(monkeypatch):
     assert manifest_rows[0]["feature_version"] == "feature_eod_tabular_v2"
     loaded_splits = {row["dataset_split"] for row in dataset_rows}
     assert {"train", "validation", "test"}.issubset(loaded_splits)
+
+
+def test_load_dataset_filters_columns_to_bigquery_contract(monkeypatch):
+    fake_client = _FakeClient()
+    monkeypatch.setattr(module, "_BQ_CLIENT", fake_client)
+    frame = pd.DataFrame(
+        [
+            {
+                "ticker": "TEST3",
+                "dataset_snapshot": "snapshot_test",
+                "created_at": dt.datetime(2024, 1, 1, tzinfo=dt.timezone.utc),
+                "holding_sessions": 2.0,
+                "unexpected_extra_column": "must_not_be_loaded",
+            }
+        ]
+    )
+
+    inserted = module._load_dataset(fake_client, frame)
+
+    assert inserted == 1
+    assert len(fake_client.loaded_rows) == 1
+    loaded = fake_client.loaded_rows[0]
+    assert "unexpected_extra_column" not in loaded
+    assert set(loaded) == set(module.TRAINING_DATASET_COLUMNS)
+    assert loaded["holding_sessions"] == 2
+
+
+def test_neural_training_dataset_returns_json_error(monkeypatch):
+    def fail_impl(request):
+        raise RuntimeError("load failed detail")
+
+    monkeypatch.setattr(module, "_neural_training_dataset", fail_impl)
+
+    response, status = module.neural_training_dataset(_Request({}))
+
+    assert status == 500
+    assert response == {
+        "status": "error",
+        "error_type": "RuntimeError",
+        "message": "load failed detail",
+    }
 
 
 def test_request_payload_merges_query_args_and_json_body():
