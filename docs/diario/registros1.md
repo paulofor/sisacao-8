@@ -1356,3 +1356,10 @@
 - Correção aplicada no schema BigQuery versionado: adicionadas as colunas executáveis derivadas do label selecionado (`trade_side`, `entry_filled`, `entry_date`, `entry_price`, `exit_date`, `exit_price`, `exit_reason`, `gross_return`, `net_return`, `holding_sessions`, `max_adverse_excursion`, `max_favorable_excursion`, `execution_policy_version`) ao `CREATE TABLE` e aos `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`.
 - Próximo passo operacional: executar novamente o SQL completo de migração do `infra/bq/17_neural_eod_training_dataset.sql` no BigQuery antes de repetir a chamada da Cloud Function.
 - Comandos usados: MCP HTTP/JSON-RPC (`initialize`, `cloud_run_function_logs`), `rg -n "trade_side|target_net_return|event_date|label_class|FEATURE_COLUMNS|dataset\[" sisacao8/neural_dataset.py functions/neural_training_dataset/sisacao8/neural_dataset.py infra/bq -S`, `sed -n` em `sisacao8/neural_dataset.py`, edição via Python e `git diff`.
+
+
+## 2026-06-27 22:18:00 UTC-3 — Ajuste da migração BigQuery para evitar rate limit
+- Analisado erro visual reportado no BigQuery Console: `Exceeded rate limits: too many table update operations for this table`.
+- Causa operacional: executar muitos `ALTER TABLE` separados na mesma tabela consome rapidamente a cota de operações de atualização de tabela do BigQuery. Separar em mais comandos piora esse erro; a alternativa correta é agrupar as adições em uma única instrução `ALTER TABLE` ou aguardar a janela de cota antes de tentar novamente.
+- Correção aplicada no repositório: consolidado o bloco de migração de `infra/bq/17_neural_eod_training_dataset.sql` em um único `ALTER TABLE ... ADD COLUMN IF NOT EXISTS ..., ADD COLUMN IF NOT EXISTS ...`, reduzindo a migração da tabela principal para uma única operação DDL.
+- Comandos usados: inspeção da imagem enviada pelo usuário, edição via Python, `git diff`, consulta web de sintaxe BigQuery para múltiplos `ADD COLUMN` no mesmo `ALTER TABLE`.

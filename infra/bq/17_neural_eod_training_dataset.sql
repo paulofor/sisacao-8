@@ -79,60 +79,24 @@ OPTIONS (
 -- `CREATE TABLE IF NOT EXISTS` não altera tabelas já existentes, portanto as
 -- colunas v2 precisam ser adicionadas explicitamente antes de cargas novas.
 ALTER TABLE `ingestaokraken.cotacao_intraday.neural_eod_training_dataset`
-ADD COLUMN IF NOT EXISTS log_return_1d FLOAT64;
-
-ALTER TABLE `ingestaokraken.cotacao_intraday.neural_eod_training_dataset`
-ADD COLUMN IF NOT EXISTS log_return_5d FLOAT64;
-
-ALTER TABLE `ingestaokraken.cotacao_intraday.neural_eod_training_dataset`
-ADD COLUMN IF NOT EXISTS log_return_10d FLOAT64;
-
-ALTER TABLE `ingestaokraken.cotacao_intraday.neural_eod_training_dataset`
-ADD COLUMN IF NOT EXISTS log_return_20d FLOAT64;
-
-ALTER TABLE `ingestaokraken.cotacao_intraday.neural_eod_training_dataset`
-ADD COLUMN IF NOT EXISTS log_financial_volume FLOAT64;
-
-ALTER TABLE `ingestaokraken.cotacao_intraday.neural_eod_training_dataset`
-ADD COLUMN IF NOT EXISTS log_volume FLOAT64;
-
-ALTER TABLE `ingestaokraken.cotacao_intraday.neural_eod_training_dataset`
-ADD COLUMN IF NOT EXISTS trade_side STRING;
-
-ALTER TABLE `ingestaokraken.cotacao_intraday.neural_eod_training_dataset`
-ADD COLUMN IF NOT EXISTS entry_filled BOOL;
-
-ALTER TABLE `ingestaokraken.cotacao_intraday.neural_eod_training_dataset`
-ADD COLUMN IF NOT EXISTS entry_date DATE;
-
-ALTER TABLE `ingestaokraken.cotacao_intraday.neural_eod_training_dataset`
-ADD COLUMN IF NOT EXISTS entry_price FLOAT64;
-
-ALTER TABLE `ingestaokraken.cotacao_intraday.neural_eod_training_dataset`
-ADD COLUMN IF NOT EXISTS exit_date DATE;
-
-ALTER TABLE `ingestaokraken.cotacao_intraday.neural_eod_training_dataset`
-ADD COLUMN IF NOT EXISTS exit_price FLOAT64;
-
-ALTER TABLE `ingestaokraken.cotacao_intraday.neural_eod_training_dataset`
-ADD COLUMN IF NOT EXISTS exit_reason STRING;
-
-ALTER TABLE `ingestaokraken.cotacao_intraday.neural_eod_training_dataset`
-ADD COLUMN IF NOT EXISTS gross_return FLOAT64;
-
-ALTER TABLE `ingestaokraken.cotacao_intraday.neural_eod_training_dataset`
-ADD COLUMN IF NOT EXISTS net_return FLOAT64;
-
-ALTER TABLE `ingestaokraken.cotacao_intraday.neural_eod_training_dataset`
-ADD COLUMN IF NOT EXISTS holding_sessions INT64;
-
-ALTER TABLE `ingestaokraken.cotacao_intraday.neural_eod_training_dataset`
-ADD COLUMN IF NOT EXISTS max_adverse_excursion FLOAT64;
-
-ALTER TABLE `ingestaokraken.cotacao_intraday.neural_eod_training_dataset`
-ADD COLUMN IF NOT EXISTS max_favorable_excursion FLOAT64;
-
-ALTER TABLE `ingestaokraken.cotacao_intraday.neural_eod_training_dataset`
+ADD COLUMN IF NOT EXISTS log_return_1d FLOAT64,
+ADD COLUMN IF NOT EXISTS log_return_5d FLOAT64,
+ADD COLUMN IF NOT EXISTS log_return_10d FLOAT64,
+ADD COLUMN IF NOT EXISTS log_return_20d FLOAT64,
+ADD COLUMN IF NOT EXISTS log_financial_volume FLOAT64,
+ADD COLUMN IF NOT EXISTS log_volume FLOAT64,
+ADD COLUMN IF NOT EXISTS trade_side STRING,
+ADD COLUMN IF NOT EXISTS entry_filled BOOL,
+ADD COLUMN IF NOT EXISTS entry_date DATE,
+ADD COLUMN IF NOT EXISTS entry_price FLOAT64,
+ADD COLUMN IF NOT EXISTS exit_date DATE,
+ADD COLUMN IF NOT EXISTS exit_price FLOAT64,
+ADD COLUMN IF NOT EXISTS exit_reason STRING,
+ADD COLUMN IF NOT EXISTS gross_return FLOAT64,
+ADD COLUMN IF NOT EXISTS net_return FLOAT64,
+ADD COLUMN IF NOT EXISTS holding_sessions INT64,
+ADD COLUMN IF NOT EXISTS max_adverse_excursion FLOAT64,
+ADD COLUMN IF NOT EXISTS max_favorable_excursion FLOAT64,
 ADD COLUMN IF NOT EXISTS execution_policy_version STRING;
 
 CREATE TABLE IF NOT EXISTS `ingestaokraken.cotacao_intraday.neural_dataset_manifests`
