@@ -39,7 +39,69 @@ UNIVERSE_VERSION = os.environ.get("NEURAL_UNIVERSE_VERSION", "b3_point_in_time_v
 BQ_LOCATION = os.environ.get("BQ_LOCATION", "us-east1").replace("region-", "")
 DEFAULT_LOOKBACK_DAYS = int(os.environ.get("NEURAL_TRAINING_LOOKBACK_DAYS", "1825"))
 DEFAULT_MIN_HISTORY_DAYS = int(os.environ.get("NEURAL_TRAINING_MIN_HISTORY_DAYS", "20"))
-INTEGER_FIELDS = {"days_to_event_buy", "days_to_event_sell"}
+INTEGER_FIELDS = {"days_to_event_buy", "days_to_event_sell", "holding_sessions"}
+
+TRAINING_DATASET_COLUMNS = [
+    "ticker",
+    "reference_date",
+    "valid_for",
+    "feature_version",
+    "label_version",
+    "dataset_split",
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume",
+    "financial_volume",
+    "log_return_1d",
+    "log_return_5d",
+    "log_return_10d",
+    "log_return_20d",
+    "log_financial_volume",
+    "log_volume",
+    "return_5d",
+    "return_10d",
+    "return_20d",
+    "volatility_10d",
+    "volatility_20d",
+    "daily_range_pct",
+    "intraday_return_pct",
+    "gap_open_pct",
+    "financial_volume_z20",
+    "volume_ratio_20d",
+    "distance_high_20d_pct",
+    "distance_low_20d_pct",
+    "distance_sma_20d_pct",
+    "has_missing_ohlcv",
+    "has_zero_volume",
+    "is_suspicious_candle",
+    "label_class",
+    "future_return",
+    "buy_net_return",
+    "sell_net_return",
+    "entry_filled_buy",
+    "entry_filled_sell",
+    "days_to_event_buy",
+    "days_to_event_sell",
+    "trade_side",
+    "entry_filled",
+    "entry_date",
+    "entry_price",
+    "exit_date",
+    "exit_price",
+    "exit_reason",
+    "gross_return",
+    "net_return",
+    "holding_sessions",
+    "max_adverse_excursion",
+    "max_favorable_excursion",
+    "execution_policy_version",
+    "created_at",
+    "dataset_snapshot",
+    "metadata_json",
+    "temporal_protocol_json",
+]
 
 _BQ_CLIENT: bigquery.Client | None = None
 
@@ -347,7 +409,8 @@ def _delete_snapshot(client: bigquery.Client, snapshot: str) -> None:
 def _load_dataset(client: bigquery.Client, dataset: pd.DataFrame) -> int:
     if dataset.empty:
         return 0
-    records = [_json_safe_record(record) for record in dataset.to_dict("records")]
+    load_frame = dataset.reindex(columns=TRAINING_DATASET_COLUMNS)
+    records = [_json_safe_record(record) for record in load_frame.to_dict("records")]
     job = client.load_table_from_json(
         records,
         _table_ref(TRAINING_DATASET_TABLE_ID),
