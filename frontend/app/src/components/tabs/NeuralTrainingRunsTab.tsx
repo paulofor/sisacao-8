@@ -143,6 +143,20 @@ const formatCriteria = (value: string | null | undefined) => {
     .join(' · ') || '—'
 }
 
+const normalizeCandidateKey = (value: string | null | undefined) =>
+  value?.trim().toLowerCase() || null
+
+const candidateFamilyHash = (run: NeuralTrainingRun) => {
+  const metrics = parseMetricsJson(run.metricsJson)
+  const economics = metrics.muen_economics
+  const economicsRecord =
+    economics && typeof economics === 'object' && !Array.isArray(economics)
+      ? (economics as Record<string, unknown>)
+      : {}
+  const value = economicsRecord.candidate_family_hash ?? economicsRecord.candidateFamilyHash
+  return typeof value === 'string' && value.trim() ? value : null
+}
+
 const latestRun = (runs: NeuralTrainingRun[]) => runs[0]
 
 const bestTestAccuracy = (runs: NeuralTrainingRun[]) => {
@@ -199,8 +213,22 @@ const NeuralTrainingRunsTab: FC<NeuralTrainingRunsTabProps> = ({
   const candidateCount = runs.filter((run) => run.status?.toLowerCase() === 'candidate').length
   const activeTrainingCount = runs.filter((run) => ['running', 'training', 'in_progress'].includes(run.status?.toLowerCase() ?? '')).length
   const rejectedCount = runs.filter((run) => ['rejected', 'reject'].includes(run.status?.toLowerCase() ?? '')).length
+  const candidateRuns = runs.filter((run) => run.status?.toLowerCase() === 'candidate')
   const rejectedGateDecisions = gateDecisions.filter((attempt) => attempt.decisionStatus?.toLowerCase() === 'rejected' || attempt.passed === false)
   const passedGateDecisions = gateDecisions.filter((attempt) => attempt.passed || attempt.decisionStatus?.toLowerCase() === 'passed')
+  const evaluatedCandidateKeys = new Set(
+    gateDecisions
+      .map((attempt) => normalizeCandidateKey(attempt.candidateFamilyHash))
+      .filter((value): value is string => Boolean(value)),
+  )
+  const pendingGateCandidateCount = candidateRuns.filter((run) => {
+    const modelVersion = normalizeCandidateKey(run.modelVersion)
+    const familyHash = normalizeCandidateKey(candidateFamilyHash(run))
+    return !(
+      (modelVersion && evaluatedCandidateKeys.has(modelVersion)) ||
+      (familyHash && evaluatedCandidateKeys.has(familyHash))
+    )
+  }).length
   const latestGateDecisions = gateDecisions.slice(0, 8)
   const latestTrain = latestTrainMetrics(runs)
   const latestTest = latestTestMetrics(runs)
@@ -243,7 +271,12 @@ const NeuralTrainingRunsTab: FC<NeuralTrainingRunsTabProps> = ({
             <SummaryCard
               title="Candidatas"
               value={formatNumber(candidateCount)}
-              helper="prontas para avaliação/evolução"
+              helper="status candidate no registry"
+            />
+            <SummaryCard
+              title="Ainda podem ser testadas"
+              value={formatNumber(pendingGateCandidateCount)}
+              helper="candidatas sem decisão MUEN carregada"
             />
             <SummaryCard
               title="Aprovadas"
@@ -263,7 +296,8 @@ const NeuralTrainingRunsTab: FC<NeuralTrainingRunsTabProps> = ({
               <Stack direction="row" flexWrap="wrap" gap={1.5}>
                 {[
                   { label: 'Em treino', value: activeTrainingCount, color: 'info' as const, helper: 'ainda executando' },
-                  { label: 'Candidata', value: candidateCount, color: 'warning' as const, helper: 'treinada, aguardando governança' },
+                  { label: 'Candidata', value: candidateCount, color: 'warning' as const, helper: 'treinada no registry' },
+                  { label: 'Pode ser testada', value: pendingGateCandidateCount, color: 'info' as const, helper: 'sem decisão MUEN carregada' },
                   { label: 'Aprovada', value: approvedCount, color: 'success' as const, helper: 'liberada para uso controlado' },
                   { label: 'Rejeitada no registro', value: rejectedCount, color: 'error' as const, helper: 'status final no registry' },
                   { label: 'Rejeitada no gate', value: rejectedGateDecisions.length, color: 'error' as const, helper: 'analisada e bloqueada pelo MUEN' },
@@ -278,7 +312,7 @@ const NeuralTrainingRunsTab: FC<NeuralTrainingRunsTabProps> = ({
                 ))}
               </Stack>
               <Typography variant="caption" color="text.secondary">
-                A tabela abaixo continua detalhando modelo, versão, métricas e artefato; os cards acima explicam a quantidade por estágio.
+                A contagem “Pode ser testada” cruza candidatas do registry com as decisões MUEN carregadas para estimar quantas ainda não têm decisão de gate.
               </Typography>
             </Stack>
           </Paper>
