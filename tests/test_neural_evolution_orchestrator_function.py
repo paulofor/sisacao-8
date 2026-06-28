@@ -277,6 +277,84 @@ def test_orchestrator_phase2_consolidates_similar_parent_families(monkeypatch):
     assert not any("neural_eod_mlp_evo1_01_seed" in notes for notes in parent_notes)
 
 
+def test_orchestrator_phase2_falls_back_to_fresh_seed_repeats_when_grid_exhausted(
+    monkeypatch,
+):
+    fake_client = _FakeClient()
+    parent = {
+        "candidate_id": "parent-1",
+        "evolution_run_id": "run-phase1",
+        "model_version": "neural_eod_mlp_evo1_01",
+        "model_id": "neural_eod_mlp",
+        "candidate_source": "deterministic",
+        "architecture_json": {
+            "type": "mlp",
+            "hidden_units": [128, 64],
+            "batch_norm": False,
+        },
+        "hyperparameters_json": {
+            "dropout_rate": 0.15,
+            "learning_rate": 0.001,
+            "batch_size": 256,
+            "epochs": 40,
+            "random_seed": 20260621,
+            "early_stopping": True,
+            "early_stopping_patience": 8,
+            "class_weight": "balanced",
+        },
+        "score_total": 0.44,
+        "score_directional_precision": 0.36,
+        "score_coverage": 0.31,
+        "score_generalization": 0.10,
+        "score_stability": 0.10,
+        "score_cost_penalty": 0.01,
+        "decision": "keep_candidate",
+        "decision_reasons_json": [],
+    }
+    fake_client.leaderboard_rows = [parent]
+    monkeypatch.setattr(module, "_BQ_CLIENT", fake_client)
+
+    parent_candidate = module._phase2_parent_candidates(fake_client, limit=1)[0][0]
+    exhausted_mutations = module.mutate_top_candidates(
+        [parent_candidate],
+        evolution_run_id="old-run",
+        dataset_snapshot="snapshot_2026",
+        budget=module.EvolutionBudget(max_trials=3, random_seed=42),
+        existing_hashes=set(),
+        model_version_prefix="old_mutation",
+    )
+
+    candidates = module._generate_phase2_candidates(
+        client=fake_client,
+        evolution_run_id="run-phase2",
+        dataset_snapshot="snapshot_2026",
+        budget=module.EvolutionBudget(max_trials=2, random_seed=42),
+        existing_hashes={candidate.dedupe_hash for candidate in exhausted_mutations},
+        model_version_prefix="evo2_test",
+        payload={
+            "phase2": {
+                "top_fraction": 1.0,
+                "parent_limit": 1,
+                "max_parents_per_family": 1,
+                "include_seed_repeats": False,
+            }
+        },
+    )
+
+    assert len(candidates) == 2
+    assert {candidate.candidate_source for candidate in candidates} == {
+        "seed_repeat_fresh"
+    }
+    assert all(
+        candidate.model_version.startswith("evo2_test_seed_fresh_")
+        for candidate in candidates
+    )
+    assert not (
+        {candidate.dedupe_hash for candidate in candidates}
+        & {candidate.dedupe_hash for candidate in exhausted_mutations}
+    )
+
+
 def test_orchestrator_dry_run_does_not_persist_or_call_training(monkeypatch):
     fake_client = _FakeClient()
     monkeypatch.setattr(module, "_BQ_CLIENT", fake_client)

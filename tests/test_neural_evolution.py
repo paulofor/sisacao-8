@@ -101,6 +101,7 @@ def test_select_top_mutate_and_repeat_finalists():
     from sisacao8.neural_evolution import (
         mutate_top_candidates,
         penalized_score,
+        repeat_finalists_with_fresh_seeds,
         repeat_finalists_with_seeds,
         select_diverse_top_candidates,
         select_top_candidates,
@@ -146,6 +147,14 @@ def test_select_top_mutate_and_repeat_finalists():
         seeds=(101, 102),
         model_version_prefix="seed_test",
     )
+    fresh_repeated = repeat_finalists_with_fresh_seeds(
+        top,
+        evolution_run_id="run-2",
+        dataset_snapshot="snapshot-1",
+        budget=EvolutionBudget(max_trials=2, random_seed=20260621),
+        existing_hashes={candidate.dedupe_hash for candidate in repeated},
+        model_version_prefix="seed_fresh_test",
+    )
     penalized = penalized_score(
         {
             "train": {"accuracy": 0.40},
@@ -173,4 +182,12 @@ def test_select_top_mutate_and_repeat_finalists():
         101,
         102,
     ]
+    assert len(fresh_repeated) == 2
+    assert {candidate.candidate_source for candidate in fresh_repeated} == {
+        "seed_repeat_fresh"
+    }
+    assert not (
+        {candidate.dedupe_hash for candidate in fresh_repeated}
+        & {candidate.dedupe_hash for candidate in repeated}
+    )
     assert penalized.score_cost_penalty > 0.0
