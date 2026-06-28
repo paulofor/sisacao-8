@@ -1,6 +1,8 @@
 # Próximo passo — Redes neurais MUEN
 
 **Última atualização:** 2026-06-28 01:05 UTC-3
+**Última atualização:** 2026-06-27 22:47 UTC-3
+**Última atualização:** 2026-06-27 22:36 UTC-3
 **Protocolo:** `neural_eod_protocol_v1`
 **Status:** ponto de parada operacional registrado
 
@@ -49,6 +51,8 @@ A candidata `neural_eod_mlp_muen_codex_20260628_030718` já passou por `evaluate
 ## Visibilidade das tentativas MUEN — 2026-06-28 01:05 UTC-3
 
 A tela de evolução neural foi preparada para acompanhamento operacional das tentativas: o backend passa a expor `/ops/neural/gate-decisions`, consultando `neural_gate_decisions` com métricas agregadas de `neural_family_evaluations`, e o frontend passa a exibir a seção `Últimas tentativas MUEN` na aba `Redes neurais — Evolução`. Após deploy do backend/frontend, o usuário poderá acompanhar na tela as decisões `passed`/`rejected`, `decision_id`, critérios reprovados, folds/seeds, delta de expectancy, drawdown e trades. O próximo passo operacional continua sendo manter o Scheduler `neural-evolution-daily` acionando `neural_evolution_orchestrator`; a aprovação `approve_if_passed` segue manual/governada somente quando uma tentativa aparecer como `passed`.
+A execução produtiva de `neural_training_dataset` retornou 500 porque a tabela `cotacao_intraday.neural_eod_training_dataset` ainda não tinha todas as colunas v2 geradas pelo código publicado. Os logs via MCP/Cloud Run confirmaram rejeição BigQuery por campos ausentes, incluindo `log_return_1d`, `log_volume`, `trade_side` e `exit_price` durante tentativas feitas com a migração parcial. Consulta posterior ao `INFORMATION_SCHEMA` confirmou que as 19 colunas v2 esperadas já existem na tabela produtiva e que `neural_dataset_manifests` também existe. Uma chamada controlada ainda retornou 500, e os logs disponíveis via MCP permaneceram dominados por stack traces antigos da migração parcial; por isso o próximo passo imediato passa a ser publicar `functions/neural_training_dataset` com o hardening que filtra a carga JSON para o contrato BigQuery (`TRAINING_DATASET_COLUMNS`) e com o retorno JSON de erro (`status`, `error_type`, `message`), repetir a materialização com um novo `DATASET_SNAPSHOT` e usar a mensagem retornada pelo `curl` para fechar a causa remanescente.
+A execução produtiva de `neural_training_dataset` retornou 500 porque a tabela `cotacao_intraday.neural_eod_training_dataset` ainda não tinha todas as colunas v2 geradas pelo código publicado. Os logs via MCP/Cloud Run confirmaram rejeição BigQuery por campos ausentes, incluindo `log_return_1d`, `log_volume`, `trade_side` e `exit_price` durante tentativas feitas com a migração parcial. Consulta posterior ao `INFORMATION_SCHEMA` confirmou que as 19 colunas v2 esperadas já existem na tabela produtiva e que `neural_dataset_manifests` também existe. Uma chamada controlada ainda retornou 500, e os logs disponíveis via MCP permaneceram dominados por stack traces antigos da migração parcial; por isso o próximo passo imediato passa a ser publicar `functions/neural_training_dataset` com o hardening que filtra a carga JSON para o contrato BigQuery (`TRAINING_DATASET_COLUMNS`) e repetir a materialização com um novo `DATASET_SNAPSHOT`.
 
 ## Nota de interface — 2026-06-25 00:02 UTC-3
 
