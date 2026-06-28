@@ -149,6 +149,44 @@ gcloud scheduler jobs update http neural-evolution-daily \
 Para rodadas maiores que 30 minutos, reduza `max_trials` ou evolua o orquestrador para enfileirar treinos de forma assíncrona em vez de manter uma única requisição HTTP aberta.
 
 
+
+## Automação após Gate MUEN rejeitado
+
+Quando uma candidata neural real é avaliada pelo Gate MUEN e retorna `rejected`,
+não rode novamente a sequência manual `neural_training_dataset` → `neural_training`
+→ `neural_champion_approval` para cada tentativa. O fluxo recorrente deve ser:
+
+1. manter um snapshot v2 válido em `neural_eod_training_dataset`;
+2. deixar o Cloud Scheduler `neural-evolution-daily` acionar
+   `neural_evolution_orchestrator`;
+3. o orquestrador gerar/mutar candidatos (`deterministic_phase2`), chamar
+   `neural_training`, ler `metrics_json.muen_economics` no registry e persistir
+   as tabelas MUEN (`neural_fold_metrics`, `neural_family_evaluations` e
+   `neural_gate_decisions`);
+4. revisar apenas decisões `passed` para então executar o fluxo governado
+   `approve_if_passed` em dry-run e depois efetivo.
+
+A aprovação de champion não deve ser agendada automaticamente: `approve_if_passed`
+continua sendo uma etapa governada e só deve ser executada quando existir uma
+decisão `passed` auditável.
+
+Para antecipar uma rodada sem esperar a próxima janela do Scheduler, dispare o job
+já existente em vez de chamar manualmente cada função:
+
+```bash
+gcloud scheduler jobs run neural-evolution-daily \
+  --project=ingestaokraken \
+  --location=us-east1
+```
+
+Se precisar rodar diretamente a função para uma triagem pontual, use:
+
+```bash
+curl -sS -X POST 'https://us-east1-ingestaokraken.cloudfunctions.net/neural_evolution_orchestrator' \
+  -H 'Content-Type: application/json' \
+  --data '{"strategy":"deterministic_phase2","budget":{"max_trials":1,"max_runtime_minutes":45,"max_parameter_count":150000,"max_layers":4,"random_seed":20260621},"phase2":{"top_fraction":1.0,"parent_limit":10,"max_parents_per_family":1,"include_seed_repeats":false}}'
+```
+
 ## Operação recorrente
 
 Para evolução contínua com controle, a cadência recomendada passa a ser horária no minuto 30 (`neural-evolution-daily`) com orçamento menor por rodada. Essa configuração avalia redes pendentes com mais rapidez sem concentrar custo/runtime em uma única execução semanal.

@@ -38,6 +38,15 @@ class OpsServiceTest {
     }
 
     @Test
+    void shouldFetchNeuralGateDecisions() {
+        when(bigQueryOpsClient.fetchNeuralGateDecisions()).thenReturn(List.of());
+
+        opsService.getNeuralGateDecisions();
+
+        org.mockito.Mockito.verify(bigQueryOpsClient).fetchNeuralGateDecisions();
+    }
+
+    @Test
     void shouldRejectNullSignalsByDate() {
         assertThatThrownBy(() -> opsService.getSignalsByDate(null))
                 .isInstanceOf(OpsValidationException.class)

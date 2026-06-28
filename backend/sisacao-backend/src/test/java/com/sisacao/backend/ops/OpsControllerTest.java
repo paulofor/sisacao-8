@@ -168,6 +168,41 @@ class OpsControllerTest {
     }
 
     @Test
+    void shouldReturnNeuralGateDecisions() throws Exception {
+        List<NeuralGateDecisionAttempt> attempts = List.of(new NeuralGateDecisionAttempt(
+                "gate_abc",
+                "neural_eod_protocol_v1",
+                "snapshot-v2",
+                "family-hash",
+                "research_gate",
+                "rejected",
+                false,
+                "drawdown_excessivo, seeds_instaveis",
+                "{\"passed\":false}",
+                "muen_research_gate_v1",
+                OffsetDateTime.parse("2026-06-28T03:17:00Z"),
+                4L,
+                1L,
+                1L,
+                0.25,
+                -0.01,
+                0.02,
+                -0.08,
+                120L,
+                false));
+        given(opsService.getNeuralGateDecisions()).willReturn(attempts);
+
+        mockMvc.perform(get("/ops/neural/gate-decisions"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].decisionId", is("gate_abc")))
+                .andExpect(jsonPath("$[0].decisionStatus", is("rejected")))
+                .andExpect(jsonPath("$[0].failedCriteria", containsString("drawdown_excessivo")))
+                .andExpect(jsonPath("$[0].folds", is(4)))
+                .andExpect(jsonPath("$[0].stableAcrossSeeds", is(false)));
+    }
+
+    @Test
     void shouldReturnNextSignals() throws Exception {
         List<Signal> signals = List.of(new Signal(
                 java.time.LocalDate.parse("2024-11-04"),

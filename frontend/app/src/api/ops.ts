@@ -139,6 +139,29 @@ export interface NeuralEvolutionLeaderboardEntry {
   createdAt: string | null
 }
 
+export interface NeuralGateDecisionAttempt {
+  decisionId: string
+  protocolVersion: string | null
+  datasetSnapshot: string | null
+  candidateFamilyHash: string | null
+  gateName: string | null
+  decisionStatus: string | null
+  passed: boolean | null
+  failedCriteria: string | null
+  metricsJson: string | null
+  gateEngineVersion: string | null
+  decidedAt: string | null
+  folds: number | null
+  seeds: number | null
+  positiveFolds: number | null
+  positiveFoldRatio: number | null
+  medianDeltaExpectancyVsChampion: number | null
+  medianExpectancyNet: number | null
+  maxDrawdown: number | null
+  totalTrades: number | null
+  stableAcrossSeeds: boolean | null
+}
+
 export interface NeuralTrainingRun {
   modelId: string
   modelVersion: string
@@ -546,6 +569,40 @@ export const fetchNeuralTrainingRuns = async (): Promise<NeuralTrainingRun[]> =>
       trainedAt: toIsoDateTime(record.trainedAt ?? record.trained_at),
       createdAt: toIsoDateTime(record.createdAt ?? record.created_at),
       notes: asNullableString(record.notes),
+    }
+  })
+}
+
+export const fetchNeuralGateDecisions = async (): Promise<NeuralGateDecisionAttempt[]> => {
+  const response = await apiClient.get<unknown>('/ops/neural/gate-decisions')
+  const items = Array.isArray(response.data) ? response.data : []
+
+  return items.map((item) => {
+    const record = item as Record<string, unknown>
+
+    return {
+      decisionId: asString(record.decisionId ?? record.decision_id, '—'),
+      protocolVersion: asNullableString(record.protocolVersion ?? record.protocol_version),
+      datasetSnapshot: asNullableString(record.datasetSnapshot ?? record.dataset_snapshot),
+      candidateFamilyHash: asNullableString(record.candidateFamilyHash ?? record.candidate_family_hash),
+      gateName: asNullableString(record.gateName ?? record.gate_name),
+      decisionStatus: asNullableString(record.decisionStatus ?? record.decision_status),
+      passed: toBoolean(record.passed),
+      failedCriteria: asNullableString(record.failedCriteria ?? record.failed_criteria),
+      metricsJson: asNullableString(record.metricsJson ?? record.metrics_json),
+      gateEngineVersion: asNullableString(record.gateEngineVersion ?? record.gate_engine_version),
+      decidedAt: toIsoDateTime(record.decidedAt ?? record.decided_at),
+      folds: toNumber(record.folds),
+      seeds: toNumber(record.seeds),
+      positiveFolds: toNumber(record.positiveFolds ?? record.positive_folds),
+      positiveFoldRatio: toNumber(record.positiveFoldRatio ?? record.positive_fold_ratio),
+      medianDeltaExpectancyVsChampion: toNumber(
+        record.medianDeltaExpectancyVsChampion ?? record.median_delta_expectancy_vs_champion,
+      ),
+      medianExpectancyNet: toNumber(record.medianExpectancyNet ?? record.median_expectancy_net),
+      maxDrawdown: toNumber(record.maxDrawdown ?? record.max_drawdown),
+      totalTrades: toNumber(record.totalTrades ?? record.total_trades),
+      stableAcrossSeeds: toBoolean(record.stableAcrossSeeds ?? record.stable_across_seeds),
     }
   })
 }

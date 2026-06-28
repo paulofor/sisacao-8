@@ -1,12 +1,12 @@
 # Próximo passo — Redes neurais MUEN
 
-**Última atualização:** 2026-06-27 19:18 UTC-3
+**Última atualização:** 2026-06-28 01:05 UTC-3
 **Protocolo:** `neural_eod_protocol_v1`
 **Status:** ponto de parada operacional registrado
 
 ## Próximo passo atual
 
-O código do treino/evaluador neural agora gera `metrics_json.muen_economics.fold_metrics` para novas candidatas usando predições dos splits não treino contra `buy_net_return`/`sell_net_return` e estresse de custo `1.0`/`1.5`. O próximo passo operacional é publicar a versão atual de `functions/neural_training`, executar um novo treino real para registrar uma candidata com o bloco `muen_economics`, confirmar o payload no `neural_model_registry`, executar `neural_champion_approval` em `mode=evaluate_candidate` com `dry_run=false`, validar a persistência em `neural_fold_metrics`, `neural_daily_returns` quando houver payload diário, `neural_family_evaluations` e `neural_gate_decisions`, e então chamar `approve_if_passed` primeiro em dry-run e depois em modo efetivo apenas se o Gate Research retornar `passed`.
+O código do treino/evaluador neural agora gera `metrics_json.muen_economics.fold_metrics` para novas candidatas usando predições dos splits não treino contra `buy_net_return`/`sell_net_return` e estresse de custo `1.0`/`1.5`. Antes de rodar o novo treino real, é necessário aplicar no BigQuery o schema v2 do dataset neural: as colunas `log_return_1d`, `log_return_5d`, `log_return_10d`, `log_return_20d`, `log_financial_volume` e `log_volume` em `neural_eod_training_dataset`, além da tabela `neural_dataset_manifests`. Depois disso, executar `neural_training_dataset` para gerar um snapshot v2, rodar `neural_training` apontando para esse snapshot, confirmar o payload no `neural_model_registry`, executar `neural_champion_approval` em `mode=evaluate_candidate` com `dry_run=false`, validar a persistência em `neural_fold_metrics`, `neural_daily_returns` quando houver payload diário, `neural_family_evaluations` e `neural_gate_decisions`, e então chamar `approve_if_passed` primeiro em dry-run e depois em modo efetivo apenas se o Gate Research retornar `passed`.
 
 ## Objetivo
 
@@ -40,6 +40,15 @@ O próximo ponto de parada será alcançado quando uma execução real de `evalu
 - O leaderboard continua sendo ordenação; o gate econômico decide avanço.
 - Atualizar este arquivo sempre que o próximo passo das redes neurais mudar.
 - Continuar registrando o trabalho executado em `docs/diario/registros1.md`.
+
+
+## Diagnóstico de schema do dataset v2 — 2026-06-27 22:04 UTC-3
+
+A candidata `neural_eod_mlp_muen_codex_20260628_030718` já passou por `evaluate_candidate` e recebeu decisão `rejected` (`gate_4f4ef2b62065636f969929ec3007fb47`), portanto não executar `approve_if_passed` para ela. A próxima ação não deve ser repetir manualmente dataset/treino/gate; o fluxo recorrente deve ser automatizado pelo Cloud Scheduler `neural-evolution-daily` chamando `neural_evolution_orchestrator` com `strategy=deterministic_phase2`, para gerar/mutar novas candidatas, chamar `neural_training`, materializar métricas MUEN e emitir novas decisões de gate. `approve_if_passed` permanece manual/governado apenas para decisões `passed`.
+
+## Visibilidade das tentativas MUEN — 2026-06-28 01:05 UTC-3
+
+A tela de evolução neural foi preparada para acompanhamento operacional das tentativas: o backend passa a expor `/ops/neural/gate-decisions`, consultando `neural_gate_decisions` com métricas agregadas de `neural_family_evaluations`, e o frontend passa a exibir a seção `Últimas tentativas MUEN` na aba `Redes neurais — Evolução`. Após deploy do backend/frontend, o usuário poderá acompanhar na tela as decisões `passed`/`rejected`, `decision_id`, critérios reprovados, folds/seeds, delta de expectancy, drawdown e trades. O próximo passo operacional continua sendo manter o Scheduler `neural-evolution-daily` acionando `neural_evolution_orchestrator`; a aprovação `approve_if_passed` segue manual/governada somente quando uma tentativa aparecer como `passed`.
 
 ## Nota de interface — 2026-06-25 00:02 UTC-3
 

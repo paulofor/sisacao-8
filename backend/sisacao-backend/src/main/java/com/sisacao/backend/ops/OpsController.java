@@ -51,6 +51,11 @@ public class OpsController {
         return opsService.getNeuralEvolutionLeaderboard();
     }
 
+    @GetMapping("/neural/gate-decisions")
+    public List<NeuralGateDecisionAttempt> getNeuralGateDecisions() {
+        return opsService.getNeuralGateDecisions();
+    }
+
     @GetMapping("/quant/inventory-summary")
     public QuantDataInventorySummary getQuantDataInventorySummary() {
         return opsService.getQuantDataInventorySummary();
