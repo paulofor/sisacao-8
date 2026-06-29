@@ -24,6 +24,7 @@ Tools disponíveis (paridade de nomes com a versão Python):
 - `bigquery_access_check`
 - `bigquery_query`
 - `cloud_run_function_logs`
+- `gcloud_research`
 - `cloud_scheduler_job`
 - `cloud_scheduler_job_write`
 - `neural_evolution_daily_scheduler_apply`
@@ -67,6 +68,46 @@ cd mcp-server-java
 mvn test
 ```
 
+
+## Executar pesquisa operacional com gcloud via MCP
+
+A tool `gcloud_research` executa comandos `gcloud` somente-leitura no runtime autenticado
+do MCP. Envie os argumentos sem o prefixo `gcloud`; o projeto `ingestaokraken` é
+adicionado automaticamente quando não for informado. A tool bloqueia verbos mutáveis
+como `create`, `update`, `delete`, `deploy`, `pause`, `resume`, `set` e operações IAM
+de escrita.
+
+Exemplo para validar a conta ativa do runtime remoto:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "method": "tools/call",
+  "params": {
+    "name": "gcloud_research",
+    "arguments": {
+      "args": ["auth", "list", "--format=json"]
+    }
+  }
+}
+```
+
+Exemplo para pesquisar Cloud Scheduler sem escrever:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "method": "tools/call",
+  "params": {
+    "name": "gcloud_research",
+    "arguments": {
+      "args": ["scheduler", "jobs", "describe", "neural-evolution-daily", "--location=us-east1", "--format=json"]
+    }
+  }
+}
+```
 
 ## Consultar Cloud Scheduler via MCP
 
