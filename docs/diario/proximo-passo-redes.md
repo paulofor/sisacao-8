@@ -1,5 +1,24 @@
 # Próximo passo — Redes neurais MUEN
 
+**Última atualização:** 2026-06-29 19:35 UTC
+**Protocolo:** `neural_eod_protocol_v1`
+**Status:** Fase 3 gerando candidatas; ajuste visual pendente de publicação
+
+## Próximo passo atual
+
+As redes da Fase 3 estão incluídas no endpoint/tabela de Treinos. A validação mais recente do endpoint publicado `GET http://34.194.252.70/api/ops/neural/training-runs` mostrou 100 treinos visíveis, dos quais 13 são Fase 3 pelo prefixo `neural_eod_phase3_` e pelas famílias `residual_mlp`, `wide_deep_mlp` e `tabular_bottleneck_mlp`, todas ainda como `candidate`.
+
+O próximo passo imediato é publicar o frontend atualizado na VPS para que a aba `Redes neurais — Treinos` destaque explicitamente a Fase 3 com o cartão “Fase 3 visíveis” e a coluna “Fase/família”. Depois da publicação, confirmar visualmente a contagem na tela e seguir monitorando a cadência de geração, as decisões MUEN e eventuais HTTP 500.
+
+## Regra operacional
+
+Não automatizar `approve_if_passed` nem promover modelos para `approved` sem decisão MUEN `passed` e autorização humana explícita. As candidatas Fase 3 devem permanecer em pesquisa/shadow até passarem pelo gate econômico governado.
+
+---
+
+## Histórico anterior
+
+
 **Última atualização:** 2026-06-28 01:05 UTC-3
 **Última atualização:** 2026-06-27 22:47 UTC-3
 **Última atualização:** 2026-06-27 22:36 UTC-3

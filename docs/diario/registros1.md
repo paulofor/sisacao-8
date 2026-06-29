@@ -1616,3 +1616,10 @@ A leitura da tela `Redes neurais — Treinos` indicou 86 redes em estágio `Cand
 - Tentada consulta BigQuery via MCP HTTP/JSON-RPC obrigatório; o `initialize` funcionou, mas `bigquery_query` retornou erro operacional do `gcloud` (`Credentials object has no attribute private_key_id`), então a contagem respondida foi baseada no endpoint operacional publicado.
 - Conclusão: sim, a Fase 3 está gerando redes atualmente; no recorte visível do endpoint de treinos existem 6 candidatas Fase 3, sem promoção automática e ainda em estado `candidate`.
 - Comandos usados: script Python com `urllib.request` para MCP HTTP/JSON-RPC (`initialize` e `tools/call` com `bigquery_query`) e script Python com `urllib.request` contra `/api/ops/neural/training-runs`, com contagem por `modelId`, `modelVersion` e `status`.
+
+## 2026-06-29 19:35 UTC — Visibilidade explícita da Fase 3 na aba Treinos
+- Verificada a dúvida do usuário a partir da tela `Redes neurais — Treinos`: o endpoint publicado `GET http://34.194.252.70/api/ops/neural/training-runs` retorna 100 treinos visíveis, dos quais 13 são Fase 3 pelo prefixo `neural_eod_phase3_` e pelas famílias `residual_mlp`, `wide_deep_mlp` e `tabular_bottleneck_mlp`.
+- Causa de confusão confirmada: as redes de Fase 3 já estavam incluídas no endpoint/tabela de Treinos, porém o frontend somava tudo em “Total de redes”/“Candidatas” e não tinha cartão/coluna própria para destacar Fase 3.
+- Correção aplicada no frontend: a aba Treinos agora calcula `phase3Runs`, mostra o cartão “Fase 3 visíveis”, inclui a etapa “Fase 3” no guia de estágios e adiciona a coluna “Fase/família” na tabela, identificando redes por prefixo `neural_eod_phase3_`, origem `phase3_family` ou pelas arquiteturas novas.
+- Próximo passo operacional: publicar o frontend atualizado na VPS e confirmar visualmente que o cartão “Fase 3 visíveis” aparece com a contagem atual; continuar monitorando geração recorrente e decisões MUEN sem promoção automática.
+- Comandos usados: `python3` com `urllib.request` contra `/api/ops/neural/training-runs`, `rg`, `sed -n`, edição via Python, `npx prettier`, `npm run build`, `git diff --check` e `git status`.
