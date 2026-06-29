@@ -4,6 +4,7 @@ from sisacao8.neural_evolution import (
     candidate_hash,
     estimate_parameter_count,
     generate_deterministic_candidates,
+    generate_phase3_family_candidates,
     score_candidate,
 )
 
@@ -33,6 +34,36 @@ def test_generate_deterministic_candidates_is_reproducible_and_within_budget():
     assert all(
         len(candidate.architecture["hidden_units"]) <= budget.max_layers
         for candidate in first
+    )
+
+
+def test_generate_phase3_family_candidates_creates_new_family_payloads():
+    candidates = generate_phase3_family_candidates(
+        evolution_run_id="run-phase3",
+        dataset_snapshot="snapshot-1",
+        budget=EvolutionBudget(max_trials=3, random_seed=7),
+        model_version_prefix="phase3_test",
+    )
+
+    assert len(candidates) == 3
+    assert {candidate.candidate_source for candidate in candidates} == {"phase3_family"}
+    assert {candidate.architecture["type"] for candidate in candidates} == {
+        "residual_mlp",
+        "wide_deep_mlp",
+        "tabular_bottleneck_mlp",
+    }
+    assert all(
+        candidate.training_request["architecture_type"]
+        == candidate.architecture["type"]
+        for candidate in candidates
+    )
+    assert {candidate.model_id for candidate in candidates} == {
+        "neural_eod_residual_mlp",
+        "neural_eod_wide_deep_mlp",
+        "neural_eod_tabular_bottleneck_mlp",
+    }
+    assert all(
+        candidate.training_request["status"] == "candidate" for candidate in candidates
     )
 
 

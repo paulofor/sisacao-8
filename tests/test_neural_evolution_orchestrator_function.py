@@ -360,6 +360,48 @@ def test_orchestrator_phase2_falls_back_to_architecture_variants_when_grid_exhau
     )
 
 
+def test_orchestrator_phase3_generates_new_family_candidates(monkeypatch):
+    fake_client = _FakeClient()
+    monkeypatch.setattr(module, "_BQ_CLIENT", fake_client)
+
+    response, status = module.neural_evolution_orchestrator(
+        _Request(
+            {
+                "dry_run": True,
+                "strategy": "phase3_new_families",
+                "budget": {"max_trials": 2, "random_seed": 42},
+            }
+        )
+    )
+
+    assert status == 200
+    assert response["candidate_count"] == 2
+    assert all("phase3" in candidate for candidate in response["candidates"])
+
+    candidates = module._generate_candidates_for_strategy(
+        client=fake_client,
+        strategy="phase3_new_families",
+        evolution_run_id="run-phase3",
+        dataset_snapshot="snapshot_2026",
+        budget=module.EvolutionBudget(max_trials=2, random_seed=42),
+        existing_hashes=set(),
+        model_version_prefix="phase3_test",
+        payload={},
+    )
+
+    assert {candidate.candidate_source for candidate in candidates} == {"phase3_family"}
+    assert all(
+        candidate.training_request["architecture_type"]
+        == candidate.architecture["type"]
+        for candidate in candidates
+    )
+    assert {candidate.model_id for candidate in candidates} <= {
+        "neural_eod_residual_mlp",
+        "neural_eod_wide_deep_mlp",
+        "neural_eod_tabular_bottleneck_mlp",
+    }
+
+
 def test_orchestrator_dry_run_does_not_persist_or_call_training(monkeypatch):
     fake_client = _FakeClient()
     monkeypatch.setattr(module, "_BQ_CLIENT", fake_client)

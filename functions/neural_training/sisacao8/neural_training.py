@@ -19,8 +19,8 @@ import numpy as np
 import pandas as pd
 
 from sisacao8.neural_dataset import FEATURE_VERSION, LABEL_VERSION
+from sisacao8.neural_muen import PROTOCOL_VERSION as MUEN_PROTOCOL_VERSION
 from sisacao8.neural_muen import (
-    PROTOCOL_VERSION as MUEN_PROTOCOL_VERSION,
     aggregate_family_evaluation,
     evaluate_fold_economics,
 )
@@ -71,6 +71,7 @@ class BaselineMlpConfig:
     early_stopping: bool = True
     early_stopping_patience: int = 8
     class_weight: str = "none"
+    architecture_type: str = "mlp"
 
     def __post_init__(self) -> None:
         if not self.hidden_units:
@@ -89,6 +90,16 @@ class BaselineMlpConfig:
             raise ValueError("early_stopping_patience must be positive")
         if self.class_weight not in {"none", "balanced", "directional"}:
             raise ValueError("class_weight must be none, balanced, or directional")
+        allowed_architectures = {
+            "mlp",
+            "residual_mlp",
+            "wide_deep_mlp",
+            "tabular_bottleneck_mlp",
+        }
+        if self.architecture_type not in allowed_architectures:
+            raise ValueError(
+                "architecture_type must be one of " f"{sorted(allowed_architectures)}"
+            )
 
 
 @dataclass(frozen=True)
@@ -397,19 +408,89 @@ def _class_weight(y_train: np.ndarray, mode: str) -> dict[int, float] | None:
 def _build_model(input_size: int, config: BaselineMlpConfig) -> Any:
     import tensorflow as tf
 
-    layers: list[Any] = [tf.keras.layers.Input(shape=(input_size,))]
-    for units in config.hidden_units:
-        layers.append(tf.keras.layers.Dense(units, activation="relu"))
-        if config.dropout_rate > 0:
-            layers.append(tf.keras.layers.Dropout(config.dropout_rate))
-    layers.append(tf.keras.layers.Dense(len(LABEL_CLASSES), activation="softmax"))
-    model = tf.keras.Sequential(layers, name=config.model_id)
+    if config.architecture_type == "mlp":
+        model = _build_sequential_mlp(input_size, config, tf)
+    elif config.architecture_type == "residual_mlp":
+        model = _build_residual_mlp(input_size, config, tf)
+    elif config.architecture_type == "wide_deep_mlp":
+        model = _build_wide_deep_mlp(input_size, config, tf)
+    elif config.architecture_type == "tabular_bottleneck_mlp":
+        model = _build_tabular_bottleneck_mlp(input_size, config, tf)
+    else:  # pragma: no cover - guarded by BaselineMlpConfig validation.
+        raise ValueError(f"Unsupported architecture_type: {config.architecture_type}")
     model.compile(
         optimizer=tf.keras.optimizers.Adam(learning_rate=config.learning_rate),
         loss="sparse_categorical_crossentropy",
         metrics=["accuracy"],
     )
     return model
+
+
+def _build_sequential_mlp(input_size: int, config: BaselineMlpConfig, tf: Any) -> Any:
+    layers: list[Any] = [tf.keras.layers.Input(shape=(input_size,))]
+    for units in config.hidden_units:
+        layers.append(tf.keras.layers.Dense(units, activation="relu"))
+        if config.dropout_rate > 0:
+            layers.append(tf.keras.layers.Dropout(config.dropout_rate))
+    layers.append(tf.keras.layers.Dense(len(LABEL_CLASSES), activation="softmax"))
+    return tf.keras.Sequential(layers, name=config.model_id)
+
+
+def _dropout_if_needed(x: Any, config: BaselineMlpConfig, tf: Any) -> Any:
+    if config.dropout_rate <= 0:
+        return x
+    return tf.keras.layers.Dropout(config.dropout_rate)(x)
+
+
+def _build_residual_mlp(input_size: int, config: BaselineMlpConfig, tf: Any) -> Any:
+    inputs = tf.keras.Input(shape=(input_size,), name="features")
+    x = inputs
+    for index, units in enumerate(config.hidden_units):
+        previous = x
+        x = tf.keras.layers.Dense(units, activation="relu", name=f"dense_{index}")(x)
+        x = _dropout_if_needed(x, config, tf)
+        previous_units = previous.shape[-1]
+        if previous_units != units:
+            previous = tf.keras.layers.Dense(
+                units, activation=None, name=f"residual_projection_{index}"
+            )(previous)
+        x = tf.keras.layers.Add(name=f"residual_add_{index}")([x, previous])
+        x = tf.keras.layers.Activation("relu", name=f"residual_relu_{index}")(x)
+    outputs = tf.keras.layers.Dense(
+        len(LABEL_CLASSES), activation="softmax", name="class_probabilities"
+    )(x)
+    return tf.keras.Model(inputs=inputs, outputs=outputs, name=config.model_id)
+
+
+def _build_wide_deep_mlp(input_size: int, config: BaselineMlpConfig, tf: Any) -> Any:
+    inputs = tf.keras.Input(shape=(input_size,), name="features")
+    x = inputs
+    for index, units in enumerate(config.hidden_units):
+        x = tf.keras.layers.Dense(units, activation="relu", name=f"deep_dense_{index}")(
+            x
+        )
+        x = _dropout_if_needed(x, config, tf)
+    combined = tf.keras.layers.Concatenate(name="wide_deep_concat")([inputs, x])
+    outputs = tf.keras.layers.Dense(
+        len(LABEL_CLASSES), activation="softmax", name="class_probabilities"
+    )(combined)
+    return tf.keras.Model(inputs=inputs, outputs=outputs, name=config.model_id)
+
+
+def _build_tabular_bottleneck_mlp(
+    input_size: int, config: BaselineMlpConfig, tf: Any
+) -> Any:
+    inputs = tf.keras.Input(shape=(input_size,), name="features")
+    x = inputs
+    for index, units in enumerate(config.hidden_units):
+        x = tf.keras.layers.Dense(units, activation="relu", name=f"bottleneck_{index}")(
+            x
+        )
+        x = _dropout_if_needed(x, config, tf)
+    outputs = tf.keras.layers.Dense(
+        len(LABEL_CLASSES), activation="softmax", name="class_probabilities"
+    )(x)
+    return tf.keras.Model(inputs=inputs, outputs=outputs, name=config.model_id)
 
 
 def _validate_dataset(dataset: pd.DataFrame, feature_columns: tuple[str, ...]) -> None:

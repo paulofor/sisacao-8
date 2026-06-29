@@ -125,3 +125,27 @@ Próximo passo imediato: publicar `functions/neural_evolution_orchestrator`, aci
 Foi confirmado via MCP HTTP/JSON-RPC que o Scheduler `neural-evolution-daily` está ativo em `ingestaokraken/us-east1` com agenda atual `30 * * * *`, ou seja, uma execução por hora no minuto 30 em `America/Sao_Paulo`. A alteração desejada é `*/30 * * * *`, para executar de meia em meia hora.
 
 A tentativa de aplicar diretamente pelo MCP falhou com `PERMISSION_DENIED` porque a service account `codex-openai@ingestaokraken.iam.gserviceaccount.com` não possui `cloudscheduler.jobs.update`. Próximo passo imediato: conceder permissão de update no Cloud Scheduler a essa conta ou executar, com uma conta autorizada, o comando de update documentado em `docs/neural_evolution_orchestrator_scheduler.md`; em seguida validar por `cloud_scheduler_job`/`gcloud scheduler jobs describe` que o schedule ficou `*/30 * * * *`.
+
+## Orientação para novas famílias neurais — 2026-06-29 07:45 UTC
+
+Estado confirmado: o leaderboard publicado contém 100 avaliações, com 56 candidatas determinísticas, 28 por mutação e 16 `architecture_variant`; portanto a evolução já começou a variar topologias MLP, mas ainda não testa famílias radicalmente diferentes de MLP.
+
+Próximo passo recomendado: não esperar para pesquisa. Depois de publicar/validar o fallback `architecture_variant`, abrir uma Fase 3 experimental com orçamento pequeno para novas famílias neurais em modo shadow/pesquisa, mantendo o MLP atual como champion e usando MUEN para comparação. Priorizar 2 ou 3 famílias no máximo inicialmente, sem promoção automática: por exemplo MLP residual/tabular melhorada, CNN/TCN temporal curta ou GRU/LSTM leve apenas se houver dataset sequencial adequado.
+
+## Fase 3 implementada localmente — 2026-06-29 07:52 UTC
+
+A Fase 3 experimental foi implementada no código para gerar e treinar novas famílias tabulares em modo pesquisa/shadow: `residual_mlp`, `wide_deep_mlp` e `tabular_bottleneck_mlp`. O orquestrador passa a aceitar `strategy=phase3_new_families`/`phase3`/`new_families`, e o treino passa a respeitar `architecture_type` no payload.
+
+Próximo passo imediato: publicar `functions/neural_training` e `functions/neural_evolution_orchestrator`; executar primeiro dry-run com `strategy=phase3_new_families`, `budget.max_trials=2` ou `3` e `train_candidates=false`/`dry_run=true`; depois executar uma rodada treinada pequena em shadow/pesquisa, validar registros em `neural_candidate_configs`, `neural_model_registry`, `neural_candidate_evaluations` e decisões MUEN, sem chamar `approve_if_passed` salvo decisão `passed` e aprovação humana explícita.
+
+## Scheduler para Fase 3 — 2026-06-29 07:58 UTC
+
+Não é obrigatório criar novo Cloud Scheduler para a Fase 3, porque `neural_evolution_orchestrator` já escolhe a estratégia pelo payload (`strategy=phase3_new_families`). Porém, por segurança operacional, não substituir o payload recorrente do `neural-evolution-daily` sem decisão explícita: ele deve continuar cuidando da Fase 2/incremental do MLP.
+
+Próximo passo recomendado: após publicar `functions/neural_training` e `functions/neural_evolution_orchestrator`, rodar primeiro um `curl` manual com `dry_run=true` e `strategy=phase3_new_families`; se a rodada treinada pequena passar pelos checks, criar um Scheduler separado e controlado, por exemplo `neural-evolution-phase3-weekly`, inicialmente pausado ou semanal. Não automatizar `approve_if_passed`.
+
+## Confirmação do agendamento existente — 2026-06-29 08:02 UTC
+
+Foi confirmado via MCP HTTP/JSON-RPC que o Cloud Scheduler `neural-evolution-daily` existe em `ingestaokraken/us-east1`, está `ENABLED` e roda `*/30 * * * *` em `America/Sao_Paulo`, ou seja, de 30 em 30 minutos. A última tentativa vista foi `2026-06-29T08:01:19.716573Z`.
+
+O payload atual do job chama `neural_evolution_orchestrator` com `strategy=deterministic_phase2`, `budget.max_trials=1`, `max_runtime_minutes=45` e `phase2.include_seed_repeats=false`; portanto o Scheduler existente está rodando Fase 2, não Fase 3. Próximo passo para Fase 3 permanece: rodar primeiro dry-run/manual com `strategy=phase3_new_families` e só criar Scheduler separado se houver decisão de recorrência controlada.
