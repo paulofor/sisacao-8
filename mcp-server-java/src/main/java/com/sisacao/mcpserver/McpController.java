@@ -46,6 +46,27 @@ public class McpController {
     private static final Pattern READ_ONLY_SQL_PATTERN = Pattern.compile("^\\s*(select|with)\\b", Pattern.CASE_INSENSITIVE);
     private static final Pattern SCHEDULER_JOB_NAME_PATTERN =
             Pattern.compile("^[A-Za-z0-9][A-Za-z0-9_-]{0,499}$");
+    private static final Pattern GCLOUD_ARG_PATTERN = Pattern.compile("^[A-Za-z0-9_@%+=:,./-]+$");
+    private static final Set<String> MUTATING_GCLOUD_VERBS = Set.of(
+            "activate-service-account",
+            "add-iam-policy-binding",
+            "apply",
+            "cancel",
+            "create",
+            "delete",
+            "deploy",
+            "disable",
+            "enable",
+            "insert",
+            "pause",
+            "remove-iam-policy-binding",
+            "resume",
+            "set",
+            "start",
+            "stop",
+            "submit",
+            "undelete",
+            "update");
 
     private final Set<String> activeSessions = Collections.newSetFromMap(new ConcurrentHashMap<>());
     private final ObjectMapper objectMapper;
@@ -126,6 +147,8 @@ public class McpController {
                         tool("bigquery_query", "Executa query read-only no BigQuery com limite de linhas."),
                         tool("mcp_server_logs", "Retorna logs do próprio MCP Server Java no Cloud Run."),
                         tool("cloud_run_function_logs", "Retorna logs básicos (placeholder de migração Java)."),
+                        tool("gcloud_research",
+                                "Executa comandos gcloud somente-leitura para pesquisa operacional no runtime autenticado."),
                         tool("cloud_scheduler_job", "Consulta um job do Cloud Scheduler via gcloud."),
                         tool("cloud_scheduler_job_write",
                                 "Cria, atualiza, pausa, retoma, executa ou remove jobs do Cloud Scheduler via gcloud."),
@@ -161,6 +184,7 @@ public class McpController {
             case "bigquery_query" -> toolResult(id, bigqueryQuery(arguments));
             case "mcp_server_logs" -> toolResult(id, mcpServerLogs(arguments));
             case "cloud_run_function_logs" -> toolResult(id, cloudRunFunctionLogs(arguments));
+            case "gcloud_research" -> toolResult(id, gcloudResearch(arguments));
             case "cloud_scheduler_job" -> toolResult(id, cloudSchedulerJob(arguments));
             case "cloud_scheduler_job_write" -> toolResult(id, cloudSchedulerJobWrite(arguments));
             case "neural_evolution_daily_scheduler_apply" -> toolResult(id, neuralEvolutionDailySchedulerApply(arguments));
@@ -323,6 +347,106 @@ public class McpController {
         }
     }
 
+
+    private Map<String, Object> gcloudResearch(Map<String, Object> arguments) {
+        Object argsObj = arguments.get("args");
+        if (!(argsObj instanceof List<?> rawArgs)) {
+            return Map.of(
+                    "status", "error",
+                    "project", FIXED_PROJECT_ID,
+                    "message", "args deve ser uma lista de argumentos gcloud sem o prefixo 'gcloud'");
+        }
+
+        List<String> args = new ArrayList<>();
+        for (Object rawArg : rawArgs) {
+            String arg = String.valueOf(rawArg).trim();
+            if (arg.isBlank()) {
+                return Map.of("status", "error", "project", FIXED_PROJECT_ID, "message", "argumento vazio");
+            }
+            if ("gcloud".equals(arg)) {
+                return Map.of(
+                        "status", "error",
+                        "project", FIXED_PROJECT_ID,
+                        "message", "não inclua o prefixo gcloud em args");
+            }
+            if (arg.length() > 200 || !GCLOUD_ARG_PATTERN.matcher(arg).matches()) {
+                return Map.of(
+                        "status", "error",
+                        "project", FIXED_PROJECT_ID,
+                        "message", "argumento gcloud inválido para execução de pesquisa: " + arg);
+            }
+            args.add(arg);
+        }
+
+        String validationError = validateReadOnlyGcloudResearchArgs(args);
+        if (validationError != null) {
+            return Map.of("status", "error", "project", FIXED_PROJECT_ID, "message", validationError);
+        }
+
+        List<String> command = new ArrayList<>();
+        command.add("gcloud");
+        command.addAll(args);
+        if (!args.contains("--project") && !args.stream().anyMatch(arg -> arg.startsWith("--project="))) {
+            command.add("--project");
+            command.add(FIXED_PROJECT_ID);
+        }
+        return gcloudTextCommand(command, "gcloud_research", Map.of("mode", "read_only"));
+    }
+
+    private String validateReadOnlyGcloudResearchArgs(List<String> args) {
+        if (args.isEmpty()) {
+            return "args vazio";
+        }
+        if (args.size() > 30) {
+            return "args excede o limite de 30 argumentos";
+        }
+        if (args.stream().anyMatch(MUTATING_GCLOUD_VERBS::contains)) {
+            return "comando gcloud de pesquisa não pode usar verbos mutáveis";
+        }
+
+        if (args.size() == 1 && List.of("version", "info").contains(args.get(0))) {
+            return null;
+        }
+        if (args.size() >= 2 && "auth".equals(args.get(0)) && "list".equals(args.get(1))) {
+            return null;
+        }
+        if (args.size() >= 2 && "config".equals(args.get(0)) && List.of("list", "get-value").contains(args.get(1))) {
+            return null;
+        }
+        if (args.size() >= 2 && "logging".equals(args.get(0)) && "read".equals(args.get(1))) {
+            return null;
+        }
+        if (args.size() >= 3 && "scheduler".equals(args.get(0)) && "jobs".equals(args.get(1))
+                && List.of("describe", "list").contains(args.get(2))) {
+            return null;
+        }
+        if (args.size() >= 3 && "run".equals(args.get(0)) && "services".equals(args.get(1))
+                && List.of("describe", "list").contains(args.get(2))) {
+            return null;
+        }
+        if (args.size() >= 4 && "run".equals(args.get(0)) && "services".equals(args.get(1))
+                && "logs".equals(args.get(2)) && "read".equals(args.get(3))) {
+            return null;
+        }
+        if (args.size() >= 2 && "functions".equals(args.get(0))
+                && List.of("describe", "list").contains(args.get(1))) {
+            return null;
+        }
+        if (args.size() >= 3 && "functions".equals(args.get(0))
+                && "logs".equals(args.get(1)) && "read".equals(args.get(2))) {
+            return null;
+        }
+        if (args.size() >= 3 && "iam".equals(args.get(0)) && "service-accounts".equals(args.get(1))
+                && List.of("describe", "list").contains(args.get(2))) {
+            return null;
+        }
+        if (args.size() >= 2 && "projects".equals(args.get(0))
+                && List.of("describe", "list").contains(args.get(1))) {
+            return null;
+        }
+
+        return "comando gcloud não permitido para pesquisa somente-leitura";
+    }
 
     private Map<String, Object> cloudSchedulerJob(Map<String, Object> arguments) {
         String jobName = String.valueOf(arguments.getOrDefault("job_name", "")).trim();
