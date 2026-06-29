@@ -173,3 +173,9 @@ Verificação inicial limitada ao leaderboard: os 100 itens ordenados por score 
 ## Causa real pós-deploy da Fase 3 — 2026-06-29 13:54 UTC
 
 O deploy da Fase 3 funcionou parcialmente: o BigQuery já contém três candidatas reais `phase3_family` (`tabular_bottleneck_mlp`, `residual_mlp` e `wide_deep_mlp`) com prefixo `neural_eod_phase3_`, todas treinadas, avaliadas e rejeitadas pelo Gate MUEN. O problema atual é esgotamento/deduplicação do espaço inicial: após criar uma configuração fixa por família, novas chamadas com `strategy=phase3_new_families` não geravam nenhuma candidata inédita e a função retornava HTTP 500 com `ValueError: No neural evolution candidates were generated`. O código foi ajustado para repetir famílias de Fase 3 com seeds frescas quando as combinações base já existirem. Próximo passo: redeployar `functions/neural_evolution_orchestrator` com essa correção e validar que o dry-run/execução pequena volta a retornar candidatas `phase3_family` em vez de 500.
+
+## Contagem atual da Fase 3 — 2026-06-29 16:10 UTC
+
+A Fase 3 está gerando redes após a correção por seeds frescas. O endpoint publicado de treinos mostra 6 candidatas Fase 3 no recorte atual: 2 `residual_mlp`, 2 `wide_deep_mlp` e 2 `tabular_bottleneck_mlp`, todas ainda com `status=candidate`. As mais recentes foram criadas em sequência às 15:02, 15:31 e 16:01 UTC com sufixos `seed20290633`, `seed20290634` e `seed20290635`.
+
+Próximo passo operacional: continuar monitorando se a cadência de Fase 3 segue criando exatamente uma candidata por execução sem HTTP 500, acompanhar decisões MUEN dessas candidatas e não promover/automatizar `approve_if_passed` sem decisão humana explícita.
