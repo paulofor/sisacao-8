@@ -332,3 +332,165 @@ Também valide no BigQuery que há linhas em:
 - `cotacao_intraday.neural_candidate_configs`
 - `cotacao_intraday.neural_candidate_evaluations`
 - `cotacao_intraday.vw_neural_evolution_leaderboard`
+
+## Agendamento recomendado para Fase 3
+
+A Fase 3 (`strategy=phase3_new_families`) não exige um novo Cloud Scheduler para funcionar: a mesma Cloud Function `neural_evolution_orchestrator` já seleciona a estratégia pelo payload HTTP. Portanto, uma execução manual ou um update temporário do job `neural-evolution-daily` tecnicamente bastam.
+
+Operacionalmente, porém, não substitua o payload recorrente de Fase 2 sem uma decisão explícita. O job `neural-evolution-daily` deve continuar cuidando da evolução incremental/mutação do MLP champion. Para Fase 3, prefira uma das duas opções seguras:
+
+1. **Primeira rodada:** chamada manual com `dry_run=true`, depois uma chamada manual treinada pequena.
+2. **Recorrência controlada:** criar um job separado, por exemplo `neural-evolution-phase3-weekly`, inicialmente `PAUSED` ou com cadência semanal, para evitar concorrência/custo com o job diário.
+
+Payload de dry-run recomendado:
+
+```bash
+curl -sS -X POST 'https://us-east1-ingestaokraken.cloudfunctions.net/neural_evolution_orchestrator' \
+  -H 'Content-Type: application/json' \
+  --data '{"dry_run":true,"strategy":"phase3_new_families","budget":{"max_trials":3,"max_runtime_minutes":120,"max_parameter_count":150000,"max_layers":4,"random_seed":20260629}}'
+```
+
+Exemplo de Scheduler separado, sem OIDC enquanto a função estiver pública:
+
+```bash
+gcloud scheduler jobs create http neural-evolution-phase3-weekly \
+  --project=ingestaokraken \
+  --location=us-east1 \
+  --schedule='0 8 * * 1' \
+  --time-zone='America/Sao_Paulo' \
+  --uri='https://us-east1-ingestaokraken.cloudfunctions.net/neural_evolution_orchestrator' \
+  --http-method=POST \
+  --headers='Content-Type=application/json' \
+  --message-body='{"strategy":"phase3_new_families","budget":{"max_trials":3,"max_runtime_minutes":120,"max_parameter_count":150000,"max_layers":4,"random_seed":20260629}}' \
+  --attempt-deadline=1800s
+```
+
+Se criar esse job antes da validação inicial, deixe-o pausado até a primeira rodada manual passar pelo MUEN:
+
+```bash
+gcloud scheduler jobs pause neural-evolution-phase3-weekly \
+  --project=ingestaokraken \
+  --location=us-east1
+```
+
+## Teste manual da Fase 3
+
+Use este roteiro depois de publicar as versões atualizadas de `functions/neural_training` e `functions/neural_evolution_orchestrator`.
+
+### 1. Dry-run sem treino e sem escrita
+
+Valida se o orquestrador consegue gerar candidatas Fase 3 e se o payload contém `strategy=phase3_new_families`.
+
+```bash
+curl -sS -X POST 'https://us-east1-ingestaokraken.cloudfunctions.net/neural_evolution_orchestrator' \
+  -H 'Content-Type: application/json' \
+  --data '{"dry_run":true,"strategy":"phase3_new_families","budget":{"max_trials":3,"max_runtime_minutes":120,"max_parameter_count":150000,"max_layers":4,"random_seed":20260629}}' \
+  | python -m json.tool
+```
+
+Resultado esperado: HTTP 200, `status=ok`, `dry_run=true`, `candidate_count` entre 1 e 3 e modelos com prefixo `neural_eod_phase3_`.
+
+### 2. Rodada pequena sem chamar treino
+
+Use esta etapa apenas se quiser materializar a rodada/configuração no BigQuery, mas sem executar TensorFlow ainda. Ela exige que os `model_version` gerados já existam no `neural_model_registry`; se não existirem, a função pode falhar ao tentar buscar o registry. Para um primeiro teste operacional, prefira pular esta etapa e ir direto para a etapa 3 com `max_trials=1`.
+
+```bash
+curl -sS -X POST 'https://us-east1-ingestaokraken.cloudfunctions.net/neural_evolution_orchestrator' \
+  -H 'Content-Type: application/json' \
+  --data '{"strategy":"phase3_new_families","train_candidates":false,"budget":{"max_trials":1,"max_runtime_minutes":120,"max_parameter_count":150000,"max_layers":4,"random_seed":20260629}}' \
+  | python -m json.tool
+```
+
+### 3. Primeiro treino real mínimo
+
+Executa apenas uma família nova. Use fora de horário crítico e acompanhe logs/custos.
+
+```bash
+curl -sS -X POST 'https://us-east1-ingestaokraken.cloudfunctions.net/neural_evolution_orchestrator' \
+  -H 'Content-Type: application/json' \
+  --data '{"strategy":"phase3_new_families","budget":{"max_trials":1,"max_runtime_minutes":120,"max_parameter_count":150000,"max_layers":4,"random_seed":20260629}}' \
+  | python -m json.tool
+```
+
+Resultado esperado: `trained_count=1`, `failed_count=0`, linha nova em `neural_candidate_configs`, linha nova em `neural_model_registry`, linha nova em `neural_candidate_evaluations` e, quando houver payload MUEN, decisão em `neural_gate_decisions`.
+
+### 4. Conferência pela API publicada
+
+```bash
+curl -sS 'http://34.194.252.70/api/ops/neural/evolution/leaderboard' \
+  | python -m json.tool
+```
+
+Procure entradas recentes com `candidateSource`/`candidate_source` igual a `phase3_family` ou `modelVersion` começando com `neural_eod_phase3_`.
+
+### 5. Conferência via BigQuery/MCP
+
+Quando precisar validar diretamente no BigQuery, use o MCP por JSON-RPC HTTP em `http://mcpserversisacao.shop/mcp` e a ferramenta `bigquery_query`. Consulta read-only sugerida:
+
+```sql
+SELECT
+  candidate_source,
+  model_id,
+  model_version,
+  architecture_json,
+  hyperparameters_json,
+  created_at
+FROM `ingestaokraken.cotacao_intraday.neural_candidate_configs`
+WHERE candidate_source = 'phase3_family'
+ORDER BY created_at DESC
+LIMIT 10;
+```
+
+Não execute `approve_if_passed` automaticamente. Qualquer aprovação continua manual/governada e só deve ocorrer se o Gate MUEN retornar `passed`.
+
+### Diagnóstico de deploy desatualizado
+
+Se o dry-run com `strategy=phase3_new_families` retornar candidatos como `neural_eod_mlp_evo1_<data>_01` e não trouxer `candidate_sources=["phase3_family"]`/`architecture_types`, a Cloud Function publicada ainda está com uma versão anterior do orquestrador. Nesse caso, não avance para treino real de Fase 3: publique novamente `functions/neural_evolution_orchestrator` e `functions/neural_training`, repita o dry-run e só prossiga quando o retorno indicar explicitamente:
+
+- `strategy: "phase3_new_families"`;
+- `candidate_sources` contendo apenas `phase3_family`;
+- `architecture_types` contendo uma ou mais famílias novas, como `residual_mlp`, `wide_deep_mlp` ou `tabular_bottleneck_mlp`;
+- `candidates` com prefixo `neural_eod_phase3_`.
+
+## Scheduler Fase 3 a cada 30 minutos
+
+Use este job separado apenas depois de confirmar, em dry-run, que a Cloud Function publicada retorna `candidate_sources=["phase3_family"]` e candidatos com prefixo `neural_eod_phase3_`. Ele não substitui o `neural-evolution-daily` da Fase 2.
+
+Criação sem OIDC, adequada enquanto `neural_evolution_orchestrator` estiver pública:
+
+```bash
+gcloud scheduler jobs create http neural-evolution-phase3-30m \
+  --project=ingestaokraken \
+  --location=us-east1 \
+  --schedule='*/30 * * * *' \
+  --time-zone='America/Sao_Paulo' \
+  --uri='https://us-east1-ingestaokraken.cloudfunctions.net/neural_evolution_orchestrator' \
+  --http-method=POST \
+  --headers='Content-Type=application/json' \
+  --message-body='{"strategy":"phase3_new_families","budget":{"max_trials":1,"max_runtime_minutes":120,"max_parameter_count":150000,"max_layers":4,"random_seed":20260629}}' \
+  --attempt-deadline=1800s
+```
+
+Se o job já existir, use update:
+
+```bash
+gcloud scheduler jobs update http neural-evolution-phase3-30m \
+  --project=ingestaokraken \
+  --location=us-east1 \
+  --schedule='*/30 * * * *' \
+  --time-zone='America/Sao_Paulo' \
+  --uri='https://us-east1-ingestaokraken.cloudfunctions.net/neural_evolution_orchestrator' \
+  --http-method=POST \
+  --update-headers='Content-Type=application/json' \
+  --message-body='{"strategy":"phase3_new_families","budget":{"max_trials":1,"max_runtime_minutes":120,"max_parameter_count":150000,"max_layers":4,"random_seed":20260629}}' \
+  --attempt-deadline=1800s
+```
+
+Depois de criar, valide:
+
+```bash
+gcloud scheduler jobs describe neural-evolution-phase3-30m \
+  --project=ingestaokraken \
+  --location=us-east1 \
+  --format='yaml(name,state,schedule,timeZone,attemptDeadline,httpTarget.uri,httpTarget.httpMethod,httpTarget.body,nextRunTime,lastAttemptTime)'
+```

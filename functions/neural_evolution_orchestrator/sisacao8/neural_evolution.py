@@ -65,6 +65,38 @@ LEARNING_RATE_SPACE = (0.0003, 0.0005, 0.001, 0.002)
 BATCH_SIZE_SPACE = (128, 256, 512)
 EPOCHS_SPACE = (20, 40, 80)
 FINALIST_SEEDS = (20260701, 20260702, 20260703)
+PHASE3_FAMILY_SPACE: tuple[dict[str, Any], ...] = (
+    {
+        "architecture_type": "residual_mlp",
+        "model_id": "neural_eod_residual_mlp",
+        "hidden_units": (128, 64),
+        "dropout_rate": 0.15,
+        "learning_rate": 0.0005,
+        "batch_size": 256,
+        "epochs": 60,
+        "class_weight": "balanced",
+    },
+    {
+        "architecture_type": "wide_deep_mlp",
+        "model_id": "neural_eod_wide_deep_mlp",
+        "hidden_units": (128, 64, 32),
+        "dropout_rate": 0.10,
+        "learning_rate": 0.0005,
+        "batch_size": 256,
+        "epochs": 60,
+        "class_weight": "directional",
+    },
+    {
+        "architecture_type": "tabular_bottleneck_mlp",
+        "model_id": "neural_eod_tabular_bottleneck_mlp",
+        "hidden_units": (256, 64, 16),
+        "dropout_rate": 0.25,
+        "learning_rate": 0.0003,
+        "batch_size": 256,
+        "epochs": 80,
+        "class_weight": "balanced",
+    },
+)
 
 
 def generate_deterministic_candidates(
@@ -343,6 +375,81 @@ def _architecture_variant_space(
     return tuple(variants)
 
 
+def generate_phase3_family_candidates(
+    *,
+    evolution_run_id: str,
+    dataset_snapshot: str,
+    budget: EvolutionBudget,
+    existing_hashes: Iterable[str] | None = None,
+    model_version_prefix: str = "neural_eod_phase3_family",
+    family_space: Sequence[Mapping[str, Any]] = PHASE3_FAMILY_SPACE,
+) -> list[CandidateConfig]:
+    """Return controlled Phase-3 candidates for new tabular neural families.
+
+    Phase 3 intentionally keeps the same supervised EOD dataset and MUEN gate,
+    but changes the trainable architecture family.  This lets research compare
+    a small set of challengers against the current MLP champion without
+    broadening the search enough to overfit the limited financial sample.
+    """
+
+    seen = set(existing_hashes or [])
+    rng = random.Random(budget.random_seed)
+    shuffled_space = list(family_space)
+    rng.shuffle(shuffled_space)
+    candidates: list[CandidateConfig] = []
+    seed_offset = 0
+
+    for family in shuffled_space:
+        if len(candidates) >= budget.max_trials:
+            break
+        hidden_units = tuple(int(item) for item in family["hidden_units"])
+        if len(hidden_units) > budget.max_layers:
+            continue
+        if estimate_parameter_count(hidden_units) > budget.max_parameter_count:
+            continue
+        architecture_type = str(family["architecture_type"])
+        architecture = {
+            "type": architecture_type,
+            "hidden_units": list(hidden_units),
+            "batch_norm": bool(family.get("batch_norm", False)),
+            "phase": "phase3_new_family",
+        }
+        hyperparameters = {
+            "dropout_rate": float(family.get("dropout_rate", 0.15)),
+            "learning_rate": float(family.get("learning_rate", 0.0005)),
+            "batch_size": int(family.get("batch_size", 256)),
+            "epochs": int(family.get("epochs", 60)),
+            "random_seed": int(budget.random_seed) + 30_000 + seed_offset,
+            "early_stopping": True,
+            "early_stopping_patience": int(family.get("early_stopping_patience", 10)),
+            "class_weight": str(family.get("class_weight", "balanced")),
+            "architecture_type": architecture_type,
+        }
+        seed_offset += 1
+        dedupe_hash = candidate_hash(architecture, hyperparameters)
+        if dedupe_hash in seen:
+            continue
+        seen.add(dedupe_hash)
+        index = len(candidates) + 1
+        candidates.append(
+            _candidate_from_parts(
+                evolution_run_id=evolution_run_id,
+                dataset_snapshot=dataset_snapshot,
+                model_version=f"{model_version_prefix}_{architecture_type}_{index:02d}",
+                candidate_source="phase3_family",
+                architecture=architecture,
+                hyperparameters=hyperparameters,
+                dedupe_hash=dedupe_hash,
+                notes=(
+                    "Fase 3 pesquisa/shadow de nova família neural; "
+                    f"architecture_type={architecture_type}; candidate_index={index}"
+                ),
+                model_id=str(family.get("model_id") or MODEL_ID),
+            )
+        )
+    return candidates
+
+
 def repeat_finalists_with_fresh_seeds(
     finalists: Sequence[CandidateConfig],
     *,
@@ -493,10 +600,11 @@ def _candidate_from_parts(
     hyperparameters: Mapping[str, Any],
     dedupe_hash: str,
     notes: str,
+    model_id: str = MODEL_ID,
 ) -> CandidateConfig:
     training_request = {
         "dataset_snapshot": dataset_snapshot,
-        "model_id": MODEL_ID,
+        "model_id": model_id,
         "model_version": model_version,
         "hidden_units": list(architecture["hidden_units"]),
         "dropout_rate": hyperparameters["dropout_rate"],
@@ -507,6 +615,7 @@ def _candidate_from_parts(
         "early_stopping": hyperparameters["early_stopping"],
         "early_stopping_patience": hyperparameters["early_stopping_patience"],
         "class_weight": hyperparameters["class_weight"],
+        "architecture_type": architecture.get("type", "mlp"),
         "status": "candidate",
         "notes": notes,
     }
@@ -514,7 +623,7 @@ def _candidate_from_parts(
     return CandidateConfig(
         candidate_id=candidate_id,
         evolution_run_id=evolution_run_id,
-        model_id=MODEL_ID,
+        model_id=model_id,
         model_version=model_version,
         candidate_source=candidate_source,
         architecture=dict(architecture),
