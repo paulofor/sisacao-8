@@ -332,3 +332,43 @@ Também valide no BigQuery que há linhas em:
 - `cotacao_intraday.neural_candidate_configs`
 - `cotacao_intraday.neural_candidate_evaluations`
 - `cotacao_intraday.vw_neural_evolution_leaderboard`
+
+## Agendamento recomendado para Fase 3
+
+A Fase 3 (`strategy=phase3_new_families`) não exige um novo Cloud Scheduler para funcionar: a mesma Cloud Function `neural_evolution_orchestrator` já seleciona a estratégia pelo payload HTTP. Portanto, uma execução manual ou um update temporário do job `neural-evolution-daily` tecnicamente bastam.
+
+Operacionalmente, porém, não substitua o payload recorrente de Fase 2 sem uma decisão explícita. O job `neural-evolution-daily` deve continuar cuidando da evolução incremental/mutação do MLP champion. Para Fase 3, prefira uma das duas opções seguras:
+
+1. **Primeira rodada:** chamada manual com `dry_run=true`, depois uma chamada manual treinada pequena.
+2. **Recorrência controlada:** criar um job separado, por exemplo `neural-evolution-phase3-weekly`, inicialmente `PAUSED` ou com cadência semanal, para evitar concorrência/custo com o job diário.
+
+Payload de dry-run recomendado:
+
+```bash
+curl -sS -X POST 'https://us-east1-ingestaokraken.cloudfunctions.net/neural_evolution_orchestrator' \
+  -H 'Content-Type: application/json' \
+  --data '{"dry_run":true,"strategy":"phase3_new_families","budget":{"max_trials":3,"max_runtime_minutes":120,"max_parameter_count":150000,"max_layers":4,"random_seed":20260629}}'
+```
+
+Exemplo de Scheduler separado, sem OIDC enquanto a função estiver pública:
+
+```bash
+gcloud scheduler jobs create http neural-evolution-phase3-weekly \
+  --project=ingestaokraken \
+  --location=us-east1 \
+  --schedule='0 8 * * 1' \
+  --time-zone='America/Sao_Paulo' \
+  --uri='https://us-east1-ingestaokraken.cloudfunctions.net/neural_evolution_orchestrator' \
+  --http-method=POST \
+  --headers='Content-Type=application/json' \
+  --message-body='{"strategy":"phase3_new_families","budget":{"max_trials":3,"max_runtime_minutes":120,"max_parameter_count":150000,"max_layers":4,"random_seed":20260629}}' \
+  --attempt-deadline=1800s
+```
+
+Se criar esse job antes da validação inicial, deixe-o pausado até a primeira rodada manual passar pelo MUEN:
+
+```bash
+gcloud scheduler jobs pause neural-evolution-phase3-weekly \
+  --project=ingestaokraken \
+  --location=us-east1
+```

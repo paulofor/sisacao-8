@@ -10,6 +10,7 @@ from sisacao8.neural_training import (
     FEATURE_COLUMNS,
     BaselineMlpConfig,
     FeatureScaler,
+    _build_model,
     build_artifact_manifest,
     build_muen_economics_from_predictions,
     encode_labels,
@@ -67,6 +68,29 @@ def test_evaluate_predictions_reports_confusion_and_coverage() -> None:
     assert metrics["directional_precision"] == 2 / 3
     assert metrics["confusion_matrix"] == [[1, 0, 0], [0, 1, 0], [1, 0, 1]]
     assert metrics["per_class"]["up"]["support"] == 2
+
+
+def test_build_model_supports_phase3_architecture_types():
+    import pytest
+
+    tf = pytest.importorskip("tensorflow")
+
+    for architecture_type in [
+        "mlp",
+        "residual_mlp",
+        "wide_deep_mlp",
+        "tabular_bottleneck_mlp",
+    ]:
+        config = BaselineMlpConfig(
+            model_id=f"test_{architecture_type}",
+            architecture_type=architecture_type,
+            hidden_units=(16, 8),
+            epochs=1,
+        )
+        model = _build_model(len(FEATURE_COLUMNS), config)
+
+        assert model.output_shape[-1] == 3
+        assert isinstance(model.optimizer, tf.keras.optimizers.Adam)
 
 
 def test_build_artifact_manifest_records_versions_metrics_and_dataset_hash() -> None:

@@ -205,6 +205,9 @@ def _training_config(payload: Mapping[str, Any]) -> BaselineMlpConfig:
             defaults.early_stopping_patience,
         ),
         class_weight=str(payload.get("class_weight") or defaults.class_weight),
+        architecture_type=str(
+            payload.get("architecture_type") or defaults.architecture_type
+        ),
     )
 
 
