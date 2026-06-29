@@ -131,7 +131,7 @@ gcloud scheduler jobs list \
   --filter='name:neural-evolution OR httpTarget.uri:neural_evolution_orchestrator'
 ```
 
-Estado esperado: `state: ENABLED`, `schedule: 30 * * * *`, `timeZone: America/Sao_Paulo`, URI apontando para `https://us-east1-ingestaokraken.cloudfunctions.net/neural_evolution_orchestrator` e `attemptDeadline` próximo de `1800s`.
+Estado esperado para a cadência solicitada de meia em meia hora: `state: ENABLED`, `schedule: */30 * * * *`, `timeZone: America/Sao_Paulo`, URI apontando para `https://us-east1-ingestaokraken.cloudfunctions.net/neural_evolution_orchestrator` e `attemptDeadline` próximo de `1800s`.
 
 ## Deadline do Scheduler
 
@@ -189,13 +189,13 @@ curl -sS -X POST 'https://us-east1-ingestaokraken.cloudfunctions.net/neural_evol
 
 ## Operação recorrente
 
-Para evolução contínua com controle, a cadência recomendada passa a ser horária no minuto 30 (`neural-evolution-daily`) com orçamento menor por rodada. Essa configuração avalia redes pendentes com mais rapidez sem concentrar custo/runtime em uma única execução semanal.
+Para evolução contínua com controle, a cadência solicitada passa a ser de meia em meia hora (`*/30 * * * *`) no job `neural-evolution-daily`, com orçamento menor por rodada. Essa configuração avalia redes pendentes com mais rapidez sem concentrar custo/runtime em uma única execução semanal.
 
-Use `max_trials=1` como padrão para a cadência horária. A execução passa a ter até 24 tentativas por dia, então aumentar o orçamento por rodada pode multiplicar custo e concorrência rapidamente. Se precisar ampliar, faça isso apenas depois de confirmar que cada execução termina bem abaixo de `attempt-deadline=1800s`, que não há sobreposição de treinos e que as métricas/custos continuam estáveis. Rodadas manuais continuam úteis para antecipar uma triagem pontual ou recuperar uma execução perdida.
+Use `max_trials=1` como padrão para a cadência de 30 minutos. A execução passa a ter até 48 tentativas por dia, então aumentar o orçamento por rodada pode multiplicar custo e concorrência rapidamente. Se precisar ampliar, faça isso apenas depois de confirmar que cada execução termina bem abaixo de `attempt-deadline=1800s`, que não há sobreposição de treinos e que as métricas/custos continuam estáveis. Rodadas manuais continuam úteis para antecipar uma triagem pontual ou recuperar uma execução perdida.
 
 ## Alteração via MCP Server
 
-Quando a versão do MCP que expõe a tool `neural_evolution_daily_scheduler_apply` estiver publicada, prefira alterar o Scheduler por JSON-RPC HTTP no endpoint `http://mcpserversisacao.shop/mcp`. A tool cria ou atualiza `neural-evolution-daily` com agenda horária no minuto 30, `strategy=deterministic_phase2`, `max_trials=1`, `max_runtime_minutes=45` e pausa o job semanal após a aplicação:
+Quando a versão do MCP que expõe a tool `neural_evolution_daily_scheduler_apply` estiver publicada, prefira alterar o Scheduler por JSON-RPC HTTP no endpoint `http://mcpserversisacao.shop/mcp`. A tool cria ou atualiza `neural-evolution-daily` com agenda de meia em meia hora, `strategy=deterministic_phase2`, `max_trials=1`, `max_runtime_minutes=45` e pausa o job semanal após a aplicação:
 
 ```json
 {
@@ -206,7 +206,7 @@ Quando a versão do MCP que expõe a tool `neural_evolution_daily_scheduler_appl
     "name": "neural_evolution_daily_scheduler_apply",
     "arguments": {
       "location": "us-east1",
-      "schedule": "30 * * * *",
+      "schedule": "*/30 * * * *",
       "strategy": "deterministic_phase2",
       "max_trials": 1,
       "max_runtime_minutes": 45,
@@ -260,7 +260,7 @@ Use esta forma quando a função estiver publicada com invocação pública (`--
 gcloud scheduler jobs create http neural-evolution-daily \
   --project=ingestaokraken \
   --location=us-east1 \
-  --schedule='30 * * * *' \
+  --schedule='*/30 * * * *' \
   --time-zone='America/Sao_Paulo' \
   --uri='https://us-east1-ingestaokraken.cloudfunctions.net/neural_evolution_orchestrator' \
   --http-method=POST \
@@ -275,7 +275,7 @@ Para alterar o job existente sem OIDC:
 gcloud scheduler jobs update http neural-evolution-daily \
   --project=ingestaokraken \
   --location=us-east1 \
-  --schedule='30 * * * *' \
+  --schedule='*/30 * * * *' \
   --time-zone='America/Sao_Paulo' \
   --uri='https://us-east1-ingestaokraken.cloudfunctions.net/neural_evolution_orchestrator' \
   --http-method=POST \
@@ -292,7 +292,7 @@ Use esta forma quando quiser manter o job autenticado. Antes, confirme/crie `sa-
 gcloud scheduler jobs create http neural-evolution-daily \
   --project=ingestaokraken \
   --location=us-east1 \
-  --schedule='30 * * * *' \
+  --schedule='*/30 * * * *' \
   --time-zone='America/Sao_Paulo' \
   --uri='https://us-east1-ingestaokraken.cloudfunctions.net/neural_evolution_orchestrator' \
   --http-method=POST \
@@ -309,7 +309,7 @@ Para alterar um job existente:
 gcloud scheduler jobs update http neural-evolution-daily \
   --project=ingestaokraken \
   --location=us-east1 \
-  --schedule='30 * * * *' \
+  --schedule='*/30 * * * *' \
   --time-zone='America/Sao_Paulo' \
   --uri='https://us-east1-ingestaokraken.cloudfunctions.net/neural_evolution_orchestrator' \
   --http-method=POST \
