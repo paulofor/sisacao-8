@@ -159,6 +159,32 @@ const candidateFamilyHash = (run: NeuralTrainingRun) => {
 
 const latestRun = (runs: NeuralTrainingRun[]) => runs[0]
 
+const PHASE3_ARCHITECTURES = [
+  'residual_mlp',
+  'wide_deep_mlp',
+  'tabular_bottleneck_mlp',
+]
+
+const isPhase3Run = (run: NeuralTrainingRun) => {
+  const searchable = [run.modelId, run.modelVersion, run.metricsJson, run.notes]
+    .filter((value): value is string => Boolean(value))
+    .join(' ')
+    .toLowerCase()
+
+  return (
+    searchable.includes('phase3') ||
+    searchable.includes('phase3_family') ||
+    PHASE3_ARCHITECTURES.some((architecture) => searchable.includes(architecture))
+  )
+}
+
+const phase3FamilyLabel = (run: NeuralTrainingRun) => {
+  const searchable = `${run.modelId ?? ''} ${run.modelVersion ?? ''} ${run.metricsJson ?? ''}`.toLowerCase()
+  const architecture = PHASE3_ARCHITECTURES.find((item) => searchable.includes(item))
+  if (!architecture) return null
+  return architecture.replaceAll('_', ' ')
+}
+
 const bestTestAccuracy = (runs: NeuralTrainingRun[]) => {
   const values = runs
     .map((run) => run.testAccuracy)
@@ -210,6 +236,8 @@ const NeuralTrainingRunsTab: FC<NeuralTrainingRunsTabProps> = ({
   const approvedCount = runs.filter(
     (run) => run.status?.toLowerCase() === 'approved',
   ).length
+  const phase3Runs = runs.filter(isPhase3Run)
+  const phase3CandidateCount = phase3Runs.filter((run) => run.status?.toLowerCase() === 'candidate').length
   const candidateCount = runs.filter((run) => run.status?.toLowerCase() === 'candidate').length
   const activeTrainingCount = runs.filter((run) => ['running', 'training', 'in_progress'].includes(run.status?.toLowerCase() ?? '')).length
   const rejectedCount = runs.filter((run) => ['rejected', 'reject'].includes(run.status?.toLowerCase() ?? '')).length
@@ -274,6 +302,11 @@ const NeuralTrainingRunsTab: FC<NeuralTrainingRunsTabProps> = ({
               helper="status candidate no registry"
             />
             <SummaryCard
+              title="Fase 3 visíveis"
+              value={formatNumber(phase3Runs.length)}
+              helper={`${formatNumber(phase3CandidateCount)} candidatas; famílias novas MUEN`}
+            />
+            <SummaryCard
               title="Ainda podem ser testadas"
               value={formatNumber(pendingGateCandidateCount)}
               helper="candidatas sem decisão MUEN carregada"
@@ -297,6 +330,7 @@ const NeuralTrainingRunsTab: FC<NeuralTrainingRunsTabProps> = ({
                 {[
                   { label: 'Em treino', value: activeTrainingCount, color: 'info' as const, helper: 'ainda executando' },
                   { label: 'Candidata', value: candidateCount, color: 'warning' as const, helper: 'treinada no registry' },
+                  { label: 'Fase 3', value: phase3Runs.length, color: 'secondary' as const, helper: 'residual/wide deep/bottleneck' },
                   { label: 'Pode ser testada', value: pendingGateCandidateCount, color: 'info' as const, helper: 'sem decisão MUEN carregada' },
                   { label: 'Aprovada', value: approvedCount, color: 'success' as const, helper: 'liberada para uso controlado' },
                   { label: 'Rejeitada no registro', value: rejectedCount, color: 'error' as const, helper: 'status final no registry' },
@@ -312,7 +346,7 @@ const NeuralTrainingRunsTab: FC<NeuralTrainingRunsTabProps> = ({
                 ))}
               </Stack>
               <Typography variant="caption" color="text.secondary">
-                A contagem “Pode ser testada” cruza candidatas do registry com as decisões MUEN carregadas para estimar quantas ainda não têm decisão de gate.
+                A contagem “Pode ser testada” cruza candidatas do registry com as decisões MUEN carregadas para estimar quantas ainda não têm decisão de gate. A contagem “Fase 3” identifica redes por prefixo `neural_eod_phase3_`, origem `phase3_family` ou pelas arquiteturas novas residual/wide deep/bottleneck.
               </Typography>
             </Stack>
           </Paper>
@@ -462,6 +496,7 @@ const NeuralTrainingRunsTab: FC<NeuralTrainingRunsTabProps> = ({
                 <TableRow>
                   <TableCell>Modelo</TableCell>
                   <TableCell>Status</TableCell>
+                  <TableCell>Fase/família</TableCell>
                   <TableCell>Treinado em</TableCell>
                   <TableCell align="right">Validação</TableCell>
                   <TableCell align="right">Treino</TableCell>
@@ -493,6 +528,18 @@ const NeuralTrainingRunsTab: FC<NeuralTrainingRunsTabProps> = ({
                         label={statusLabel(run.status)}
                         color={statusColor(run.status)}
                       />
+                    </TableCell>
+                    <TableCell>
+                      {isPhase3Run(run) ? (
+                        <Stack spacing={0.25}>
+                          <Chip size="small" color="secondary" label="Fase 3" sx={{ alignSelf: 'flex-start' }} />
+                          <Typography variant="caption" color="text.secondary">
+                            {phase3FamilyLabel(run) ?? 'phase3 family'}
+                          </Typography>
+                        </Stack>
+                      ) : (
+                        <Typography variant="caption" color="text.secondary">Anterior</Typography>
+                      )}
                     </TableCell>
                     <TableCell>{formatDateTime(run.trainedAt)}</TableCell>
                     <TableCell align="right">{formatPct(run.validationAccuracy)}</TableCell>
