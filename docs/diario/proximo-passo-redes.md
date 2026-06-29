@@ -185,3 +185,6 @@ Próximo passo operacional: continuar monitorando se a cadência de Fase 3 segue
 A falha anterior do `bigquery_query` foi reavaliada e se mostrou temporária no runtime remoto do MCP/Cloud SDK: após retries, o MCP voltou a responder consultas via `bq_cli`. A contagem canônica pelo BigQuery em `neural_model_registry` é 7 candidatas Fase 3, todas `candidate`: 2 `residual_mlp`, 2 `wide_deep_mlp` e 3 `tabular_bottleneck_mlp`. O número 6 veio do endpoint de treinos no recorte visível e não incluía a candidata base `tabular_bottleneck_mlp` das 09:01:02 UTC.
 
 Próximo passo operacional permanece monitorar a geração recorrente de Fase 3, decisões MUEN e ausência de HTTP 500, sem promoção automática.
+A Fase 3 está gerando redes após a correção por seeds frescas. O endpoint publicado de treinos mostra 6 candidatas Fase 3 no recorte atual: 2 `residual_mlp`, 2 `wide_deep_mlp` e 2 `tabular_bottleneck_mlp`, todas ainda com `status=candidate`. As mais recentes foram criadas em sequência às 15:02, 15:31 e 16:01 UTC com sufixos `seed20290633`, `seed20290634` e `seed20290635`.
+
+Próximo passo operacional: continuar monitorando se a cadência de Fase 3 segue criando exatamente uma candidata por execução sem HTTP 500, acompanhar decisões MUEN dessas candidatas e não promover/automatizar `approve_if_passed` sem decisão humana explícita.
