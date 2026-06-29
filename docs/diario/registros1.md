@@ -1584,3 +1584,12 @@ A leitura da tela `Redes neurais — Treinos` indicou 86 redes em estágio `Cand
 - Correção aplicada no código: `generate_phase3_family_candidates` agora continua tentando as mesmas famílias com seeds frescas quando as combinações base já existem, gerando hashes e versões novas com sufixo `_seed<seed>` em vez de retornar lista vazia.
 - Próximo passo operacional: publicar novamente `functions/neural_evolution_orchestrator` com essa correção e repetir dry-run/execução pequena; a expectativa é que a função deixe de retornar 500 por `No neural evolution candidates were generated` e crie novas tentativas `phase3_family` com seed fresca.
 - Comandos usados: `urllib.request` contra a Cloud Function, MCP HTTP/JSON-RPC com `cloud_run_function_logs`, MCP HTTP/JSON-RPC com `bigquery_query`, `rg`, edição via Python e `pytest`.
+
+## 2026-06-29 16:10 UTC — Contagem atual de redes Fase 3
+- Verificada a pergunta operacional sobre se a Fase 3 está gerando redes e quantas existem agora.
+- Consultado o endpoint publicado `GET http://34.194.252.70/api/ops/neural/training-runs` via `urllib.request`; o retorno atual contém 100 treinos visíveis, dos quais 6 são Fase 3 pelo prefixo `neural_eod_phase3_`/famílias novas.
+- Distribuição atual das redes Fase 3: 2 `neural_eod_residual_mlp`, 2 `neural_eod_wide_deep_mlp` e 2 `neural_eod_tabular_bottleneck_mlp`, todas com `status=candidate`.
+- As três redes Fase 3 mais recentes confirmam que a geração continuou após a correção por seeds frescas: `neural_eod_phase3_20260629_residual_mlp_seed20290633_01` às 15:02:30 UTC, `neural_eod_phase3_20260629_wide_deep_mlp_seed20290634_01` às 15:31:10 UTC e `neural_eod_phase3_20260629_tabular_bottleneck_mlp_seed20290635_01` às 16:01:07 UTC.
+- Tentada consulta BigQuery via MCP HTTP/JSON-RPC obrigatório; o `initialize` funcionou, mas `bigquery_query` retornou erro operacional do `gcloud` (`Credentials object has no attribute private_key_id`), então a contagem respondida foi baseada no endpoint operacional publicado.
+- Conclusão: sim, a Fase 3 está gerando redes atualmente; no recorte visível do endpoint de treinos existem 6 candidatas Fase 3, sem promoção automática e ainda em estado `candidate`.
+- Comandos usados: script Python com `urllib.request` para MCP HTTP/JSON-RPC (`initialize` e `tools/call` com `bigquery_query`) e script Python com `urllib.request` contra `/api/ops/neural/training-runs`, com contagem por `modelId`, `modelVersion` e `status`.
