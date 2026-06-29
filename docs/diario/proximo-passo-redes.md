@@ -149,3 +149,19 @@ Próximo passo recomendado: após publicar `functions/neural_training` e `functi
 Foi confirmado via MCP HTTP/JSON-RPC que o Cloud Scheduler `neural-evolution-daily` existe em `ingestaokraken/us-east1`, está `ENABLED` e roda `*/30 * * * *` em `America/Sao_Paulo`, ou seja, de 30 em 30 minutos. A última tentativa vista foi `2026-06-29T08:01:19.716573Z`.
 
 O payload atual do job chama `neural_evolution_orchestrator` com `strategy=deterministic_phase2`, `budget.max_trials=1`, `max_runtime_minutes=45` e `phase2.include_seed_repeats=false`; portanto o Scheduler existente está rodando Fase 2, não Fase 3. Próximo passo para Fase 3 permanece: rodar primeiro dry-run/manual com `strategy=phase3_new_families` e só criar Scheduler separado se houver decisão de recorrência controlada.
+
+## Teste manual da Fase 3 — 2026-06-29 08:08 UTC
+
+Roteiro documentado em `docs/neural_evolution_orchestrator_scheduler.md`: depois do deploy, executar primeiro `curl` com `dry_run=true`, `strategy=phase3_new_families` e `budget.max_trials=3`; validar `status=ok`, `dry_run=true` e candidatas `neural_eod_phase3_*`; só então executar uma rodada real mínima com `max_trials=1`. A validação deve ser feita pela API `/api/ops/neural/evolution/leaderboard` e, se necessário, por consulta MCP/BigQuery em `neural_candidate_configs`. Não automatizar `approve_if_passed`.
+
+## Dry-run Fase 3 indica deploy desatualizado — 2026-06-29 08:14 UTC
+
+O teste do usuário com `strategy=phase3_new_families` retornou `neural_eod_mlp_evo1_20260629_*`, e o `curl` local reproduziu o mesmo comportamento. Isso indica que a Cloud Function publicada ainda não contém a implementação local da Fase 3; se estivesse atualizada, o dry-run deveria indicar `candidate_sources=["phase3_family"]`, `architecture_types` com novas famílias e candidatos `neural_eod_phase3_*`. Próximo passo: publicar `functions/neural_evolution_orchestrator` e `functions/neural_training`, repetir o dry-run e só executar treino real se esses campos confirmarem Fase 3.
+
+## Resultado do teste manual criado — 2026-06-29 08:18 UTC
+
+A execução real `neural_evolution_20260629_081013_8114097c` foi criada e avaliada, mas não como Fase 3 real: ela aparece com `strategy=phase3_new_families`, porém `candidateSource=deterministic`, `modelId=neural_eod_mlp`, `modelVersion=neural_eod_mlp_evo1_20260629_01` e arquitetura `type=mlp`. O BigQuery/MCP confirmou avaliação `decision=reject` e gate `rejected`. Próximo passo: não repetir treino real; redeployar `functions/neural_evolution_orchestrator` e `functions/neural_training`, repetir dry-run e só avançar quando vier `candidate_sources=["phase3_family"]` e prefixo `neural_eod_phase3_`.
+
+## Comando Scheduler Fase 3 30 minutos — 2026-06-29 08:23 UTC
+
+Foi documentado o comando para criar `neural-evolution-phase3-30m` com agenda `*/30 * * * *`, payload `strategy=phase3_new_families` e `budget.max_trials=1`. Só executar depois de redeployar as funções e confirmar em dry-run que a resposta traz `candidate_sources=["phase3_family"]` e prefixo `neural_eod_phase3_`; caso contrário, o Scheduler repetirá o fluxo MLP antigo.

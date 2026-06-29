@@ -375,8 +375,19 @@ def test_orchestrator_phase3_generates_new_family_candidates(monkeypatch):
     )
 
     assert status == 200
+    assert response["strategy"] == "phase3_new_families"
     assert response["candidate_count"] == 2
+    assert response["candidate_sources"] == ["phase3_family"]
+    assert set(response["architecture_types"]) <= {
+        "residual_mlp",
+        "wide_deep_mlp",
+        "tabular_bottleneck_mlp",
+    }
     assert all("phase3" in candidate for candidate in response["candidates"])
+    assert all(
+        detail["candidate_source"] == "phase3_family"
+        for detail in response["candidate_details"]
+    )
 
     candidates = module._generate_candidates_for_strategy(
         client=fake_client,

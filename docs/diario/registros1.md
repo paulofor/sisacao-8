@@ -1534,3 +1534,34 @@ A leitura da tela `Redes neurais — Treinos` indicou 86 redes em estágio `Cand
 - O payload atual decodificado usa `strategy=deterministic_phase2`, `budget.max_trials=1`, `max_runtime_minutes=45`, `max_parameter_count=150000`, `max_layers=4`, `random_seed=20260621` e `phase2.include_seed_repeats=false`; ou seja, o agendamento existente ainda roda Fase 2, não Fase 3.
 - Conclusão operacional: já existe agendamento recorrente para evolução neural; para Fase 3, manter primeiro execução manual/dry-run ou criar job separado somente se for desejada recorrência própria, sem alterar o job diário de Fase 2 sem decisão explícita.
 - Comandos usados: `which gcloud`, script Python `urllib.request` para MCP JSON-RPC (`initialize` e `tools/call` com `cloud_scheduler_job`) e script Python para decodificar o body base64 do Scheduler.
+
+## 2026-06-29 08:08 UTC — Roteiro de teste manual da Fase 3 neural
+- Preparado roteiro operacional para testar manualmente a Fase 3 (`strategy=phase3_new_families`) sem depender de novo Scheduler.
+- Atualizado `docs/neural_evolution_orchestrator_scheduler.md` com sequência segura: dry-run sem escrita/treino, opção de rodada sem treino, primeiro treino real com `max_trials=1`, validação pela API publicada e consulta read-only via MCP/BigQuery.
+- Reforçado que a primeira execução produtiva deve usar orçamento mínimo, fora de horário crítico, e que `approve_if_passed` não deve ser automatizado.
+- Próximo passo operacional das redes: após deploy das funções atualizadas, executar o dry-run manual documentado e só avançar para treino real mínimo se o retorno indicar `status=ok`, `dry_run=true` e candidatas `neural_eod_phase3_*`.
+- Comandos usados: `sed -n` em `docs/neural_evolution_orchestrator_scheduler.md`, edição via shell e `git diff --check`.
+
+## 2026-06-29 08:14 UTC — Diagnóstico de dry-run Fase 3 ainda usando Fase 1 publicada
+- Analisada a saída operacional do usuário para `strategy=phase3_new_families`: o endpoint publicado retornou candidatas `neural_eod_mlp_evo1_20260629_*`, sem prefixo `neural_eod_phase3_`, apesar de `dry_run=true` e status `ok`.
+- Reproduzido via `curl` local contra `https://us-east1-ingestaokraken.cloudfunctions.net/neural_evolution_orchestrator`, confirmando que a função publicada ainda gera `neural_eod_mlp_evo1_20260629_01` para `strategy=phase3_new_families`.
+- Causa confirmada por comparação com o código do repositório: a versão local já reconhece `_is_phase3_strategy` e gera prefixo `neural_eod_phase3_<data>`, portanto o comportamento produtivo indica deploy desatualizado da Cloud Function, não falha do comando do usuário.
+- Atualizado o orquestrador para incluir no retorno `strategy`, `candidate_sources`, `architecture_types` e `candidate_details`, facilitando detectar imediatamente se a função publicada reconheceu Fase 3 após o próximo deploy.
+- Atualizado o runbook com seção de diagnóstico: se `strategy=phase3_new_families` ainda retornar `neural_eod_mlp_evo1_*` ou não trouxer `candidate_sources=["phase3_family"]`, não avançar para treino real; primeiro redeployar `functions/neural_evolution_orchestrator` e `functions/neural_training`.
+- Próximo passo operacional das redes atualizado: publicar as funções atualizadas e repetir dry-run; a execução real de Fase 3 só deve ocorrer quando o dry-run retornar `candidate_sources=["phase3_family"]`, `architecture_types` de novas famílias e prefixo `neural_eod_phase3_`.
+- Comandos usados: `curl -sS -X POST https://us-east1-ingestaokraken.cloudfunctions.net/neural_evolution_orchestrator`, `rg -n` em `functions/neural_evolution_orchestrator/main.py`, `sisacao8/neural_evolution.py`, `.github/workflows/deploy.yml` e runbook, edição via Python/shell e `python -m pytest tests/test_neural_evolution_orchestrator_function.py -q`.
+
+## 2026-06-29 08:18 UTC — Verificação se o teste manual criou candidata
+- Verificada a pergunta do usuário sobre o resultado incompleto do teste manual da Fase 3.
+- Consultado o endpoint publicado `GET http://34.194.252.70/api/ops/neural/evolution/leaderboard`, confirmando que a execução `neural_evolution_20260629_081013_8114097c` aparece no leaderboard com `strategy=phase3_new_families`, porém `candidateSource=deterministic`, `modelId=neural_eod_mlp`, `modelVersion=neural_eod_mlp_evo1_20260629_01` e `architectureJson.type=mlp`.
+- Confirmado via MCP obrigatório em `http://mcpserversisacao.shop/mcp` por JSON-RPC HTTP usando `bigquery_query` que a execução gravou registros em `neural_candidate_configs`, `neural_candidate_evaluations` e `neural_gate_decisions`; a avaliação recebeu `decision=reject` e `gate_status=rejected`, com `score_total=0.346547`.
+- Conclusão operacional: foi criada e avaliada uma candidata, mas não foi criada uma candidata de Fase 3 real (`phase3_family`). O endpoint publicado ainda está executando código antigo que trata `phase3_new_families` como fluxo determinístico MLP/Fase 1.
+- Próximo passo operacional: não repetir treino real de Fase 3 até redeploy de `functions/neural_evolution_orchestrator` e `functions/neural_training`; após deploy, o dry-run precisa retornar `candidate_sources=["phase3_family"]`, `architecture_types` de novas famílias e prefixo `neural_eod_phase3_`.
+- Comandos usados: script Python com `urllib.request` para consultar `/api/ops/neural/evolution/leaderboard`, MCP JSON-RPC HTTP (`initialize` e `tools/call` com `bigquery_query`) e análise dos campos `evolution_run_id`, `candidate_source`, `model_version`, `decision` e `gate_status`.
+
+## 2026-06-29 08:23 UTC — Comando para Scheduler Fase 3 a cada 30 minutos
+- Preparado comando operacional solicitado para criar um Cloud Scheduler separado da Fase 3, `neural-evolution-phase3-30m`, com cadência `*/30 * * * *` em `America/Sao_Paulo`.
+- O payload usa `strategy=phase3_new_families` e orçamento mínimo `max_trials=1`, para reduzir custo/concorrência quando rodar de 30 em 30 minutos.
+- Atualizado `docs/neural_evolution_orchestrator_scheduler.md` com comandos de `create`, `update` e `describe`, sem OIDC enquanto a função estiver pública.
+- Observação operacional mantida: só criar/ativar esse Scheduler depois de o dry-run confirmar que a Cloud Function publicada retorna `candidate_sources=["phase3_family"]` e prefixo `neural_eod_phase3_`; caso contrário, o job criará MLP determinística antiga.
+- Comandos usados: edição via shell em `docs/neural_evolution_orchestrator_scheduler.md` e `git diff --check`.

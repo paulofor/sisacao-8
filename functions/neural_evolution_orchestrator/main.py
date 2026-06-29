@@ -153,12 +153,23 @@ def neural_evolution_orchestrator(request_obj: Any) -> tuple[Dict[str, Any], int
             "status": "ok",
             "evolution_run_id": evolution_run_id,
             "dataset_snapshot": dataset_snapshot,
+            "strategy": strategy,
             "candidate_count": len(candidates),
             "trained_count": 0,
             "evaluated_count": 0,
             "failed_count": 0,
             "dry_run": True,
             "candidates": [candidate.model_version for candidate in candidates],
+            "candidate_sources": sorted(
+                {candidate.candidate_source for candidate in candidates}
+            ),
+            "architecture_types": sorted(
+                {
+                    str(candidate.architecture.get("type", "mlp"))
+                    for candidate in candidates
+                }
+            ),
+            "candidate_details": _candidate_response_details(candidates),
             "failures": [],
         }, 200
 
@@ -235,6 +246,7 @@ def neural_evolution_orchestrator(request_obj: Any) -> tuple[Dict[str, Any], int
         "status": "ok" if status != "failed" else "error",
         "evolution_run_id": evolution_run_id,
         "dataset_snapshot": dataset_snapshot,
+        "strategy": strategy,
         "candidate_count": len(candidates),
         "trained_count": len(training_results),
         "evaluated_count": len(evaluation_rows),
@@ -244,8 +256,29 @@ def neural_evolution_orchestrator(request_obj: Any) -> tuple[Dict[str, Any], int
         "family_evaluation_count": len(family_evaluation_rows),
         "dry_run": dry_run,
         "candidates": [candidate.model_version for candidate in candidates],
+        "candidate_sources": sorted(
+            {candidate.candidate_source for candidate in candidates}
+        ),
+        "architecture_types": sorted(
+            {str(candidate.architecture.get("type", "mlp")) for candidate in candidates}
+        ),
+        "candidate_details": _candidate_response_details(candidates),
         "failures": failures,
     }, (200 if status != "failed" else 500)
+
+
+def _candidate_response_details(
+    candidates: Iterable[CandidateConfig],
+) -> list[dict[str, Any]]:
+    return [
+        {
+            "model_version": candidate.model_version,
+            "model_id": candidate.model_id,
+            "candidate_source": candidate.candidate_source,
+            "architecture_type": str(candidate.architecture.get("type", "mlp")),
+        }
+        for candidate in candidates
+    ]
 
 
 def _model_version_prefix(
