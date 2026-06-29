@@ -398,55 +398,73 @@ def generate_phase3_family_candidates(
     rng.shuffle(shuffled_space)
     candidates: list[CandidateConfig] = []
     seed_offset = 0
+    repeat_round = 0
+    max_attempts = max(budget.max_trials * max(len(shuffled_space), 1) * 30, 30)
+    attempts = 0
 
-    for family in shuffled_space:
-        if len(candidates) >= budget.max_trials:
-            break
-        hidden_units = tuple(int(item) for item in family["hidden_units"])
-        if len(hidden_units) > budget.max_layers:
-            continue
-        if estimate_parameter_count(hidden_units) > budget.max_parameter_count:
-            continue
-        architecture_type = str(family["architecture_type"])
-        architecture = {
-            "type": architecture_type,
-            "hidden_units": list(hidden_units),
-            "batch_norm": bool(family.get("batch_norm", False)),
-            "phase": "phase3_new_family",
-        }
-        hyperparameters = {
-            "dropout_rate": float(family.get("dropout_rate", 0.15)),
-            "learning_rate": float(family.get("learning_rate", 0.0005)),
-            "batch_size": int(family.get("batch_size", 256)),
-            "epochs": int(family.get("epochs", 60)),
-            "random_seed": int(budget.random_seed) + 30_000 + seed_offset,
-            "early_stopping": True,
-            "early_stopping_patience": int(family.get("early_stopping_patience", 10)),
-            "class_weight": str(family.get("class_weight", "balanced")),
-            "architecture_type": architecture_type,
-        }
-        seed_offset += 1
-        dedupe_hash = candidate_hash(architecture, hyperparameters)
-        if dedupe_hash in seen:
-            continue
-        seen.add(dedupe_hash)
-        index = len(candidates) + 1
-        candidates.append(
-            _candidate_from_parts(
-                evolution_run_id=evolution_run_id,
-                dataset_snapshot=dataset_snapshot,
-                model_version=f"{model_version_prefix}_{architecture_type}_{index:02d}",
-                candidate_source="phase3_family",
-                architecture=architecture,
-                hyperparameters=hyperparameters,
-                dedupe_hash=dedupe_hash,
-                notes=(
-                    "Fase 3 pesquisa/shadow de nova família neural; "
-                    f"architecture_type={architecture_type}; candidate_index={index}"
+    while len(candidates) < budget.max_trials and attempts < max_attempts:
+        for family in shuffled_space:
+            if len(candidates) >= budget.max_trials or attempts >= max_attempts:
+                break
+            attempts += 1
+            hidden_units = tuple(int(item) for item in family["hidden_units"])
+            if len(hidden_units) > budget.max_layers:
+                continue
+            if estimate_parameter_count(hidden_units) > budget.max_parameter_count:
+                continue
+            architecture_type = str(family["architecture_type"])
+            architecture = {
+                "type": architecture_type,
+                "hidden_units": list(hidden_units),
+                "batch_norm": bool(family.get("batch_norm", False)),
+                "phase": "phase3_new_family",
+            }
+            hyperparameters = {
+                "dropout_rate": float(family.get("dropout_rate", 0.15)),
+                "learning_rate": float(family.get("learning_rate", 0.0005)),
+                "batch_size": int(family.get("batch_size", 256)),
+                "epochs": int(family.get("epochs", 60)),
+                "random_seed": int(budget.random_seed) + 30_000 + seed_offset,
+                "early_stopping": True,
+                "early_stopping_patience": int(
+                    family.get("early_stopping_patience", 10)
                 ),
-                model_id=str(family.get("model_id") or MODEL_ID),
+                "class_weight": str(family.get("class_weight", "balanced")),
+                "architecture_type": architecture_type,
+            }
+            seed_offset += 1
+            dedupe_hash = candidate_hash(architecture, hyperparameters)
+            if dedupe_hash in seen:
+                continue
+            seen.add(dedupe_hash)
+            index = len(candidates) + 1
+            repeat_suffix = (
+                ""
+                if repeat_round == 0
+                else f"_seed{int(hyperparameters['random_seed'])}"
             )
-        )
+            candidates.append(
+                _candidate_from_parts(
+                    evolution_run_id=evolution_run_id,
+                    dataset_snapshot=dataset_snapshot,
+                    model_version=(
+                        f"{model_version_prefix}_{architecture_type}"
+                        f"{repeat_suffix}_{index:02d}"
+                    ),
+                    candidate_source="phase3_family",
+                    architecture=architecture,
+                    hyperparameters=hyperparameters,
+                    dedupe_hash=dedupe_hash,
+                    notes=(
+                        "Fase 3 pesquisa/shadow de nova família neural; "
+                        f"architecture_type={architecture_type}; "
+                        f"seed={hyperparameters['random_seed']}; "
+                        f"candidate_index={index}"
+                    ),
+                    model_id=str(family.get("model_id") or MODEL_ID),
+                )
+            )
+        repeat_round += 1
     return candidates
 
 
