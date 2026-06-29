@@ -67,6 +67,30 @@ def test_generate_phase3_family_candidates_creates_new_family_payloads():
     )
 
 
+def test_generate_phase3_family_candidates_repeats_with_fresh_seeds_after_exhaustion():
+    first = generate_phase3_family_candidates(
+        evolution_run_id="run-phase3-a",
+        dataset_snapshot="snapshot-1",
+        budget=EvolutionBudget(max_trials=3, random_seed=7),
+        model_version_prefix="phase3_test",
+    )
+
+    repeated = generate_phase3_family_candidates(
+        evolution_run_id="run-phase3-b",
+        dataset_snapshot="snapshot-1",
+        budget=EvolutionBudget(max_trials=2, random_seed=7),
+        existing_hashes={candidate.dedupe_hash for candidate in first},
+        model_version_prefix="phase3_test",
+    )
+
+    assert len(repeated) == 2
+    assert {candidate.candidate_source for candidate in repeated} == {"phase3_family"}
+    assert not {candidate.dedupe_hash for candidate in repeated} & {
+        candidate.dedupe_hash for candidate in first
+    }
+    assert all("_seed" in candidate.model_version for candidate in repeated)
+
+
 def test_candidate_hash_changes_with_hyperparameters():
     architecture = {"type": "mlp", "hidden_units": [64, 32]}
 

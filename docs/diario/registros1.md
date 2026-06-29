@@ -1565,3 +1565,22 @@ A leitura da tela `Redes neurais — Treinos` indicou 86 redes em estágio `Cand
 - Atualizado `docs/neural_evolution_orchestrator_scheduler.md` com comandos de `create`, `update` e `describe`, sem OIDC enquanto a função estiver pública.
 - Observação operacional mantida: só criar/ativar esse Scheduler depois de o dry-run confirmar que a Cloud Function publicada retorna `candidate_sources=["phase3_family"]` e prefixo `neural_eod_phase3_`; caso contrário, o job criará MLP determinística antiga.
 - Comandos usados: edição via shell em `docs/neural_evolution_orchestrator_scheduler.md` e `git diff --check`.
+
+## 2026-06-29 13:45 UTC — Verificação visual da aba Treinos sobre Fase 3
+- Verificação inicial limitada ao endpoint de leaderboard; posteriormente corrigida pela investigação de 13:54 UTC, que confirmou candidatas reais de Fase 3 em `training-runs`/BigQuery.
+- Consultado `GET http://34.194.252.70/api/ops/neural/evolution/leaderboard` via script Python com `urllib.request`: o endpoint retornou 100 registros, todos com `modelId=neural_eod_mlp`, `candidateSource` distribuído entre `deterministic`, `mutation` e `architecture_variant`, e sem qualquer ocorrência de `phase3`, `phase3_family`, `neural_eod_phase3_`, `residual_mlp`, `wide_deep_mlp` ou `tabular_bottleneck_mlp`.
+- Consultado `GET http://34.194.252.70/api/ops/neural/gate-decisions`: há decisões MUEN recentes em 2026-06-29, porém os hashes/famílias vistos continuam no padrão MLP Fase 2/variante arquitetural, por exemplo `neural_eod_mlp_evo2_20260629_arch_01`, não Fase 3.
+- Conclusão corrigida posteriormente: o leaderboard limitado por score não mostrava Fase 3, mas o BigQuery/registro de treinos confirmou três candidatas reais `phase3_family`; ver entrada de 13:54 UTC.
+- Próximo passo operacional corrigido posteriormente: tratar o esgotamento/deduplicação do espaço de Fase 3 e redeployar o orquestrador com geração por seeds frescas.
+- Comandos usados: scripts Python com `urllib.request` contra `/api/ops/neural/evolution/leaderboard` e `/api/ops/neural/gate-decisions`, com contagem por `strategy`, `candidateSource`, `modelId` e `decision`.
+
+## 2026-06-29 13:54 UTC — Causa real após deploy da Fase 3
+- Reinvestigada a situação após o usuário confirmar que já fez o deploy.
+- Executado dry-run HTTP contra `https://us-east1-ingestaokraken.cloudfunctions.net/neural_evolution_orchestrator` com `strategy=phase3_new_families`; a função publicada retornou HTTP 500.
+- Consultados logs via MCP HTTP/JSON-RPC (`cloud_run_function_logs`) e confirmada a exceção real: `ValueError: No neural evolution candidates were generated` em `/workspace/main.py`, linha 129.
+- Consultado BigQuery via MCP HTTP/JSON-RPC (`bigquery_query`) e confirmadas 3 candidatas reais de Fase 3 já criadas/treinadas/avaliadas: `neural_eod_phase3_20260629_tabular_bottleneck_mlp_01`, `neural_eod_phase3_20260629_residual_mlp_01` e `neural_eod_phase3_20260629_wide_deep_mlp_01`, todas com `candidate_source=phase3_family`, `registry_status=candidate`, avaliação `reject` e Gate MUEN `rejected`.
+- Causa operacional real: o deploy funcionou e criou as três famílias base da Fase 3; depois disso, o gerador ficou sem novas candidatas porque a estratégia tinha apenas uma configuração fixa por família e o `dedupe_hash` dessas três combinações já estava em `neural_candidate_configs`. As chamadas recorrentes passam a falhar com 500 por esgotamento/deduplicação total, não por falta de deploy.
+- Observação de tela: a aba de Treinos consegue conter essas candidatas como `status=candidate`, mas o resumo visual não separa Fase 3; além disso, o leaderboard ordenado por score pode ocultá-las quando limitado aos 100 maiores scores.
+- Correção aplicada no código: `generate_phase3_family_candidates` agora continua tentando as mesmas famílias com seeds frescas quando as combinações base já existem, gerando hashes e versões novas com sufixo `_seed<seed>` em vez de retornar lista vazia.
+- Próximo passo operacional: publicar novamente `functions/neural_evolution_orchestrator` com essa correção e repetir dry-run/execução pequena; a expectativa é que a função deixe de retornar 500 por `No neural evolution candidates were generated` e crie novas tentativas `phase3_family` com seed fresca.
+- Comandos usados: `urllib.request` contra a Cloud Function, MCP HTTP/JSON-RPC com `cloud_run_function_logs`, MCP HTTP/JSON-RPC com `bigquery_query`, `rg`, edição via Python e `pytest`.

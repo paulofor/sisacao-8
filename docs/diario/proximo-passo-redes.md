@@ -165,3 +165,11 @@ A execução real `neural_evolution_20260629_081013_8114097c` foi criada e avali
 ## Comando Scheduler Fase 3 30 minutos — 2026-06-29 08:23 UTC
 
 Foi documentado o comando para criar `neural-evolution-phase3-30m` com agenda `*/30 * * * *`, payload `strategy=phase3_new_families` e `budget.max_trials=1`. Só executar depois de redeployar as funções e confirmar em dry-run que a resposta traz `candidate_sources=["phase3_family"]` e prefixo `neural_eod_phase3_`; caso contrário, o Scheduler repetirá o fluxo MLP antigo.
+
+## Verificação da tela Treinos — 2026-06-29 13:45 UTC
+
+Verificação inicial limitada ao leaderboard: os 100 itens ordenados por score não mostravam Fase 3. Essa conclusão foi corrigida pela investigação posterior de 13:54 UTC: o BigQuery e o registro de treinos confirmaram três candidatas reais `phase3_family`; o problema atual é esgotamento/deduplicação do espaço inicial da Fase 3.
+
+## Causa real pós-deploy da Fase 3 — 2026-06-29 13:54 UTC
+
+O deploy da Fase 3 funcionou parcialmente: o BigQuery já contém três candidatas reais `phase3_family` (`tabular_bottleneck_mlp`, `residual_mlp` e `wide_deep_mlp`) com prefixo `neural_eod_phase3_`, todas treinadas, avaliadas e rejeitadas pelo Gate MUEN. O problema atual é esgotamento/deduplicação do espaço inicial: após criar uma configuração fixa por família, novas chamadas com `strategy=phase3_new_families` não geravam nenhuma candidata inédita e a função retornava HTTP 500 com `ValueError: No neural evolution candidates were generated`. O código foi ajustado para repetir famílias de Fase 3 com seeds frescas quando as combinações base já existirem. Próximo passo: redeployar `functions/neural_evolution_orchestrator` com essa correção e validar que o dry-run/execução pequena volta a retornar candidatas `phase3_family` em vez de 500.
