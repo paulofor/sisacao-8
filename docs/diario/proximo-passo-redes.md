@@ -207,3 +207,11 @@ Próximo passo operacional permanece monitorar a geração recorrente de Fase 3,
 A Fase 3 está gerando redes após a correção por seeds frescas. O endpoint publicado de treinos mostra 6 candidatas Fase 3 no recorte atual: 2 `residual_mlp`, 2 `wide_deep_mlp` e 2 `tabular_bottleneck_mlp`, todas ainda com `status=candidate`. As mais recentes foram criadas em sequência às 15:02, 15:31 e 16:01 UTC com sufixos `seed20290633`, `seed20290634` e `seed20290635`.
 
 Próximo passo operacional: continuar monitorando se a cadência de Fase 3 segue criando exatamente uma candidata por execução sem HTTP 500, acompanhar decisões MUEN dessas candidatas e não promover/automatizar `approve_if_passed` sem decisão humana explícita.
+
+## Próximo passo após diagnóstico do limite do gate — 2026-06-30 08:18 UTC-3
+
+O cartão “Rejeitadas no gate” agora deve ser lido como recorte das últimas decisões carregadas pela API. Como o backend atual limita `/api/ops/neural/gate-decisions` a 50 linhas, o frontend foi ajustado para exibir `50+` quando esse limite for atingido. Próximo passo operacional: se for necessário acompanhar o total histórico real, evoluir o backend para retornar agregados/counts separados da listagem paginada, sem remover o limite da tabela de últimas tentativas.
+
+## Próximo passo após contagem histórica do gate — 2026-06-30 08:31 UTC-3
+
+A tela Treinos passa a depender dos campos agregados `totalDecisions`, `rejectedDecisions` e `passedDecisions` no endpoint `/api/ops/neural/gate-decisions` para mostrar número histórico correto no cartão “Rejeitadas no gate”, mantendo a tabela de auditoria limitada às últimas 50 decisões. Próximo passo operacional: publicar backend e frontend juntos; se apenas o frontend for publicado, ele mantém fallback para o recorte carregado até o backend novo estar em produção.

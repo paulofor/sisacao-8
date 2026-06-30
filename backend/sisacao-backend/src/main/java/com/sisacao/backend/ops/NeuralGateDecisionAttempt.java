@@ -22,5 +22,8 @@ public record NeuralGateDecisionAttempt(
         Double medianExpectancyNet,
         Double maxDrawdown,
         Long totalTrades,
-        Boolean stableAcrossSeeds) {
+        Boolean stableAcrossSeeds,
+        Long totalDecisions,
+        Long rejectedDecisions,
+        Long passedDecisions) {
 }
