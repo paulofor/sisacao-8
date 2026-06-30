@@ -233,17 +233,23 @@ const NeuralTrainingRunsTab: FC<NeuralTrainingRunsTabProps> = ({
   gateDecisionsLoading = false,
 }) => {
   const latest = latestRun(runs)
-  const approvedCount = runs.filter(
+  const registryTotals = runs[0]
+  const approvedCount = registryTotals?.approvedRuns ?? runs.filter(
     (run) => run.status?.toLowerCase() === 'approved',
   ).length
   const phase3Runs = runs.filter(isPhase3Run)
   const phase3CandidateCount = phase3Runs.filter((run) => run.status?.toLowerCase() === 'candidate').length
-  const candidateCount = runs.filter((run) => run.status?.toLowerCase() === 'candidate').length
-  const activeTrainingCount = runs.filter((run) => ['running', 'training', 'in_progress'].includes(run.status?.toLowerCase() ?? '')).length
-  const rejectedCount = runs.filter((run) => ['rejected', 'reject'].includes(run.status?.toLowerCase() ?? '')).length
+  const candidateCount = registryTotals?.candidateRuns ?? runs.filter((run) => run.status?.toLowerCase() === 'candidate').length
+  const totalRunsCount = registryTotals?.totalRuns ?? runs.length
+  const activeTrainingCount = registryTotals?.activeTrainingRuns ?? runs.filter((run) => ['running', 'training', 'in_progress'].includes(run.status?.toLowerCase() ?? '')).length
+  const rejectedCount = registryTotals?.rejectedRuns ?? runs.filter((run) => ['rejected', 'reject'].includes(run.status?.toLowerCase() ?? '')).length
   const candidateRuns = runs.filter((run) => run.status?.toLowerCase() === 'candidate')
   const rejectedGateDecisions = gateDecisions.filter((attempt) => attempt.decisionStatus?.toLowerCase() === 'rejected' || attempt.passed === false)
   const passedGateDecisions = gateDecisions.filter((attempt) => attempt.passed || attempt.decisionStatus?.toLowerCase() === 'passed')
+  const totalGateDecisions = gateDecisions[0]?.totalDecisions ?? gateDecisions.length
+  const totalRejectedGateDecisions = gateDecisions[0]?.rejectedDecisions ?? rejectedGateDecisions.length
+  const totalPassedGateDecisions = gateDecisions[0]?.passedDecisions ?? passedGateDecisions.length
+  const gateDecisionHelperPrefix = `${formatNumber(totalGateDecisions)} decisões MUEN no histórico`
   const evaluatedCandidateKeys = new Set(
     gateDecisions
       .map((attempt) => normalizeCandidateKey(attempt.candidateFamilyHash))
@@ -288,7 +294,7 @@ const NeuralTrainingRunsTab: FC<NeuralTrainingRunsTabProps> = ({
           <Stack direction="row" flexWrap="wrap" gap={2}>
             <SummaryCard
               title="Total de redes"
-              value={formatNumber(runs.length)}
+              value={formatNumber(totalRunsCount)}
               helper="artefatos treinados/registrados"
             />
             <SummaryCard
@@ -318,8 +324,8 @@ const NeuralTrainingRunsTab: FC<NeuralTrainingRunsTabProps> = ({
             />
             <SummaryCard
               title="Rejeitadas no gate"
-              value={formatNumber(rejectedGateDecisions.length)}
-              helper={`${formatNumber(gateDecisions.length)} decisões MUEN; ${formatNumber(passedGateDecisions.length)} aprovadas`}
+              value={formatNumber(totalRejectedGateDecisions)}
+              helper={`${gateDecisionHelperPrefix}; ${formatNumber(totalPassedGateDecisions)} aprovadas`}
             />
           </Stack>
 
@@ -334,7 +340,7 @@ const NeuralTrainingRunsTab: FC<NeuralTrainingRunsTabProps> = ({
                   { label: 'Pode ser testada', value: pendingGateCandidateCount, color: 'info' as const, helper: 'sem decisão MUEN carregada' },
                   { label: 'Aprovada', value: approvedCount, color: 'success' as const, helper: 'liberada para uso controlado' },
                   { label: 'Rejeitada no registro', value: rejectedCount, color: 'error' as const, helper: 'status final no registry' },
-                  { label: 'Rejeitada no gate', value: rejectedGateDecisions.length, color: 'error' as const, helper: 'analisada e bloqueada pelo MUEN' },
+                  { label: 'Rejeitada no gate', value: totalRejectedGateDecisions, color: 'error' as const, helper: 'analisada e bloqueada pelo MUEN' },
                 ].map((stage) => (
                   <Paper key={stage.label} elevation={0} sx={{ p: 2, minWidth: 190, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
                     <Stack spacing={0.75}>

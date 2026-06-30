@@ -160,6 +160,9 @@ export interface NeuralGateDecisionAttempt {
   maxDrawdown: number | null
   totalTrades: number | null
   stableAcrossSeeds: boolean | null
+  totalDecisions: number | null
+  rejectedDecisions: number | null
+  passedDecisions: number | null
 }
 
 export interface NeuralTrainingRun {
@@ -181,6 +184,11 @@ export interface NeuralTrainingRun {
   trainedAt: string | null
   createdAt: string | null
   notes: string | null
+  totalRuns: number | null
+  candidateRuns: number | null
+  approvedRuns: number | null
+  rejectedRuns: number | null
+  activeTrainingRuns: number | null
 }
 
 export interface AiAdvisorRequest {
@@ -569,6 +577,11 @@ export const fetchNeuralTrainingRuns = async (): Promise<NeuralTrainingRun[]> =>
       trainedAt: toIsoDateTime(record.trainedAt ?? record.trained_at),
       createdAt: toIsoDateTime(record.createdAt ?? record.created_at),
       notes: asNullableString(record.notes),
+      totalRuns: toNumber(record.totalRuns ?? record.total_runs),
+      candidateRuns: toNumber(record.candidateRuns ?? record.candidate_runs),
+      approvedRuns: toNumber(record.approvedRuns ?? record.approved_runs),
+      rejectedRuns: toNumber(record.rejectedRuns ?? record.rejected_runs),
+      activeTrainingRuns: toNumber(record.activeTrainingRuns ?? record.active_training_runs),
     }
   })
 }
@@ -603,6 +616,9 @@ export const fetchNeuralGateDecisions = async (): Promise<NeuralGateDecisionAtte
       maxDrawdown: toNumber(record.maxDrawdown ?? record.max_drawdown),
       totalTrades: toNumber(record.totalTrades ?? record.total_trades),
       stableAcrossSeeds: toBoolean(record.stableAcrossSeeds ?? record.stable_across_seeds),
+      totalDecisions: toNumber(record.totalDecisions ?? record.total_decisions),
+      rejectedDecisions: toNumber(record.rejectedDecisions ?? record.rejected_decisions),
+      passedDecisions: toNumber(record.passedDecisions ?? record.passed_decisions),
     }
   })
 }

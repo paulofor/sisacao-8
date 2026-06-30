@@ -1623,3 +1623,24 @@ A leitura da tela `Redes neurais — Treinos` indicou 86 redes em estágio `Cand
 - Correção aplicada no frontend: a aba Treinos agora calcula `phase3Runs`, mostra o cartão “Fase 3 visíveis”, inclui a etapa “Fase 3” no guia de estágios e adiciona a coluna “Fase/família” na tabela, identificando redes por prefixo `neural_eod_phase3_`, origem `phase3_family` ou pelas arquiteturas novas.
 - Próximo passo operacional: publicar o frontend atualizado na VPS e confirmar visualmente que o cartão “Fase 3 visíveis” aparece com a contagem atual; continuar monitorando geração recorrente e decisões MUEN sem promoção automática.
 - Comandos usados: `python3` com `urllib.request` contra `/api/ops/neural/training-runs`, `rg`, `sed -n`, edição via Python, `npx prettier`, `npm run build`, `git diff --check` e `git status`.
+
+## 2026-06-30 08:18 UTC-3 — Diagnóstico do cartão Rejeitadas no gate
+- Investigada a dúvida sobre o cartão “Rejeitadas no gate” ficar em 50 na aba Treinos.
+- Confirmado no frontend que o cartão conta apenas as decisões MUEN carregadas no array `gateDecisions`, filtrando `decisionStatus=rejected` ou `passed=false`.
+- Confirmado no backend que o endpoint `/ops/neural/gate-decisions` ordena por `decided_at DESC` e aplica `LIMIT 50`; portanto a tela recebe no máximo as últimas 50 decisões, não o total histórico do BigQuery.
+- Confirmado no endpoint publicado `GET http://34.194.252.70/api/ops/neural/gate-decisions` que o payload atual contém exatamente 50 itens e todos estão como `decisionStatus=rejected`/`passed=false`; por isso o valor visual fica travado em 50 enquanto houver pelo menos 50 rejeições recentes e nenhuma aprovação no recorte.
+- Correção de clareza aplicada no frontend: quando a API devolve 50 decisões, o cartão passa a mostrar `50+` e o helper informa que são as últimas 50 decisões MUEN carregadas, evitando interpretação de total absoluto.
+- Comandos usados: `rg`, `sed -n`, script Python com `urllib.request` para consultar `/api/ops/neural/gate-decisions`, edição via Python e `npm run lint -- --max-warnings=0` em `frontend/app`.
+
+## 2026-06-30 08:31 UTC-3 — Contagem histórica exata para Rejeitadas no gate
+- Ajustada a solução anterior após feedback do usuário: em vez de exibir `50+`, o backend agora inclui agregados históricos na própria consulta de `/ops/neural/gate-decisions` usando janelas `COUNT(*) OVER ()` e `COUNTIF(...) OVER ()` antes do `LIMIT 50` da lista de últimas decisões.
+- O record `NeuralGateDecisionAttempt` passou a expor `totalDecisions`, `rejectedDecisions` e `passedDecisions`; a listagem continua limitada às últimas 50 linhas para auditoria, mas cada linha traz as contagens corretas do histórico retornado pela tabela.
+- O frontend passou a usar `rejectedDecisions`/`passedDecisions`/`totalDecisions` quando disponíveis, mantendo fallback para o tamanho do array apenas em backends antigos.
+- Comandos usados: edição via Python, `rg`, `sed -n`, `npm run lint -- --max-warnings=0`, `npm run build` em `frontend/app` e `./mvnw test -Dtest=OpsControllerTest,OpsServiceTest,BigQueryOpsClientTest` em `backend/sisacao-backend`.
+
+## 2026-06-30 10:54 UTC-3 — Contagem histórica exata para Candidatas
+- Investigada a suspeita de que o cartão “Candidata” também estivesse travado: confirmado no código que a aba Treinos calculava `candidateCount` apenas sobre o array `runs` carregado de `/ops/neural/training-runs`.
+- Confirmado no backend que `fetchNeuralTrainingRuns()` mantém a listagem limitada a `LIMIT 100`; portanto “Total de redes”, “Candidatas”, “Em treino agora”, “Aprovadas” e “Rejeitada no registro” podiam ficar limitados ao recorte visível quando o registry passasse de 100 linhas.
+- Correção aplicada: a consulta de `neural_model_registry` agora inclui agregados históricos por janela (`totalRuns`, `candidateRuns`, `approvedRuns`, `rejectedRuns`, `activeTrainingRuns`) antes do `LIMIT 100`, mantendo a lista curta para auditoria mas expondo contagens corretas para os cartões.
+- O frontend da aba Treinos passou a preferir esses totais agregados, com fallback para o recorte carregado se o backend publicado ainda não tiver os novos campos.
+- Comandos usados: `rg`, `sed -n`, edição via Python, `npm run lint -- --max-warnings=0`, `npm run build` em `frontend/app` e `./mvnw test -Dtest=OpsControllerTest,OpsServiceTest,BigQueryOpsClientTest` em `backend/sisacao-backend`.

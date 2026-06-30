@@ -47,6 +47,35 @@ class BigQueryOpsClientTest {
         assertThat(queryConfig.getNamedParameters().get("date").getValue()).isEqualTo("2026-04-10");
     }
 
+
+    @Test
+    void shouldQueryNeuralTrainingRunsWithRegistryTotals() throws Exception {
+        BigQuery bigQuery = mock(BigQuery.class);
+        TableResult tableResult = mock(TableResult.class);
+        doReturn(List.of()).when(tableResult).iterateAll();
+        doReturn(tableResult).when(bigQuery).query(any(QueryJobConfiguration.class));
+
+        OpsBigQueryProperties properties = new OpsBigQueryProperties();
+        properties.setProjectId("ingestaokraken");
+        properties.setQuantDataset("cotacao_intraday");
+
+        BigQueryOpsClient client = new BigQueryOpsClient(bigQuery, properties);
+        client.fetchNeuralTrainingRuns();
+
+        ArgumentCaptor<QueryJobConfiguration> queryCaptor = ArgumentCaptor.forClass(QueryJobConfiguration.class);
+        verify(bigQuery).query(queryCaptor.capture());
+        QueryJobConfiguration queryConfig = queryCaptor.getValue();
+
+        assertThat(queryConfig.getQuery())
+                .contains("FROM `ingestaokraken.cotacao_intraday.neural_model_registry`")
+                .contains("COUNT(*) OVER () AS total_runs")
+                .contains("COUNTIF(LOWER(status) = 'candidate') OVER () AS candidate_runs")
+                .contains("COUNTIF(LOWER(status) = 'approved') OVER () AS approved_runs")
+                .contains("COUNTIF(LOWER(status) IN ('rejected', 'reject')) OVER () AS rejected_runs")
+                .contains("COUNTIF(LOWER(status) IN ('running', 'training', 'in_progress')) OVER () AS active_training_runs")
+                .contains("ORDER BY trained_at DESC, created_at DESC LIMIT 100");
+    }
+
     @Test
     void shouldQueryNeuralGateDecisionsWithFamilyMetrics() throws Exception {
         BigQuery bigQuery = mock(BigQuery.class);
@@ -69,6 +98,9 @@ class BigQueryOpsClientTest {
                 .contains("FROM `ingestaokraken.cotacao_intraday.neural_gate_decisions` d")
                 .contains("LEFT JOIN (SELECT * FROM `ingestaokraken.cotacao_intraday.neural_family_evaluations`")
                 .contains("ROW_NUMBER() OVER (PARTITION BY protocol_version, dataset_snapshot, candidate_family_hash ORDER BY created_at DESC) = 1")
+                .contains("COUNT(*) OVER () AS total_decisions")
+                .contains("COUNTIF(d.decision_status = 'rejected' OR d.passed = FALSE) OVER () AS rejected_decisions")
+                .contains("COUNTIF(d.decision_status = 'passed' OR d.passed = TRUE) OVER () AS passed_decisions")
                 .contains("ARRAY_TO_STRING(d.failed_criteria, ', ') AS failed_criteria")
                 .contains("ORDER BY d.decided_at DESC LIMIT 50");
     }

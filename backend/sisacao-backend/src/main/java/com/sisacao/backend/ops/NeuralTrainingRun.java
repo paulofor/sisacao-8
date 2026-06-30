@@ -20,5 +20,10 @@ public record NeuralTrainingRun(
         String confusionMatrixJson,
         OffsetDateTime trainedAt,
         OffsetDateTime createdAt,
-        String notes) {
+        String notes,
+        Long totalRuns,
+        Long candidateRuns,
+        Long approvedRuns,
+        Long rejectedRuns,
+        Long activeTrainingRuns) {
 }
