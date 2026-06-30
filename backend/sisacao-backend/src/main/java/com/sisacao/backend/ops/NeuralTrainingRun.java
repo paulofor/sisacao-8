@@ -25,5 +25,7 @@ public record NeuralTrainingRun(
         Long candidateRuns,
         Long approvedRuns,
         Long rejectedRuns,
-        Long activeTrainingRuns) {
+        Long activeTrainingRuns,
+        Long phase3Runs,
+        Long pendingGateCandidateRuns) {
 }

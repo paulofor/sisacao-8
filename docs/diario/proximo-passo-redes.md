@@ -223,3 +223,7 @@ A tela Treinos agora precisa do backend atualizado para mostrar contagens histó
 ## Próximo passo após limpeza visual da aba Treinos — 2026-06-30 13:50 UTC
 
 A aba `Redes neurais — Treinos` foi simplificada removendo os cards superiores redundantes destacados pelo usuário. A alteração é apenas visual/organizacional: permanecem o guia `Como ler o estágio de cada rede`, a auditoria do Gate MUEN e os indicadores de treino/teste. Próximo passo operacional permanece publicar backend e frontend juntos para validar os agregados históricos vindos de `/api/ops/neural/training-runs` e `/api/ops/neural/gate-decisions`, acompanhando a geração recorrente da Fase 3 e decisões MUEN sem promoção automática.
+
+## Próximo passo após remoção de limites remanescentes nos contadores — 2026-06-30 17:18 UTC
+
+A tabela `Últimas análises do Gate MUEN` agora mostra `Data` como primeira coluna. Os contadores `Fase 3` e `Pode ser testada` foram migrados para agregados históricos vindos de `/api/ops/neural/training-runs` (`phase3Runs` e `pendingGateCandidateRuns`), evitando dependência do recorte visual de 100 treinos ou 50 decisões. Próximo passo operacional: publicar backend e frontend juntos e validar na VPS que os cartões refletem os agregados históricos enquanto a tabela continua limitada apenas como listagem de auditoria.

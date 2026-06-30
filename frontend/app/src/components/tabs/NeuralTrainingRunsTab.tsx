@@ -238,6 +238,7 @@ const NeuralTrainingRunsTab: FC<NeuralTrainingRunsTabProps> = ({
     (run) => run.status?.toLowerCase() === 'approved',
   ).length
   const phase3Runs = runs.filter(isPhase3Run)
+  const phase3Count = registryTotals?.phase3Runs ?? phase3Runs.length
   const candidateCount = registryTotals?.candidateRuns ?? runs.filter((run) => run.status?.toLowerCase() === 'candidate').length
   const activeTrainingCount = registryTotals?.activeTrainingRuns ?? runs.filter((run) => ['running', 'training', 'in_progress'].includes(run.status?.toLowerCase() ?? '')).length
   const rejectedCount = registryTotals?.rejectedRuns ?? runs.filter((run) => ['rejected', 'reject'].includes(run.status?.toLowerCase() ?? '')).length
@@ -249,7 +250,7 @@ const NeuralTrainingRunsTab: FC<NeuralTrainingRunsTabProps> = ({
       .map((attempt) => normalizeCandidateKey(attempt.candidateFamilyHash))
       .filter((value): value is string => Boolean(value)),
   )
-  const pendingGateCandidateCount = candidateRuns.filter((run) => {
+  const loadedPendingGateCandidateCount = candidateRuns.filter((run) => {
     const modelVersion = normalizeCandidateKey(run.modelVersion)
     const familyHash = normalizeCandidateKey(candidateFamilyHash(run))
     return !(
@@ -257,6 +258,7 @@ const NeuralTrainingRunsTab: FC<NeuralTrainingRunsTabProps> = ({
       (familyHash && evaluatedCandidateKeys.has(familyHash))
     )
   }).length
+  const pendingGateCandidateCount = registryTotals?.pendingGateCandidateRuns ?? loadedPendingGateCandidateCount
   const latestGateDecisions = gateDecisions.slice(0, 8)
   const latestTrain = latestTrainMetrics(runs)
   const latestTest = latestTestMetrics(runs)
@@ -292,7 +294,7 @@ const NeuralTrainingRunsTab: FC<NeuralTrainingRunsTabProps> = ({
                 {[
                   { label: 'Em treino', value: activeTrainingCount, color: 'info' as const, helper: 'ainda executando' },
                   { label: 'Candidata', value: candidateCount, color: 'warning' as const, helper: 'treinada no registry' },
-                  { label: 'Fase 3', value: phase3Runs.length, color: 'secondary' as const, helper: 'residual/wide deep/bottleneck' },
+                  { label: 'Fase 3', value: phase3Count, color: 'secondary' as const, helper: 'residual/wide deep/bottleneck' },
                   { label: 'Pode ser testada', value: pendingGateCandidateCount, color: 'info' as const, helper: 'sem decisão MUEN carregada' },
                   { label: 'Aprovada', value: approvedCount, color: 'success' as const, helper: 'liberada para uso controlado' },
                   { label: 'Rejeitada no registro', value: rejectedCount, color: 'error' as const, helper: 'status final no registry' },
@@ -331,6 +333,7 @@ const NeuralTrainingRunsTab: FC<NeuralTrainingRunsTabProps> = ({
                   <Table size="small" aria-label="Últimas decisões do Gate MUEN em treinos neurais">
                     <TableHead>
                       <TableRow>
+                        <TableCell>Data</TableCell>
                         <TableCell>Decisão</TableCell>
                         <TableCell>Status</TableCell>
                         <TableCell>Família/candidata</TableCell>
@@ -338,12 +341,12 @@ const NeuralTrainingRunsTab: FC<NeuralTrainingRunsTabProps> = ({
                         <TableCell align="right">Folds +</TableCell>
                         <TableCell align="right">Δ expectancy</TableCell>
                         <TableCell align="right">Drawdown</TableCell>
-                        <TableCell>Data</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
                       {latestGateDecisions.map((attempt) => (
                         <TableRow key={attempt.decisionId} hover>
+                          <TableCell>{formatDateTime(attempt.decidedAt)}</TableCell>
                           <TableCell>
                             <Typography variant="body2" fontWeight={700}>{attempt.decisionId}</Typography>
                           </TableCell>
@@ -361,7 +364,6 @@ const NeuralTrainingRunsTab: FC<NeuralTrainingRunsTabProps> = ({
                           <TableCell align="right">{attempt.positiveFolds ?? '—'} / {attempt.folds ?? '—'}</TableCell>
                           <TableCell align="right">{formatPct(attempt.medianDeltaExpectancyVsChampion)}</TableCell>
                           <TableCell align="right">{formatPct(attempt.maxDrawdown)}</TableCell>
-                          <TableCell>{formatDateTime(attempt.decidedAt)}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>

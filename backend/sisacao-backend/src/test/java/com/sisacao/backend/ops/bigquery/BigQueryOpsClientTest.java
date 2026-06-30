@@ -73,6 +73,9 @@ class BigQueryOpsClientTest {
                 .contains("COUNTIF(LOWER(status) = 'approved') OVER () AS approved_runs")
                 .contains("COUNTIF(LOWER(status) IN ('rejected', 'reject')) OVER () AS rejected_runs")
                 .contains("COUNTIF(LOWER(status) IN ('running', 'training', 'in_progress')) OVER () AS active_training_runs")
+                .contains("AS phase3_runs")
+                .contains("AS pending_gate_candidate_runs")
+                .contains("FROM `ingestaokraken.cotacao_intraday.neural_gate_decisions` gd")
                 .contains("ORDER BY trained_at DESC, created_at DESC LIMIT 100");
     }
 
