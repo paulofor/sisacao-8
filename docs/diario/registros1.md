@@ -1644,3 +1644,9 @@ A leitura da tela `Redes neurais — Treinos` indicou 86 redes em estágio `Cand
 - Correção aplicada: a consulta de `neural_model_registry` agora inclui agregados históricos por janela (`totalRuns`, `candidateRuns`, `approvedRuns`, `rejectedRuns`, `activeTrainingRuns`) antes do `LIMIT 100`, mantendo a lista curta para auditoria mas expondo contagens corretas para os cartões.
 - O frontend da aba Treinos passou a preferir esses totais agregados, com fallback para o recorte carregado se o backend publicado ainda não tiver os novos campos.
 - Comandos usados: `rg`, `sed -n`, edição via Python, `npm run lint -- --max-warnings=0`, `npm run build` em `frontend/app` e `./mvnw test -Dtest=OpsControllerTest,OpsServiceTest,BigQueryOpsClientTest` em `backend/sisacao-backend`.
+
+## 2026-06-30 13:50 UTC — Remoção dos cards superiores da aba Treinos
+- Atendida a solicitação visual do usuário na tela `Redes neurais — Treinos`: removido o bloco superior de cards de resumo que ficava acima do painel `Como ler o estágio de cada rede`, pois os cards/indicadores mais úteis já aparecem abaixo na própria tela.
+- Mantidos o guia de estágios, as últimas análises do Gate MUEN, os cards da rede mais recente e os indicadores de treino/teste, sem alterar regras de contagem ou integrações com backend.
+- Atualizado o próximo passo operacional das redes para registrar que a mudança é apenas de organização visual e que o foco segue em publicar/validar backend e frontend com os agregados históricos.
+- Comandos usados: `rg`, `sed -n`, edição via Python, `npm run lint -- --max-warnings=0`, `npm run build` em `frontend/app`, `git diff --check` e `git status`.

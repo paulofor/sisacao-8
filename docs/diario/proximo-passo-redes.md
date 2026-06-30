@@ -219,3 +219,7 @@ A tela Treinos passa a depender dos campos agregados `totalDecisions`, `rejected
 ## Próximo passo após contagem histórica de candidatas — 2026-06-30 10:54 UTC-3
 
 A tela Treinos agora precisa do backend atualizado para mostrar contagens históricas corretas do registry nos cartões “Total de redes”, “Candidatas”, “Em treino agora”, “Aprovadas” e “Rejeitada no registro”. Próximo passo operacional: publicar backend e frontend juntos; após deploy, validar que “Candidata” deixa de refletir o limite visual de 100 linhas e passa a refletir `candidateRuns` vindo de `/api/ops/neural/training-runs`.
+
+## Próximo passo após limpeza visual da aba Treinos — 2026-06-30 13:50 UTC
+
+A aba `Redes neurais — Treinos` foi simplificada removendo os cards superiores redundantes destacados pelo usuário. A alteração é apenas visual/organizacional: permanecem o guia `Como ler o estágio de cada rede`, a auditoria do Gate MUEN e os indicadores de treino/teste. Próximo passo operacional permanece publicar backend e frontend juntos para validar os agregados históricos vindos de `/api/ops/neural/training-runs` e `/api/ops/neural/gate-decisions`, acompanhando a geração recorrente da Fase 3 e decisões MUEN sem promoção automática.
