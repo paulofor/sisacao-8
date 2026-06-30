@@ -238,18 +238,12 @@ const NeuralTrainingRunsTab: FC<NeuralTrainingRunsTabProps> = ({
     (run) => run.status?.toLowerCase() === 'approved',
   ).length
   const phase3Runs = runs.filter(isPhase3Run)
-  const phase3CandidateCount = phase3Runs.filter((run) => run.status?.toLowerCase() === 'candidate').length
   const candidateCount = registryTotals?.candidateRuns ?? runs.filter((run) => run.status?.toLowerCase() === 'candidate').length
-  const totalRunsCount = registryTotals?.totalRuns ?? runs.length
   const activeTrainingCount = registryTotals?.activeTrainingRuns ?? runs.filter((run) => ['running', 'training', 'in_progress'].includes(run.status?.toLowerCase() ?? '')).length
   const rejectedCount = registryTotals?.rejectedRuns ?? runs.filter((run) => ['rejected', 'reject'].includes(run.status?.toLowerCase() ?? '')).length
   const candidateRuns = runs.filter((run) => run.status?.toLowerCase() === 'candidate')
   const rejectedGateDecisions = gateDecisions.filter((attempt) => attempt.decisionStatus?.toLowerCase() === 'rejected' || attempt.passed === false)
-  const passedGateDecisions = gateDecisions.filter((attempt) => attempt.passed || attempt.decisionStatus?.toLowerCase() === 'passed')
-  const totalGateDecisions = gateDecisions[0]?.totalDecisions ?? gateDecisions.length
   const totalRejectedGateDecisions = gateDecisions[0]?.rejectedDecisions ?? rejectedGateDecisions.length
-  const totalPassedGateDecisions = gateDecisions[0]?.passedDecisions ?? passedGateDecisions.length
-  const gateDecisionHelperPrefix = `${formatNumber(totalGateDecisions)} decisões MUEN no histórico`
   const evaluatedCandidateKeys = new Set(
     gateDecisions
       .map((attempt) => normalizeCandidateKey(attempt.candidateFamilyHash))
@@ -291,44 +285,6 @@ const NeuralTrainingRunsTab: FC<NeuralTrainingRunsTabProps> = ({
 
       {runs.length > 0 ? (
         <>
-          <Stack direction="row" flexWrap="wrap" gap={2}>
-            <SummaryCard
-              title="Total de redes"
-              value={formatNumber(totalRunsCount)}
-              helper="artefatos treinados/registrados"
-            />
-            <SummaryCard
-              title="Em treino agora"
-              value={formatNumber(activeTrainingCount)}
-              helper="status running/training/in_progress"
-            />
-            <SummaryCard
-              title="Candidatas"
-              value={formatNumber(candidateCount)}
-              helper="status candidate no registry"
-            />
-            <SummaryCard
-              title="Fase 3 visíveis"
-              value={formatNumber(phase3Runs.length)}
-              helper={`${formatNumber(phase3CandidateCount)} candidatas; famílias novas MUEN`}
-            />
-            <SummaryCard
-              title="Ainda podem ser testadas"
-              value={formatNumber(pendingGateCandidateCount)}
-              helper="candidatas sem decisão MUEN carregada"
-            />
-            <SummaryCard
-              title="Aprovadas"
-              value={formatNumber(approvedCount)}
-              helper={`${formatNumber(rejectedCount)} rejeitadas no registro`}
-            />
-            <SummaryCard
-              title="Rejeitadas no gate"
-              value={formatNumber(totalRejectedGateDecisions)}
-              helper={`${gateDecisionHelperPrefix}; ${formatNumber(totalPassedGateDecisions)} aprovadas`}
-            />
-          </Stack>
-
           <Paper elevation={0} sx={{ p: 2.5, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
             <Stack spacing={1.5}>
               <Typography variant="h6" fontWeight={800}>Como ler o estágio de cada rede</Typography>
