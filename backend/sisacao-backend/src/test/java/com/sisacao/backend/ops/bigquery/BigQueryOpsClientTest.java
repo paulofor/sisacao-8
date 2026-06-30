@@ -67,7 +67,9 @@ class BigQueryOpsClientTest {
         QueryJobConfiguration queryConfig = queryCaptor.getValue();
 
         assertThat(queryConfig.getQuery())
-                .contains("FROM `ingestaokraken.cotacao_intraday.neural_model_registry`")
+                .contains("FROM `ingestaokraken.cotacao_intraday.neural_model_registry` r")
+                .contains("WHERE LOWER(gd.candidate_family_hash) = LOWER(r.model_version)")
+                .contains("LOWER(JSON_VALUE(r.metrics_json, '$.muen_economics.candidate_family_hash'))")
                 .contains("COUNT(*) OVER () AS total_runs")
                 .contains("COUNTIF(LOWER(status) = 'candidate') OVER () AS candidate_runs")
                 .contains("COUNTIF(LOWER(status) = 'approved') OVER () AS approved_runs")
