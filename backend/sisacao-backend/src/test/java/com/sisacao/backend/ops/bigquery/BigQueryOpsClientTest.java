@@ -69,6 +69,9 @@ class BigQueryOpsClientTest {
                 .contains("FROM `ingestaokraken.cotacao_intraday.neural_gate_decisions` d")
                 .contains("LEFT JOIN (SELECT * FROM `ingestaokraken.cotacao_intraday.neural_family_evaluations`")
                 .contains("ROW_NUMBER() OVER (PARTITION BY protocol_version, dataset_snapshot, candidate_family_hash ORDER BY created_at DESC) = 1")
+                .contains("COUNT(*) OVER () AS total_decisions")
+                .contains("COUNTIF(d.decision_status = 'rejected' OR d.passed = FALSE) OVER () AS rejected_decisions")
+                .contains("COUNTIF(d.decision_status = 'passed' OR d.passed = TRUE) OVER () AS passed_decisions")
                 .contains("ARRAY_TO_STRING(d.failed_criteria, ', ') AS failed_criteria")
                 .contains("ORDER BY d.decided_at DESC LIMIT 50");
     }

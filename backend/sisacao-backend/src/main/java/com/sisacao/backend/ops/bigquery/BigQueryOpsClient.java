@@ -167,6 +167,9 @@ public class BigQueryOpsClient {
         String sql = "SELECT "
                 + "d.decision_id, d.protocol_version, d.dataset_snapshot, d.candidate_family_hash, "
                 + "d.gate_name, d.decision_status, d.passed, "
+                + "COUNT(*) OVER () AS total_decisions, "
+                + "COUNTIF(d.decision_status = 'rejected' OR d.passed = FALSE) OVER () AS rejected_decisions, "
+                + "COUNTIF(d.decision_status = 'passed' OR d.passed = TRUE) OVER () AS passed_decisions, "
                 + "ARRAY_TO_STRING(d.failed_criteria, ', ') AS failed_criteria, "
                 + "TO_JSON_STRING(d.metrics_json) AS metrics_json, d.gate_engine_version, d.decided_at, "
                 + "f.folds, f.seeds, f.positive_folds, f.positive_fold_ratio, "
@@ -634,7 +637,10 @@ public class BigQueryOpsClient {
                 getDouble(row, "median_expectancy_net", "medianExpectancyNet"),
                 getDouble(row, "max_drawdown", "maxDrawdown"),
                 getLong(row, "total_trades", "totalTrades"),
-                getBoolean(row, "stable_across_seeds", "stableAcrossSeeds"));
+                getBoolean(row, "stable_across_seeds", "stableAcrossSeeds"),
+                getLong(row, "total_decisions", "totalDecisions"),
+                getLong(row, "rejected_decisions", "rejectedDecisions"),
+                getLong(row, "passed_decisions", "passedDecisions"));
     }
 
     private QuantDataInventorySummary toQuantDataInventorySummary(FieldValueList row) {

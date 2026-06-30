@@ -244,6 +244,10 @@ const NeuralTrainingRunsTab: FC<NeuralTrainingRunsTabProps> = ({
   const candidateRuns = runs.filter((run) => run.status?.toLowerCase() === 'candidate')
   const rejectedGateDecisions = gateDecisions.filter((attempt) => attempt.decisionStatus?.toLowerCase() === 'rejected' || attempt.passed === false)
   const passedGateDecisions = gateDecisions.filter((attempt) => attempt.passed || attempt.decisionStatus?.toLowerCase() === 'passed')
+  const totalGateDecisions = gateDecisions[0]?.totalDecisions ?? gateDecisions.length
+  const totalRejectedGateDecisions = gateDecisions[0]?.rejectedDecisions ?? rejectedGateDecisions.length
+  const totalPassedGateDecisions = gateDecisions[0]?.passedDecisions ?? passedGateDecisions.length
+  const gateDecisionHelperPrefix = `${formatNumber(totalGateDecisions)} decisões MUEN no histórico`
   const evaluatedCandidateKeys = new Set(
     gateDecisions
       .map((attempt) => normalizeCandidateKey(attempt.candidateFamilyHash))
@@ -318,8 +322,8 @@ const NeuralTrainingRunsTab: FC<NeuralTrainingRunsTabProps> = ({
             />
             <SummaryCard
               title="Rejeitadas no gate"
-              value={formatNumber(rejectedGateDecisions.length)}
-              helper={`${formatNumber(gateDecisions.length)} decisões MUEN; ${formatNumber(passedGateDecisions.length)} aprovadas`}
+              value={formatNumber(totalRejectedGateDecisions)}
+              helper={`${gateDecisionHelperPrefix}; ${formatNumber(totalPassedGateDecisions)} aprovadas`}
             />
           </Stack>
 
@@ -334,7 +338,7 @@ const NeuralTrainingRunsTab: FC<NeuralTrainingRunsTabProps> = ({
                   { label: 'Pode ser testada', value: pendingGateCandidateCount, color: 'info' as const, helper: 'sem decisão MUEN carregada' },
                   { label: 'Aprovada', value: approvedCount, color: 'success' as const, helper: 'liberada para uso controlado' },
                   { label: 'Rejeitada no registro', value: rejectedCount, color: 'error' as const, helper: 'status final no registry' },
-                  { label: 'Rejeitada no gate', value: rejectedGateDecisions.length, color: 'error' as const, helper: 'analisada e bloqueada pelo MUEN' },
+                  { label: 'Rejeitada no gate', value: totalRejectedGateDecisions, color: 'error' as const, helper: 'analisada e bloqueada pelo MUEN' },
                 ].map((stage) => (
                   <Paper key={stage.label} elevation={0} sx={{ p: 2, minWidth: 190, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
                     <Stack spacing={0.75}>

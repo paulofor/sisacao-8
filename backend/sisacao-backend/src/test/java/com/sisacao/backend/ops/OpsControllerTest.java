@@ -189,7 +189,10 @@ class OpsControllerTest {
                 0.02,
                 -0.08,
                 120L,
-                false));
+                false,
+                78L,
+                76L,
+                2L));
         given(opsService.getNeuralGateDecisions()).willReturn(attempts);
 
         mockMvc.perform(get("/ops/neural/gate-decisions"))
@@ -199,7 +202,10 @@ class OpsControllerTest {
                 .andExpect(jsonPath("$[0].decisionStatus", is("rejected")))
                 .andExpect(jsonPath("$[0].failedCriteria", containsString("drawdown_excessivo")))
                 .andExpect(jsonPath("$[0].folds", is(4)))
-                .andExpect(jsonPath("$[0].stableAcrossSeeds", is(false)));
+                .andExpect(jsonPath("$[0].stableAcrossSeeds", is(false)))
+                .andExpect(jsonPath("$[0].totalDecisions", is(78)))
+                .andExpect(jsonPath("$[0].rejectedDecisions", is(76)))
+                .andExpect(jsonPath("$[0].passedDecisions", is(2)));
     }
 
     @Test
