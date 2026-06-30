@@ -189,6 +189,8 @@ export interface NeuralTrainingRun {
   approvedRuns: number | null
   rejectedRuns: number | null
   activeTrainingRuns: number | null
+  phase3Runs: number | null
+  pendingGateCandidateRuns: number | null
 }
 
 export interface AiAdvisorRequest {
@@ -582,6 +584,8 @@ export const fetchNeuralTrainingRuns = async (): Promise<NeuralTrainingRun[]> =>
       approvedRuns: toNumber(record.approvedRuns ?? record.approved_runs),
       rejectedRuns: toNumber(record.rejectedRuns ?? record.rejected_runs),
       activeTrainingRuns: toNumber(record.activeTrainingRuns ?? record.active_training_runs),
+      phase3Runs: toNumber(record.phase3Runs ?? record.phase3_runs),
+      pendingGateCandidateRuns: toNumber(record.pendingGateCandidateRuns ?? record.pending_gate_candidate_runs),
     }
   })
 }

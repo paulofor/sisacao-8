@@ -160,7 +160,9 @@ class OpsControllerTest {
                 122L,
                 3L,
                 11L,
-                2L));
+                2L,
+                37L,
+                99L));
         given(opsService.getNeuralTrainingRuns()).willReturn(runs);
 
         mockMvc.perform(get("/ops/neural/training-runs"))
@@ -174,7 +176,9 @@ class OpsControllerTest {
                 .andExpect(jsonPath("$[0].candidateRuns", is(122)))
                 .andExpect(jsonPath("$[0].approvedRuns", is(3)))
                 .andExpect(jsonPath("$[0].rejectedRuns", is(11)))
-                .andExpect(jsonPath("$[0].activeTrainingRuns", is(2)));
+                .andExpect(jsonPath("$[0].activeTrainingRuns", is(2)))
+                .andExpect(jsonPath("$[0].phase3Runs", is(37)))
+                .andExpect(jsonPath("$[0].pendingGateCandidateRuns", is(99)));
     }
 
     @Test

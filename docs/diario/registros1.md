@@ -1650,3 +1650,11 @@ A leitura da tela `Redes neurais — Treinos` indicou 86 redes em estágio `Cand
 - Mantidos o guia de estágios, as últimas análises do Gate MUEN, os cards da rede mais recente e os indicadores de treino/teste, sem alterar regras de contagem ou integrações com backend.
 - Atualizado o próximo passo operacional das redes para registrar que a mudança é apenas de organização visual e que o foco segue em publicar/validar backend e frontend com os agregados históricos.
 - Comandos usados: `rg`, `sed -n`, edição via Python, `npm run lint -- --max-warnings=0`, `npm run build` em `frontend/app`, `git diff --check` e `git status`.
+
+## 2026-06-30 17:18 UTC — Data na primeira coluna e remoção de limites remanescentes em contadores
+- Atendida a solicitação visual na tabela `Últimas análises do Gate MUEN`: a coluna `Data` foi movida para a primeira posição, antes de `Decisão`, facilitando leitura cronológica das análises.
+- Reavaliados os contadores do guia de estágios da aba Treinos. Confirmado no código que `Fase 3` e `Pode ser testada` ainda podiam cair no fallback limitado ao recorte carregado quando dependiam apenas das listas `/ops/neural/training-runs` e `/ops/neural/gate-decisions`.
+- Correção aplicada no backend: `/ops/neural/training-runs` agora calcula agregados históricos `phase3Runs` e `pendingGateCandidateRuns` na consulta ao BigQuery antes do `LIMIT 100`, mantendo a listagem curta para auditoria mas liberando contadores históricos para os cards.
+- Correção aplicada no frontend: os cartões `Fase 3` e `Pode ser testada` passam a preferir os agregados históricos do backend, mantendo fallback para o recorte carregado apenas se o backend publicado ainda não tiver os novos campos.
+- Atualizados testes de backend para cobrir os novos campos no contrato JSON e a presença dos agregados na SQL; executados lint/build do frontend e testes Maven do backend.
+- Comandos usados: `rg`, `sed -n`, edição via Python, `npm run lint -- --max-warnings=0`, `npm run build` em `frontend/app` e `./mvnw test` em `backend/sisacao-backend`.

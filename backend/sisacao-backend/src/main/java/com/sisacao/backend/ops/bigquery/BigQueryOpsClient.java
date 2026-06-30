@@ -144,13 +144,32 @@ public class BigQueryOpsClient {
     }
 
     public List<NeuralTrainingRun> fetchNeuralTrainingRuns() {
-        String sql = "SELECT "
+        String searchableText = "LOWER(CONCAT(IFNULL(model_id, ''), ' ', IFNULL(model_version, ''), ' ', "
+                + "IFNULL(TO_JSON_STRING(metrics_json), ''), ' ', IFNULL(notes, '')))";
+        String phase3Expression = searchableText + " LIKE '%phase3%' "
+                + "OR " + searchableText + " LIKE '%phase3_family%' "
+                + "OR " + searchableText + " LIKE '%residual_mlp%' "
+                + "OR " + searchableText + " LIKE '%wide_deep_mlp%' "
+                + "OR " + searchableText + " LIKE '%tabular_bottleneck_mlp%'";
+        String gateDecisionTable = qualifiedQuantView(properties.getNeuralGateDecisionsTable());
+        String sql = "WITH registry AS ("
+                + "SELECT *, (" + phase3Expression + ") AS is_phase3, "
+                + "EXISTS (SELECT 1 FROM " + gateDecisionTable + " gd "
+                + "WHERE LOWER(gd.candidate_family_hash) = LOWER(model_version) "
+                + "OR LOWER(gd.candidate_family_hash) = "
+                + "LOWER(JSON_VALUE(metrics_json, '$.muen_economics.candidate_family_hash'))) "
+                + "AS has_gate_decision "
+                + "FROM " + qualifiedQuantView(properties.getNeuralModelRegistryTable()) + ") "
+                + "SELECT "
                 + "model_id, model_version, status, feature_version, label_version, "
                 + "COUNT(*) OVER () AS total_runs, "
                 + "COUNTIF(LOWER(status) = 'candidate') OVER () AS candidate_runs, "
                 + "COUNTIF(LOWER(status) = 'approved') OVER () AS approved_runs, "
                 + "COUNTIF(LOWER(status) IN ('rejected', 'reject')) OVER () AS rejected_runs, "
                 + "COUNTIF(LOWER(status) IN ('running', 'training', 'in_progress')) OVER () AS active_training_runs, "
+                + "COUNTIF(is_phase3) OVER () AS phase3_runs, "
+                + "COUNTIF(LOWER(status) = 'candidate' AND NOT has_gate_decision) "
+                + "OVER () AS pending_gate_candidate_runs, "
                 + "training_dataset_snapshot, artifact_uri, "
                 + "ARRAY_LENGTH(feature_columns) AS feature_columns_count, "
                 + "ARRAY_LENGTH(label_classes) AS label_classes_count, "
@@ -158,7 +177,7 @@ public class BigQueryOpsClient {
                 + "TO_JSON_STRING(metrics_json) AS metrics_json, "
                 + "TO_JSON_STRING(confusion_matrix_json) AS confusion_matrix_json, "
                 + "trained_at, created_at, notes "
-                + "FROM " + qualifiedQuantView(properties.getNeuralModelRegistryTable())
+                + "FROM registry"
                 + " ORDER BY trained_at DESC, created_at DESC LIMIT 100";
         TableResult result = runQuery(sql, Map.of());
         List<NeuralTrainingRun> rows = new ArrayList<>();
@@ -623,7 +642,9 @@ public class BigQueryOpsClient {
                 getLong(row, "candidate_runs", "candidateRuns"),
                 getLong(row, "approved_runs", "approvedRuns"),
                 getLong(row, "rejected_runs", "rejectedRuns"),
-                getLong(row, "active_training_runs", "activeTrainingRuns"));
+                getLong(row, "active_training_runs", "activeTrainingRuns"),
+                getLong(row, "phase3_runs", "phase3Runs"),
+                getLong(row, "pending_gate_candidate_runs", "pendingGateCandidateRuns"));
     }
 
     private NeuralGateDecisionAttempt toNeuralGateDecisionAttempt(FieldValueList row) {
