@@ -1665,3 +1665,9 @@ A leitura da tela `Redes neurais — Treinos` indicou 86 redes em estágio `Cand
 - Correção aplicada no backend: a CTE do registry agora usa alias `r` e a subquery qualifica `r.model_version` e `r.metrics_json` ao comparar decisões de gate, evitando ambiguidade entre `neural_model_registry.metrics_json` e `neural_gate_decisions.metrics_json`.
 - Atualizado o teste `BigQueryOpsClientTest` para exigir o alias `r` e as referências qualificadas no SQL de `/ops/neural/training-runs`.
 - Comandos usados: `curl -i` contra `http://34.194.252.70/api/ops/neural/training-runs`, MCP HTTP/JSON-RPC com `initialize`, `bigquery_query` em `INFORMATION_SCHEMA`, `cloud_run_function_logs`, `rg`, `sed -n`, edição via Python e testes Maven.
+
+## 2026-06-30 18:05 UTC — Totalizações do dia anterior na aba Treinos
+- Atendida a solicitação visual na tela `Redes neurais — Treinos`: o painel de estágios agora exibe um segundo grupo com as mesmas totalizações, limitado ao dia anterior.
+- A implementação reutiliza os mesmos cartões/labels de estágio e filtra treinos por `trainedAt` e decisões MUEN por `decidedAt` usando a data anterior calculada no navegador; os totais históricos gerais continuam usando os agregados do backend quando disponíveis.
+- Para o grupo do dia anterior, `Rejeitada no gate` considera somente decisões MUEN do dia anterior, enquanto `Pode ser testada` considera candidatas treinadas no dia anterior ainda sem decisão MUEN carregada nessa mesma data.
+- Comandos usados: `rg`, `sed -n`, edição via Python, `npx prettier --write frontend/app/src/components/tabs/NeuralTrainingRunsTab.tsx`, `npm run build` e `npm run lint` em `frontend/app`.

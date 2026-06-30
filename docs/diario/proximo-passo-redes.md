@@ -231,3 +231,7 @@ A tabela `Últimas análises do Gate MUEN` agora mostra `Data` como primeira col
 ## Próximo passo após correção do erro de Treinos — 2026-06-30 17:31 UTC
 
 A falha HTTP 502 da aba `Redes neurais — Treinos` foi corrigida no código qualificando o alias do registry (`r.model_version` e `r.metrics_json`) na subquery de decisões MUEN. Próximo passo operacional: publicar o backend atualizado, validar `GET http://34.194.252.70/api/ops/neural/training-runs` retornando HTTP 200 e então confirmar na tela que o alerta “Erro ao carregar os treinos neurais” desapareceu. Manter a publicação conjunta do frontend/backend quando houver mudanças visuais pendentes e não automatizar promoção de modelos sem decisão MUEN `passed` e autorização humana explícita.
+
+## Próximo passo após totalizações do dia anterior — 2026-06-30 18:05 UTC
+
+A aba `Redes neurais — Treinos` agora tem um grupo adicional de totalizações limitado ao dia anterior, calculado no frontend a partir de `trainedAt` dos treinos e `decidedAt` das decisões MUEN carregadas. Próximo passo operacional: publicar o frontend atualizado junto com o backend pendente, validar na VPS que o novo grupo aparece abaixo das totalizações gerais e conferir se os valores do dia anterior batem com as execuções/decisões esperadas. Manter a regra de não promover modelos sem decisão MUEN `passed` e autorização humana explícita.

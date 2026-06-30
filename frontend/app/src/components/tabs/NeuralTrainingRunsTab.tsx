@@ -159,6 +159,14 @@ const candidateFamilyHash = (run: NeuralTrainingRun) => {
 
 const latestRun = (runs: NeuralTrainingRun[]) => runs[0]
 
+const isOnPreviousDay = (value: string | null | undefined) => {
+  if (!value) return false
+  const parsed = dayjs(value)
+  if (!parsed.isValid()) return false
+  const previousDay = dayjs().subtract(1, 'day')
+  return parsed.isSame(previousDay, 'day')
+}
+
 const PHASE3_ARCHITECTURES = [
   'residual_mlp',
   'wide_deep_mlp',
@@ -191,6 +199,39 @@ const bestTestAccuracy = (runs: NeuralTrainingRun[]) => {
     .filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
   return values.length > 0 ? Math.max(...values) : null
 }
+
+interface StageTotal {
+  label: string
+  value: number
+  color: 'default' | 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning'
+  helper: string
+}
+
+const StageTotalsGroup: FC<{ title: string; subtitle?: string; stages: StageTotal[] }> = ({
+  title,
+  subtitle,
+  stages,
+}) => (
+  <Stack spacing={1.5}>
+    <Stack spacing={0.5}>
+      <Typography variant="h6" fontWeight={800}>{title}</Typography>
+      {subtitle ? (
+        <Typography variant="body2" color="text.secondary">{subtitle}</Typography>
+      ) : null}
+    </Stack>
+    <Stack direction="row" flexWrap="wrap" gap={1.5}>
+      {stages.map((stage) => (
+        <Paper key={stage.label} elevation={0} sx={{ p: 2, minWidth: 190, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+          <Stack spacing={0.75}>
+            <Chip size="small" color={stage.color} label={stage.label} sx={{ alignSelf: 'flex-start' }} />
+            <Typography variant="h5" fontWeight={900}>{formatNumber(stage.value)}</Typography>
+            <Typography variant="caption" color="text.secondary">{stage.helper}</Typography>
+          </Stack>
+        </Paper>
+      ))}
+    </Stack>
+  </Stack>
+)
 
 const SummaryCard: FC<{ title: string; value: string; helper?: string }> = ({
   title,
@@ -234,6 +275,10 @@ const NeuralTrainingRunsTab: FC<NeuralTrainingRunsTabProps> = ({
 }) => {
   const latest = latestRun(runs)
   const registryTotals = runs[0]
+  const previousDay = dayjs().subtract(1, 'day')
+  const previousDayLabel = previousDay.format('DD/MM/YYYY')
+  const previousDayRuns = runs.filter((run) => isOnPreviousDay(run.trainedAt))
+  const previousDayGateDecisions = gateDecisions.filter((attempt) => isOnPreviousDay(attempt.decidedAt))
   const approvedCount = registryTotals?.approvedRuns ?? runs.filter(
     (run) => run.status?.toLowerCase() === 'approved',
   ).length
@@ -243,7 +288,9 @@ const NeuralTrainingRunsTab: FC<NeuralTrainingRunsTabProps> = ({
   const activeTrainingCount = registryTotals?.activeTrainingRuns ?? runs.filter((run) => ['running', 'training', 'in_progress'].includes(run.status?.toLowerCase() ?? '')).length
   const rejectedCount = registryTotals?.rejectedRuns ?? runs.filter((run) => ['rejected', 'reject'].includes(run.status?.toLowerCase() ?? '')).length
   const candidateRuns = runs.filter((run) => run.status?.toLowerCase() === 'candidate')
+  const previousDayCandidateRuns = previousDayRuns.filter((run) => run.status?.toLowerCase() === 'candidate')
   const rejectedGateDecisions = gateDecisions.filter((attempt) => attempt.decisionStatus?.toLowerCase() === 'rejected' || attempt.passed === false)
+  const previousDayRejectedGateDecisions = previousDayGateDecisions.filter((attempt) => attempt.decisionStatus?.toLowerCase() === 'rejected' || attempt.passed === false)
   const totalRejectedGateDecisions = gateDecisions[0]?.rejectedDecisions ?? rejectedGateDecisions.length
   const evaluatedCandidateKeys = new Set(
     gateDecisions
@@ -259,6 +306,37 @@ const NeuralTrainingRunsTab: FC<NeuralTrainingRunsTabProps> = ({
     )
   }).length
   const pendingGateCandidateCount = registryTotals?.pendingGateCandidateRuns ?? loadedPendingGateCandidateCount
+  const previousDayEvaluatedCandidateKeys = new Set(
+    previousDayGateDecisions
+      .map((attempt) => normalizeCandidateKey(attempt.candidateFamilyHash))
+      .filter((value): value is string => Boolean(value)),
+  )
+  const previousDayPendingGateCandidateCount = previousDayCandidateRuns.filter((run) => {
+    const modelVersion = normalizeCandidateKey(run.modelVersion)
+    const familyHash = normalizeCandidateKey(candidateFamilyHash(run))
+    return !(
+      (modelVersion && previousDayEvaluatedCandidateKeys.has(modelVersion)) ||
+      (familyHash && previousDayEvaluatedCandidateKeys.has(familyHash))
+    )
+  }).length
+  const totalStages: StageTotal[] = [
+    { label: 'Em treino', value: activeTrainingCount, color: 'info', helper: 'ainda executando' },
+    { label: 'Candidata', value: candidateCount, color: 'warning', helper: 'treinada no registry' },
+    { label: 'Fase 3', value: phase3Count, color: 'secondary', helper: 'residual/wide deep/bottleneck' },
+    { label: 'Pode ser testada', value: pendingGateCandidateCount, color: 'info', helper: 'sem decisão MUEN carregada' },
+    { label: 'Aprovada', value: approvedCount, color: 'success', helper: 'liberada para uso controlado' },
+    { label: 'Rejeitada no registro', value: rejectedCount, color: 'error', helper: 'status final no registry' },
+    { label: 'Rejeitada no gate', value: totalRejectedGateDecisions, color: 'error', helper: 'analisada e bloqueada pelo MUEN' },
+  ]
+  const previousDayStages: StageTotal[] = [
+    { label: 'Em treino', value: previousDayRuns.filter((run) => ['running', 'training', 'in_progress'].includes(run.status?.toLowerCase() ?? '')).length, color: 'info', helper: 'treinos do dia anterior ainda executando' },
+    { label: 'Candidata', value: previousDayCandidateRuns.length, color: 'warning', helper: 'treinada no registry no dia anterior' },
+    { label: 'Fase 3', value: previousDayRuns.filter(isPhase3Run).length, color: 'secondary', helper: 'phase3 do dia anterior' },
+    { label: 'Pode ser testada', value: previousDayPendingGateCandidateCount, color: 'info', helper: 'sem decisão MUEN no dia anterior' },
+    { label: 'Aprovada', value: previousDayRuns.filter((run) => run.status?.toLowerCase() === 'approved').length, color: 'success', helper: 'liberada no dia anterior' },
+    { label: 'Rejeitada no registro', value: previousDayRuns.filter((run) => ['rejected', 'reject'].includes(run.status?.toLowerCase() ?? '')).length, color: 'error', helper: 'status final no registry no dia anterior' },
+    { label: 'Rejeitada no gate', value: previousDayRejectedGateDecisions.length, color: 'error', helper: 'bloqueada pelo MUEN no dia anterior' },
+  ]
   const latestGateDecisions = gateDecisions.slice(0, 8)
   const latestTrain = latestTrainMetrics(runs)
   const latestTest = latestTestMetrics(runs)
@@ -289,26 +367,12 @@ const NeuralTrainingRunsTab: FC<NeuralTrainingRunsTabProps> = ({
         <>
           <Paper elevation={0} sx={{ p: 2.5, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
             <Stack spacing={1.5}>
-              <Typography variant="h6" fontWeight={800}>Como ler o estágio de cada rede</Typography>
-              <Stack direction="row" flexWrap="wrap" gap={1.5}>
-                {[
-                  { label: 'Em treino', value: activeTrainingCount, color: 'info' as const, helper: 'ainda executando' },
-                  { label: 'Candidata', value: candidateCount, color: 'warning' as const, helper: 'treinada no registry' },
-                  { label: 'Fase 3', value: phase3Count, color: 'secondary' as const, helper: 'residual/wide deep/bottleneck' },
-                  { label: 'Pode ser testada', value: pendingGateCandidateCount, color: 'info' as const, helper: 'sem decisão MUEN carregada' },
-                  { label: 'Aprovada', value: approvedCount, color: 'success' as const, helper: 'liberada para uso controlado' },
-                  { label: 'Rejeitada no registro', value: rejectedCount, color: 'error' as const, helper: 'status final no registry' },
-                  { label: 'Rejeitada no gate', value: totalRejectedGateDecisions, color: 'error' as const, helper: 'analisada e bloqueada pelo MUEN' },
-                ].map((stage) => (
-                  <Paper key={stage.label} elevation={0} sx={{ p: 2, minWidth: 190, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
-                    <Stack spacing={0.75}>
-                      <Chip size="small" color={stage.color} label={stage.label} sx={{ alignSelf: 'flex-start' }} />
-                      <Typography variant="h5" fontWeight={900}>{formatNumber(stage.value)}</Typography>
-                      <Typography variant="caption" color="text.secondary">{stage.helper}</Typography>
-                    </Stack>
-                  </Paper>
-                ))}
-              </Stack>
+              <StageTotalsGroup title="Como ler o estágio de cada rede" stages={totalStages} />
+              <StageTotalsGroup
+                title="Totalizações do dia anterior"
+                subtitle={`Mesmas contagens limitadas aos treinos e decisões MUEN registrados em ${previousDayLabel}.`}
+                stages={previousDayStages}
+              />
               <Typography variant="caption" color="text.secondary">
                 A contagem “Pode ser testada” cruza candidatas do registry com as decisões MUEN carregadas para estimar quantas ainda não têm decisão de gate. A contagem “Fase 3” identifica redes por prefixo `neural_eod_phase3_`, origem `phase3_family` ou pelas arquiteturas novas residual/wide deep/bottleneck.
               </Typography>
