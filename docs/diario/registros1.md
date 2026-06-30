@@ -1637,3 +1637,10 @@ A leitura da tela `Redes neurais — Treinos` indicou 86 redes em estágio `Cand
 - O record `NeuralGateDecisionAttempt` passou a expor `totalDecisions`, `rejectedDecisions` e `passedDecisions`; a listagem continua limitada às últimas 50 linhas para auditoria, mas cada linha traz as contagens corretas do histórico retornado pela tabela.
 - O frontend passou a usar `rejectedDecisions`/`passedDecisions`/`totalDecisions` quando disponíveis, mantendo fallback para o tamanho do array apenas em backends antigos.
 - Comandos usados: edição via Python, `rg`, `sed -n`, `npm run lint -- --max-warnings=0`, `npm run build` em `frontend/app` e `./mvnw test -Dtest=OpsControllerTest,OpsServiceTest,BigQueryOpsClientTest` em `backend/sisacao-backend`.
+
+## 2026-06-30 10:54 UTC-3 — Contagem histórica exata para Candidatas
+- Investigada a suspeita de que o cartão “Candidata” também estivesse travado: confirmado no código que a aba Treinos calculava `candidateCount` apenas sobre o array `runs` carregado de `/ops/neural/training-runs`.
+- Confirmado no backend que `fetchNeuralTrainingRuns()` mantém a listagem limitada a `LIMIT 100`; portanto “Total de redes”, “Candidatas”, “Em treino agora”, “Aprovadas” e “Rejeitada no registro” podiam ficar limitados ao recorte visível quando o registry passasse de 100 linhas.
+- Correção aplicada: a consulta de `neural_model_registry` agora inclui agregados históricos por janela (`totalRuns`, `candidateRuns`, `approvedRuns`, `rejectedRuns`, `activeTrainingRuns`) antes do `LIMIT 100`, mantendo a lista curta para auditoria mas expondo contagens corretas para os cartões.
+- O frontend da aba Treinos passou a preferir esses totais agregados, com fallback para o recorte carregado se o backend publicado ainda não tiver os novos campos.
+- Comandos usados: `rg`, `sed -n`, edição via Python, `npm run lint -- --max-warnings=0`, `npm run build` em `frontend/app` e `./mvnw test -Dtest=OpsControllerTest,OpsServiceTest,BigQueryOpsClientTest` em `backend/sisacao-backend`.

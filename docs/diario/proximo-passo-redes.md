@@ -215,3 +215,7 @@ O cartão “Rejeitadas no gate” agora deve ser lido como recorte das últimas
 ## Próximo passo após contagem histórica do gate — 2026-06-30 08:31 UTC-3
 
 A tela Treinos passa a depender dos campos agregados `totalDecisions`, `rejectedDecisions` e `passedDecisions` no endpoint `/api/ops/neural/gate-decisions` para mostrar número histórico correto no cartão “Rejeitadas no gate”, mantendo a tabela de auditoria limitada às últimas 50 decisões. Próximo passo operacional: publicar backend e frontend juntos; se apenas o frontend for publicado, ele mantém fallback para o recorte carregado até o backend novo estar em produção.
+
+## Próximo passo após contagem histórica de candidatas — 2026-06-30 10:54 UTC-3
+
+A tela Treinos agora precisa do backend atualizado para mostrar contagens históricas corretas do registry nos cartões “Total de redes”, “Candidatas”, “Em treino agora”, “Aprovadas” e “Rejeitada no registro”. Próximo passo operacional: publicar backend e frontend juntos; após deploy, validar que “Candidata” deixa de refletir o limite visual de 100 linhas e passa a refletir `candidateRuns` vindo de `/api/ops/neural/training-runs`.

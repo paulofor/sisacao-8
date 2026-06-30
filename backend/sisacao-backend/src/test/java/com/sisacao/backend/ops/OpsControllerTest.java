@@ -155,7 +155,12 @@ class OpsControllerTest {
                 "[[10,1,2],[1,8,1],[2,1,11]]",
                 OffsetDateTime.parse("2026-06-18T20:30:00Z"),
                 OffsetDateTime.parse("2026-06-18T20:35:00Z"),
-                "Baseline inicial"));
+                "Baseline inicial",
+                138L,
+                122L,
+                3L,
+                11L,
+                2L));
         given(opsService.getNeuralTrainingRuns()).willReturn(runs);
 
         mockMvc.perform(get("/ops/neural/training-runs"))
@@ -164,7 +169,12 @@ class OpsControllerTest {
                 .andExpect(jsonPath("$[0].modelId", is("neural_eod_mlp")))
                 .andExpect(jsonPath("$[0].status", is("candidate")))
                 .andExpect(jsonPath("$[0].testAccuracy", is(0.55)))
-                .andExpect(jsonPath("$[0].metricsJson", is("{\"test\":{\"accuracy\":0.55,\"rows_count\":120}}")));
+                .andExpect(jsonPath("$[0].metricsJson", is("{\"test\":{\"accuracy\":0.55,\"rows_count\":120}}")))
+                .andExpect(jsonPath("$[0].totalRuns", is(138)))
+                .andExpect(jsonPath("$[0].candidateRuns", is(122)))
+                .andExpect(jsonPath("$[0].approvedRuns", is(3)))
+                .andExpect(jsonPath("$[0].rejectedRuns", is(11)))
+                .andExpect(jsonPath("$[0].activeTrainingRuns", is(2)));
     }
 
     @Test

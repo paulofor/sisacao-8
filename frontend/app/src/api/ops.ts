@@ -184,6 +184,11 @@ export interface NeuralTrainingRun {
   trainedAt: string | null
   createdAt: string | null
   notes: string | null
+  totalRuns: number | null
+  candidateRuns: number | null
+  approvedRuns: number | null
+  rejectedRuns: number | null
+  activeTrainingRuns: number | null
 }
 
 export interface AiAdvisorRequest {
@@ -572,6 +577,11 @@ export const fetchNeuralTrainingRuns = async (): Promise<NeuralTrainingRun[]> =>
       trainedAt: toIsoDateTime(record.trainedAt ?? record.trained_at),
       createdAt: toIsoDateTime(record.createdAt ?? record.created_at),
       notes: asNullableString(record.notes),
+      totalRuns: toNumber(record.totalRuns ?? record.total_runs),
+      candidateRuns: toNumber(record.candidateRuns ?? record.candidate_runs),
+      approvedRuns: toNumber(record.approvedRuns ?? record.approved_runs),
+      rejectedRuns: toNumber(record.rejectedRuns ?? record.rejected_runs),
+      activeTrainingRuns: toNumber(record.activeTrainingRuns ?? record.active_training_runs),
     }
   })
 }

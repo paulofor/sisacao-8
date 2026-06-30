@@ -146,6 +146,11 @@ public class BigQueryOpsClient {
     public List<NeuralTrainingRun> fetchNeuralTrainingRuns() {
         String sql = "SELECT "
                 + "model_id, model_version, status, feature_version, label_version, "
+                + "COUNT(*) OVER () AS total_runs, "
+                + "COUNTIF(LOWER(status) = 'candidate') OVER () AS candidate_runs, "
+                + "COUNTIF(LOWER(status) = 'approved') OVER () AS approved_runs, "
+                + "COUNTIF(LOWER(status) IN ('rejected', 'reject')) OVER () AS rejected_runs, "
+                + "COUNTIF(LOWER(status) IN ('running', 'training', 'in_progress')) OVER () AS active_training_runs, "
                 + "training_dataset_snapshot, artifact_uri, "
                 + "ARRAY_LENGTH(feature_columns) AS feature_columns_count, "
                 + "ARRAY_LENGTH(label_classes) AS label_classes_count, "
@@ -613,7 +618,12 @@ public class BigQueryOpsClient {
                 getString(row, "confusion_matrix_json", "confusionMatrixJson"),
                 getTimestamp(row, "trained_at", "trainedAt"),
                 getTimestamp(row, "created_at", "createdAt"),
-                getString(row, "notes"));
+                getString(row, "notes"),
+                getLong(row, "total_runs", "totalRuns"),
+                getLong(row, "candidate_runs", "candidateRuns"),
+                getLong(row, "approved_runs", "approvedRuns"),
+                getLong(row, "rejected_runs", "rejectedRuns"),
+                getLong(row, "active_training_runs", "activeTrainingRuns"));
     }
 
     private NeuralGateDecisionAttempt toNeuralGateDecisionAttempt(FieldValueList row) {

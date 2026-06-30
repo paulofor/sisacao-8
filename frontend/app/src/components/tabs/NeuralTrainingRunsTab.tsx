@@ -233,14 +233,16 @@ const NeuralTrainingRunsTab: FC<NeuralTrainingRunsTabProps> = ({
   gateDecisionsLoading = false,
 }) => {
   const latest = latestRun(runs)
-  const approvedCount = runs.filter(
+  const registryTotals = runs[0]
+  const approvedCount = registryTotals?.approvedRuns ?? runs.filter(
     (run) => run.status?.toLowerCase() === 'approved',
   ).length
   const phase3Runs = runs.filter(isPhase3Run)
   const phase3CandidateCount = phase3Runs.filter((run) => run.status?.toLowerCase() === 'candidate').length
-  const candidateCount = runs.filter((run) => run.status?.toLowerCase() === 'candidate').length
-  const activeTrainingCount = runs.filter((run) => ['running', 'training', 'in_progress'].includes(run.status?.toLowerCase() ?? '')).length
-  const rejectedCount = runs.filter((run) => ['rejected', 'reject'].includes(run.status?.toLowerCase() ?? '')).length
+  const candidateCount = registryTotals?.candidateRuns ?? runs.filter((run) => run.status?.toLowerCase() === 'candidate').length
+  const totalRunsCount = registryTotals?.totalRuns ?? runs.length
+  const activeTrainingCount = registryTotals?.activeTrainingRuns ?? runs.filter((run) => ['running', 'training', 'in_progress'].includes(run.status?.toLowerCase() ?? '')).length
+  const rejectedCount = registryTotals?.rejectedRuns ?? runs.filter((run) => ['rejected', 'reject'].includes(run.status?.toLowerCase() ?? '')).length
   const candidateRuns = runs.filter((run) => run.status?.toLowerCase() === 'candidate')
   const rejectedGateDecisions = gateDecisions.filter((attempt) => attempt.decisionStatus?.toLowerCase() === 'rejected' || attempt.passed === false)
   const passedGateDecisions = gateDecisions.filter((attempt) => attempt.passed || attempt.decisionStatus?.toLowerCase() === 'passed')
@@ -292,7 +294,7 @@ const NeuralTrainingRunsTab: FC<NeuralTrainingRunsTabProps> = ({
           <Stack direction="row" flexWrap="wrap" gap={2}>
             <SummaryCard
               title="Total de redes"
-              value={formatNumber(runs.length)}
+              value={formatNumber(totalRunsCount)}
               helper="artefatos treinados/registrados"
             />
             <SummaryCard
