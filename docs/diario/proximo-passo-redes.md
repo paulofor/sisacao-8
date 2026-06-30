@@ -227,3 +227,7 @@ A aba `Redes neurais — Treinos` foi simplificada removendo os cards superiores
 ## Próximo passo após remoção de limites remanescentes nos contadores — 2026-06-30 17:18 UTC
 
 A tabela `Últimas análises do Gate MUEN` agora mostra `Data` como primeira coluna. Os contadores `Fase 3` e `Pode ser testada` foram migrados para agregados históricos vindos de `/api/ops/neural/training-runs` (`phase3Runs` e `pendingGateCandidateRuns`), evitando dependência do recorte visual de 100 treinos ou 50 decisões. Próximo passo operacional: publicar backend e frontend juntos e validar na VPS que os cartões refletem os agregados históricos enquanto a tabela continua limitada apenas como listagem de auditoria.
+
+## Próximo passo após correção do erro de Treinos — 2026-06-30 17:31 UTC
+
+A falha HTTP 502 da aba `Redes neurais — Treinos` foi corrigida no código qualificando o alias do registry (`r.model_version` e `r.metrics_json`) na subquery de decisões MUEN. Próximo passo operacional: publicar o backend atualizado, validar `GET http://34.194.252.70/api/ops/neural/training-runs` retornando HTTP 200 e então confirmar na tela que o alerta “Erro ao carregar os treinos neurais” desapareceu. Manter a publicação conjunta do frontend/backend quando houver mudanças visuais pendentes e não automatizar promoção de modelos sem decisão MUEN `passed` e autorização humana explícita.

@@ -1658,3 +1658,10 @@ A leitura da tela `Redes neurais — Treinos` indicou 86 redes em estágio `Cand
 - Correção aplicada no frontend: os cartões `Fase 3` e `Pode ser testada` passam a preferir os agregados históricos do backend, mantendo fallback para o recorte carregado apenas se o backend publicado ainda não tiver os novos campos.
 - Atualizados testes de backend para cobrir os novos campos no contrato JSON e a presença dos agregados na SQL; executados lint/build do frontend e testes Maven do backend.
 - Comandos usados: `rg`, `sed -n`, edição via Python, `npm run lint -- --max-warnings=0`, `npm run build` em `frontend/app` e `./mvnw test` em `backend/sisacao-backend`.
+
+## 2026-06-30 17:31 UTC — Correção do erro ao carregar Treinos
+- Investigado o erro visual informado na aba `Redes neurais — Treinos`: o endpoint publicado `GET http://34.194.252.70/api/ops/neural/training-runs` retornava HTTP 502 com `Falha ao consultar BigQuery`.
+- Confirmada a causa provável no SQL recém-alterado de agregados históricos: a subquery `EXISTS` lia `neural_gate_decisions` com alias `gd`, mas referenciava `model_version` e `metrics_json` sem qualificar o alias do registry. Como `gd.metrics_json` também existe e é `STRUCT`, a expressão `JSON_VALUE(metrics_json, ...)` podia resolver para o campo errado e quebrar a consulta.
+- Correção aplicada no backend: a CTE do registry agora usa alias `r` e a subquery qualifica `r.model_version` e `r.metrics_json` ao comparar decisões de gate, evitando ambiguidade entre `neural_model_registry.metrics_json` e `neural_gate_decisions.metrics_json`.
+- Atualizado o teste `BigQueryOpsClientTest` para exigir o alias `r` e as referências qualificadas no SQL de `/ops/neural/training-runs`.
+- Comandos usados: `curl -i` contra `http://34.194.252.70/api/ops/neural/training-runs`, MCP HTTP/JSON-RPC com `initialize`, `bigquery_query` em `INFORMATION_SCHEMA`, `cloud_run_function_logs`, `rg`, `sed -n`, edição via Python e testes Maven.
