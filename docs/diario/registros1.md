@@ -1670,4 +1670,11 @@ A leitura da tela `Redes neurais — Treinos` indicou 86 redes em estágio `Cand
 - Atendida a solicitação visual na tela `Redes neurais — Treinos`: o painel de estágios agora exibe um segundo grupo com as mesmas totalizações, limitado ao dia anterior.
 - A implementação reutiliza os mesmos cartões/labels de estágio e filtra treinos por `trainedAt` e decisões MUEN por `decidedAt` usando a data anterior calculada no navegador; os totais históricos gerais continuam usando os agregados do backend quando disponíveis.
 - Para o grupo do dia anterior, `Rejeitada no gate` considera somente decisões MUEN do dia anterior, enquanto `Pode ser testada` considera candidatas treinadas no dia anterior ainda sem decisão MUEN carregada nessa mesma data.
-- Comandos usados: `rg`, `sed -n`, edição via Python, `npx prettier --write frontend/app/src/components/tabs/NeuralTrainingRunsTab.tsx`, `npm run build` e `npm run lint` em `frontend/app`.
+- Comandos usados: `rg`, `sed -n`, edição via Python, `npm run build` e `npm run lint` em `frontend/app`.
+
+## 2026-07-01 07:35 UTC — Card diário de redes criadas e testadas
+- Atendida a solicitação visual na tela `Redes neurais — Treinos`: adicionado um novo card com gráfico de linha mostrando, por dia, a quantidade de redes criadas e a quantidade testada.
+- A série usa uma janela móvel de 14 dias: `Criadas` conta treinos por `trainedAt` com fallback para `createdAt`, e `Testadas` conta decisões do Gate MUEN por `decidedAt`.
+- O card inclui legenda/totalizadores de criadas e testadas no período e mantém implementação local em SVG/Material UI, sem adicionar nova dependência de gráficos.
+- Atualizado o próximo passo operacional das redes para registrar que a mudança visual precisa ser publicada e validada na VPS junto às demais alterações de frontend pendentes.
+- Comandos usados: `rg`, `sed -n`, edição via Python, `npm run build` e `npm run lint` em `frontend/app`.

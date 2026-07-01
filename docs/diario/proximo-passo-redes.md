@@ -1,10 +1,12 @@
 # Próximo passo — Redes neurais MUEN
 
-**Última atualização:** 2026-06-29 19:35 UTC
+**Última atualização:** 2026-07-01 07:35 UTC
 **Protocolo:** `neural_eod_protocol_v1`
 **Status:** Fase 3 gerando candidatas; ajuste visual pendente de publicação
 
 ## Próximo passo atual
+
+A aba `Redes neurais — Treinos` recebeu um card visual adicional com gráfico de linha diário para comparar redes criadas no registry e redes testadas pelo Gate MUEN nos últimos 14 dias. O próximo passo imediato é publicar o frontend atualizado na VPS e validar visualmente que o card aparece abaixo das totalizações, com as linhas “Criadas” e “Testadas” coerentes com as execuções recentes.
 
 As redes da Fase 3 estão incluídas no endpoint/tabela de Treinos. A validação mais recente do endpoint publicado `GET http://34.194.252.70/api/ops/neural/training-runs` mostrou 100 treinos visíveis, dos quais 13 são Fase 3 pelo prefixo `neural_eod_phase3_` e pelas famílias `residual_mlp`, `wide_deep_mlp` e `tabular_bottleneck_mlp`, todas ainda como `candidate`.
 
