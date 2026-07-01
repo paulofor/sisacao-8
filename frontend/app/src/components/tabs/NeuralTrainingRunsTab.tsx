@@ -15,7 +15,7 @@ import {
   Typography,
 } from '@mui/material'
 import dayjs from 'dayjs'
-import type { FC } from 'react'
+import { useMemo, type FC } from 'react'
 
 import type { NeuralGateDecisionAttempt, NeuralTrainingRun } from '../../api/ops'
 
@@ -26,6 +26,100 @@ interface NeuralTrainingRunsTabProps {
   gateDecisions?: NeuralGateDecisionAttempt[]
   gateDecisionsError?: Error | null
   gateDecisionsLoading?: boolean
+}
+
+interface DailyNetworkActivityPoint {
+  date: string
+  created: number
+  tested: number
+}
+
+const toDateKey = (value: string | null | undefined) => {
+  if (!value) return null
+  const parsed = dayjs(value)
+  return parsed.isValid() ? parsed.format('YYYY-MM-DD') : null
+}
+
+const buildDailyNetworkActivity = (
+  runs: NeuralTrainingRun[],
+  gateDecisions: NeuralGateDecisionAttempt[],
+  days = 14,
+): DailyNetworkActivityPoint[] => {
+  const start = dayjs().subtract(days - 1, 'day').startOf('day')
+  const points = Array.from({ length: days }, (_, index) => {
+    const date = start.add(index, 'day').format('YYYY-MM-DD')
+    return { date, created: 0, tested: 0 }
+  })
+  const byDate = new Map(points.map((point) => [point.date, point]))
+
+  runs.forEach((run) => {
+    const key = toDateKey(run.trainedAt ?? run.createdAt)
+    const point = key ? byDate.get(key) : undefined
+    if (point) point.created += 1
+  })
+
+  gateDecisions.forEach((attempt) => {
+    const key = toDateKey(attempt.decidedAt)
+    const point = key ? byDate.get(key) : undefined
+    if (point) point.tested += 1
+  })
+
+  return points
+}
+
+const formatShortDate = (value: string) => dayjs(value).format('DD/MM')
+
+const DailyNetworkActivityChart: FC<{ data: DailyNetworkActivityPoint[] }> = ({
+  data,
+}) => {
+  const width = 720
+  const height = 240
+  const padding = { top: 18, right: 28, bottom: 42, left: 44 }
+  const innerWidth = width - padding.left - padding.right
+  const innerHeight = height - padding.top - padding.bottom
+  const maxValue = Math.max(1, ...data.flatMap((point) => [point.created, point.tested]))
+  const yTicks = Array.from(new Set([0, Math.ceil(maxValue / 2), maxValue]))
+  const x = (index: number) =>
+    padding.left + (data.length <= 1 ? innerWidth / 2 : (index / (data.length - 1)) * innerWidth)
+  const y = (value: number) => padding.top + innerHeight - (value / maxValue) * innerHeight
+  const linePath = (metric: 'created' | 'tested') =>
+    data.map((point, index) => `${index === 0 ? 'M' : 'L'} ${x(index)} ${y(point[metric])}`).join(' ')
+
+  return (
+    <Box sx={{ width: '100%', overflowX: 'auto' }}>
+      <Box
+        component="svg"
+        viewBox={`0 0 ${width} ${height}`}
+        role="img"
+        aria-label="Gráfico diário de redes criadas e redes testadas"
+        sx={{ minWidth: 640, width: '100%', height: 'auto', display: 'block' }}
+      >
+        {yTicks.map((tick) => (
+          <g key={tick}>
+            <line x1={padding.left} x2={width - padding.right} y1={y(tick)} y2={y(tick)} stroke="#e0e0e0" strokeDasharray="4 4" />
+            <text x={padding.left - 10} y={y(tick) + 4} textAnchor="end" fontSize="12" fill="#667085">{tick}</text>
+          </g>
+        ))}
+        <line x1={padding.left} x2={padding.left} y1={padding.top} y2={height - padding.bottom} stroke="#cfd4dc" />
+        <line x1={padding.left} x2={width - padding.right} y1={height - padding.bottom} y2={height - padding.bottom} stroke="#cfd4dc" />
+        <path d={linePath('created')} fill="none" stroke="#1976d2" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+        <path d={linePath('tested')} fill="none" stroke="#2e7d32" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+        {data.map((point, index) => (
+          <g key={point.date}>
+            <circle cx={x(index)} cy={y(point.created)} r="4" fill="#1976d2">
+              <title>{`${formatShortDate(point.date)} — criadas: ${point.created}`}</title>
+            </circle>
+            <circle cx={x(index)} cy={y(point.tested)} r="4" fill="#2e7d32">
+              <title>{`${formatShortDate(point.date)} — testadas: ${point.tested}`}</title>
+            </circle>
+            {index % 2 === 0 || index === data.length - 1 ? (
+              <text x={x(index)} y={height - 16} textAnchor="middle" fontSize="12" fill="#667085">{formatShortDate(point.date)}</text>
+            ) : null}
+          </g>
+        ))}
+      </Box>
+    </Box>
+  )
 }
 
 interface NeuralSplitMetrics {
@@ -338,6 +432,17 @@ const NeuralTrainingRunsTab: FC<NeuralTrainingRunsTabProps> = ({
     { label: 'Rejeitada no gate', value: previousDayRejectedGateDecisions.length, color: 'error', helper: 'bloqueada pelo MUEN no dia anterior' },
   ]
   const latestGateDecisions = gateDecisions.slice(0, 8)
+  const dailyNetworkActivity = useMemo(
+    () => buildDailyNetworkActivity(runs, gateDecisions),
+    [runs, gateDecisions],
+  )
+  const activityTotals = dailyNetworkActivity.reduce(
+    (totals, point) => ({
+      created: totals.created + point.created,
+      tested: totals.tested + point.tested,
+    }),
+    { created: 0, tested: 0 },
+  )
   const latestTrain = latestTrainMetrics(runs)
   const latestTest = latestTestMetrics(runs)
 
@@ -375,6 +480,27 @@ const NeuralTrainingRunsTab: FC<NeuralTrainingRunsTabProps> = ({
               />
               <Typography variant="caption" color="text.secondary">
                 A contagem “Pode ser testada” cruza candidatas do registry com as decisões MUEN carregadas para estimar quantas ainda não têm decisão de gate. A contagem “Fase 3” identifica redes por prefixo `neural_eod_phase3_`, origem `phase3_family` ou pelas arquiteturas novas residual/wide deep/bottleneck.
+              </Typography>
+            </Stack>
+          </Paper>
+
+          <Paper elevation={0} sx={{ p: 2.5, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+            <Stack spacing={1.5}>
+              <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" spacing={1.5}>
+                <Stack spacing={0.5}>
+                  <Typography variant="h6" fontWeight={800}>Redes criadas x testadas por dia</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Série dos últimos 14 dias: redes criadas pelo registry e redes testadas pelo Gate MUEN.
+                  </Typography>
+                </Stack>
+                <Stack direction="row" flexWrap="wrap" gap={1}>
+                  <Chip size="small" color="primary" label={`Criadas: ${formatNumber(activityTotals.created)}`} />
+                  <Chip size="small" color="success" label={`Testadas: ${formatNumber(activityTotals.tested)}`} />
+                </Stack>
+              </Stack>
+              <DailyNetworkActivityChart data={dailyNetworkActivity} />
+              <Typography variant="caption" color="text.secondary">
+                “Criadas” usa `trainedAt` com fallback para `createdAt`; “testadas” usa `decidedAt` das decisões MUEN carregadas.
               </Typography>
             </Stack>
           </Paper>
