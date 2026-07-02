@@ -1723,3 +1723,13 @@ A leitura da tela `Redes neurais — Treinos` indicou 86 redes em estágio `Cand
 - Comandos/ferramentas usados para confirmar a causa: `rg` para localizar a implementação do gráfico e das consultas no backend; `curl`/`requests` em `http://34.194.252.70/api/ops/neural/training-runs` e `http://34.194.252.70/api/ops/neural/gate-decisions` para conferir os payloads publicados; MCP JSON-RPC por HTTP em `http://mcpserversisacao.shop/mcp` com a ferramenta `bigquery_query` para comparar os totais reais no BigQuery.
 - Causa confirmada: o gráfico em si soma corretamente por data, mas a API publicada entregava apenas os registros mais recentes (`training-runs` limitado a 100 e `gate-decisions` limitado a 50). Como o frontend monta a série de 14 dias em memória a partir do payload carregado, dias anteriores apareciam zerados mesmo existindo dados históricos no BigQuery.
 - Correção aplicada no backend: ampliados os limites das consultas de treinos e decisões MUEN para 1000 registros, suficiente para preservar a janela recente atual e evitar que o gráfico perca os dias anteriores por truncamento do endpoint.
+
+## 2026-07-02 17:04:45 UTC-3
+- Ajustado o gráfico `Redes criadas x testadas por dia` na aba `Redes neurais — Treinos` para separar as redes criadas em duas séries: `Criadas Fase 2` e `Criadas Fase 3`.
+- A investigação visual partiu da tela publicada, onde a linha azul parecia sumir quando o volume de `Testadas` ficava muito maior; a correção mantém a série azul para Fase 2, adiciona série roxa para Fase 3 e preserva a série verde de testadas.
+- A separação usa o mesmo critério já existente para identificar Fase 3 (`neural_eod_phase3_`, `phase3_family` ou arquiteturas `residual_mlp`, `wide_deep_mlp`, `tabular_bottleneck_mlp`).
+- Checks executados: tentativa inicial de atualizar o diário a partir de `frontend/app` falhou por caminho relativo incorreto; em seguida o registro foi aplicado na raiz do repositório. `npm run lint` foi executado em `frontend/app` com sucesso.
+
+## 2026-07-02 17:05:47 UTC-3
+- Validação complementar da alteração visual: `npm run build` em `frontend/app` executou com sucesso e confirmou compilação TypeScript/Vite.
+- Tentativa de captura de screenshot local foi bloqueada porque o pacote `playwright` não está instalado no app (`Cannot find module 'playwright'`); não foi adicionada dependência nem versionada evidência visual.
