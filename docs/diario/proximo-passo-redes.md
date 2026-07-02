@@ -247,3 +247,6 @@ A falha HTTP 502 da aba `Redes neurais — Treinos` foi corrigida no código qua
 ## Próximo passo após totalizações do dia anterior — 2026-06-30 18:05 UTC
 
 A aba `Redes neurais — Treinos` agora tem um grupo adicional de totalizações limitado ao dia anterior, calculado no frontend a partir de `trainedAt` dos treinos e `decidedAt` das decisões MUEN carregadas. Próximo passo operacional: publicar o frontend atualizado junto com o backend pendente, validar na VPS que o novo grupo aparece abaixo das totalizações gerais e conferir se os valores do dia anterior batem com as execuções/decisões esperadas. Manter a regra de não promover modelos sem decisão MUEN `passed` e autorização humana explícita.
+
+## 2026-07-02 19:20 UTC — Próximo passo após diagnóstico do gráfico diário
+O gráfico `Redes criadas x testadas por dia` não estava refletindo todo o histórico recente porque os endpoints publicados truncavam os payloads em 100 treinos e 50 decisões MUEN. A correção no backend amplia ambos os limites para 1000 registros. Próximo passo operacional: publicar o backend atualizado na VPS e validar novamente os endpoints `/api/ops/neural/training-runs` e `/api/ops/neural/gate-decisions`; depois recarregar a tela de treinos para confirmar que os dias 28/06, 29/06, 30/06 e 01/07 deixam de aparecer zerados/incorretos quando há dados no BigQuery.
