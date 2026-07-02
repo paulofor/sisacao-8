@@ -178,7 +178,7 @@ public class BigQueryOpsClient {
                 + "TO_JSON_STRING(confusion_matrix_json) AS confusion_matrix_json, "
                 + "trained_at, created_at, notes "
                 + "FROM registry"
-                + " ORDER BY trained_at DESC, created_at DESC LIMIT 100";
+                + " ORDER BY trained_at DESC, created_at DESC LIMIT 1000";
         TableResult result = runQuery(sql, Map.of());
         List<NeuralTrainingRun> rows = new ArrayList<>();
         for (FieldValueList row : result.iterateAll()) {
@@ -206,7 +206,7 @@ public class BigQueryOpsClient {
                 + "ON f.protocol_version = d.protocol_version "
                 + "AND f.dataset_snapshot = d.dataset_snapshot "
                 + "AND f.candidate_family_hash = d.candidate_family_hash "
-                + "ORDER BY d.decided_at DESC LIMIT 50";
+                + "ORDER BY d.decided_at DESC LIMIT 1000";
         TableResult result;
         try {
             result = runQuery(sql, Map.of());

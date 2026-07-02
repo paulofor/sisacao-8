@@ -78,7 +78,7 @@ class BigQueryOpsClientTest {
                 .contains("AS phase3_runs")
                 .contains("AS pending_gate_candidate_runs")
                 .contains("FROM `ingestaokraken.cotacao_intraday.neural_gate_decisions` gd")
-                .contains("ORDER BY trained_at DESC, created_at DESC LIMIT 100");
+                .contains("ORDER BY trained_at DESC, created_at DESC LIMIT 1000");
     }
 
     @Test
@@ -107,7 +107,7 @@ class BigQueryOpsClientTest {
                 .contains("COUNTIF(d.decision_status = 'rejected' OR d.passed = FALSE) OVER () AS rejected_decisions")
                 .contains("COUNTIF(d.decision_status = 'passed' OR d.passed = TRUE) OVER () AS passed_decisions")
                 .contains("ARRAY_TO_STRING(d.failed_criteria, ', ') AS failed_criteria")
-                .contains("ORDER BY d.decided_at DESC LIMIT 50");
+                .contains("ORDER BY d.decided_at DESC LIMIT 1000");
     }
 
     @Test

@@ -1717,3 +1717,9 @@ A leitura da tela `Redes neurais — Treinos` indicou 86 redes em estágio `Cand
 - Atualizado teste para garantir que, após exaustão das configurações base, as novas candidatas Fase 3 continuam com seed nova e também apresentam variação real de hiperparâmetros.
 - Atualizado o runbook do Scheduler para deixar explícito que a Fase 3 agora também diversifica hiperparâmetros de forma controlada nas rodadas após a base.
 - Comandos usados: edição via Python, `python -m black`, `python -m pytest tests/test_neural_evolution.py tests/test_neural_evolution_orchestrator_function.py -q` e `python -m py_compile sisacao8/neural_evolution.py functions/neural_evolution_orchestrator/sisacao8/neural_evolution.py functions/neural_evolution_orchestrator/main.py`.
+
+## 2026-07-02 19:20 UTC — Diagnóstico do gráfico diário de redes criadas/testadas
+- Investigada a dúvida operacional sobre o gráfico `Redes criadas x testadas por dia` exibido na VPS.
+- Comandos/ferramentas usados para confirmar a causa: `rg` para localizar a implementação do gráfico e das consultas no backend; `curl`/`requests` em `http://34.194.252.70/api/ops/neural/training-runs` e `http://34.194.252.70/api/ops/neural/gate-decisions` para conferir os payloads publicados; MCP JSON-RPC por HTTP em `http://mcpserversisacao.shop/mcp` com a ferramenta `bigquery_query` para comparar os totais reais no BigQuery.
+- Causa confirmada: o gráfico em si soma corretamente por data, mas a API publicada entregava apenas os registros mais recentes (`training-runs` limitado a 100 e `gate-decisions` limitado a 50). Como o frontend monta a série de 14 dias em memória a partir do payload carregado, dias anteriores apareciam zerados mesmo existindo dados históricos no BigQuery.
+- Correção aplicada no backend: ampliados os limites das consultas de treinos e decisões MUEN para 1000 registros, suficiente para preservar a janela recente atual e evitar que o gráfico perca os dias anteriores por truncamento do endpoint.
