@@ -1,10 +1,12 @@
 # Próximo passo — Redes neurais MUEN
 
-**Última atualização:** 2026-07-02 18:05 UTC
+**Última atualização:** 2026-07-02 20:04 UTC
 **Protocolo:** `neural_eod_protocol_v1`
 **Status:** diversidade controlada Fase 2 e Fase 3 implementada; deploy/validação pendente
 
 ## Próximo passo atual
+
+A aba `Redes neurais — Treinos` agora separa o gráfico diário em `Criadas Fase 2`, `Criadas Fase 3` e `Testadas`, evitando a leitura equivocada de que a linha azul sumiu quando o volume de decisões MUEN é muito maior. O próximo passo imediato é publicar o frontend atualizado na VPS e validar visualmente se as séries azul, roxa e verde aparecem no card dos últimos 14 dias com os totais coerentes.
 
 A Fase 3 também recebeu diversidade controlada: depois das configurações base das famílias `residual_mlp`, `wide_deep_mlp` e `tabular_bottleneck_mlp`, novas rodadas passam a variar learning rate, dropout, batch size, epochs e class weight em grade compacta antes de repetir apenas seed. O próximo passo de validação após o deploy é executar dry-run/rodada pequena de `strategy=phase3_new_families` e confirmar que as candidatas com sufixo `_seed` trazem hiperparâmetros variados, mantendo `max_trials=1` para controlar custo.
 

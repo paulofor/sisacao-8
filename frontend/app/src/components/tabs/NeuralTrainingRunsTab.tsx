@@ -33,7 +33,8 @@ interface NeuralTrainingRunsTabProps {
 
 interface DailyNetworkActivityPoint {
   date: string;
-  created: number;
+  createdPhase2: number;
+  createdPhase3: number;
   tested: number;
 }
 
@@ -58,14 +59,20 @@ const buildDailyNetworkActivity = (
     .startOf("day");
   const points = Array.from({ length: days }, (_, index) => {
     const date = start.add(index, "day").format("YYYY-MM-DD");
-    return { date, created: 0, tested: 0 };
+    return { date, createdPhase2: 0, createdPhase3: 0, tested: 0 };
   });
   const byDate = new Map(points.map((point) => [point.date, point]));
 
   runs.forEach((run) => {
     const key = toDateKey(run.trainedAt ?? run.createdAt);
     const point = key ? byDate.get(key) : undefined;
-    if (point) point.created += 1;
+    if (point) {
+      if (isPhase3Run(run)) {
+        point.createdPhase3 += 1;
+      } else {
+        point.createdPhase2 += 1;
+      }
+    }
   });
 
   gateDecisions.forEach((attempt) => {
@@ -89,7 +96,11 @@ const DailyNetworkActivityChart: FC<{ data: DailyNetworkActivityPoint[] }> = ({
   const innerHeight = height - padding.top - padding.bottom;
   const maxValue = Math.max(
     1,
-    ...data.flatMap((point) => [point.created, point.tested]),
+    ...data.flatMap((point) => [
+      point.createdPhase2,
+      point.createdPhase3,
+      point.tested,
+    ]),
   );
   const yTicks = Array.from(new Set([0, Math.ceil(maxValue / 2), maxValue]));
   const x = (index: number) =>
@@ -99,7 +110,9 @@ const DailyNetworkActivityChart: FC<{ data: DailyNetworkActivityPoint[] }> = ({
       : (index / (data.length - 1)) * innerWidth);
   const y = (value: number) =>
     padding.top + innerHeight - (value / maxValue) * innerHeight;
-  const linePath = (metric: "created" | "tested") =>
+  const linePath = (
+    metric: "createdPhase2" | "createdPhase3" | "tested",
+  ) =>
     data
       .map(
         (point, index) =>
@@ -113,7 +126,7 @@ const DailyNetworkActivityChart: FC<{ data: DailyNetworkActivityPoint[] }> = ({
         component="svg"
         viewBox={`0 0 ${width} ${height}`}
         role="img"
-        aria-label="Gráfico diário de redes criadas e redes testadas"
+        aria-label="Gráfico diário de redes criadas na Fase 2, criadas na Fase 3 e redes testadas"
         sx={{ minWidth: 640, width: "100%", height: "auto", display: "block" }}
       >
         {yTicks.map((tick) => (
@@ -152,9 +165,17 @@ const DailyNetworkActivityChart: FC<{ data: DailyNetworkActivityPoint[] }> = ({
           stroke="#cfd4dc"
         />
         <path
-          d={linePath("created")}
+          d={linePath("createdPhase2")}
           fill="none"
           stroke="#1976d2"
+          strokeWidth="3"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <path
+          d={linePath("createdPhase3")}
+          fill="none"
+          stroke="#7b1fa2"
           strokeWidth="3"
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -169,8 +190,11 @@ const DailyNetworkActivityChart: FC<{ data: DailyNetworkActivityPoint[] }> = ({
         />
         {data.map((point, index) => (
           <g key={point.date}>
-            <circle cx={x(index)} cy={y(point.created)} r="4" fill="#1976d2">
-              <title>{`${formatShortDate(point.date)} — criadas: ${point.created}`}</title>
+            <circle cx={x(index)} cy={y(point.createdPhase2)} r="4" fill="#1976d2">
+              <title>{`${formatShortDate(point.date)} — criadas Fase 2: ${point.createdPhase2}`}</title>
+            </circle>
+            <circle cx={x(index)} cy={y(point.createdPhase3)} r="4" fill="#7b1fa2">
+              <title>{`${formatShortDate(point.date)} — criadas Fase 3: ${point.createdPhase3}`}</title>
             </circle>
             <circle cx={x(index)} cy={y(point.tested)} r="4" fill="#2e7d32">
               <title>{`${formatShortDate(point.date)} — testadas: ${point.tested}`}</title>
@@ -1100,10 +1124,11 @@ const NeuralTrainingRunsTab: FC<NeuralTrainingRunsTabProps> = ({
   );
   const activityTotals = dailyNetworkActivity.reduce(
     (totals, point) => ({
-      created: totals.created + point.created,
+      createdPhase2: totals.createdPhase2 + point.createdPhase2,
+      createdPhase3: totals.createdPhase3 + point.createdPhase3,
       tested: totals.tested + point.tested,
     }),
-    { created: 0, tested: 0 },
+    { createdPhase2: 0, createdPhase3: 0, tested: 0 },
   );
   const latestTrain = latestTrainMetrics(runs);
   const latestTest = latestTestMetrics(runs);
@@ -1178,18 +1203,23 @@ const NeuralTrainingRunsTab: FC<NeuralTrainingRunsTabProps> = ({
               >
                 <Stack spacing={0.5}>
                   <Typography variant="h6" fontWeight={800}>
-                    Redes criadas x testadas por dia
+                    Redes criadas por fase x testadas por dia
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    Série dos últimos 14 dias: redes criadas pelo registry e
-                    redes testadas pelo Gate MUEN.
+                    Série dos últimos 14 dias: redes criadas pelo registry
+                    separadas entre Fase 2 e Fase 3, além das redes testadas pelo Gate MUEN.
                   </Typography>
                 </Stack>
                 <Stack direction="row" flexWrap="wrap" gap={1}>
                   <Chip
                     size="small"
                     color="primary"
-                    label={`Criadas: ${formatNumber(activityTotals.created)}`}
+                    label={`Criadas Fase 2: ${formatNumber(activityTotals.createdPhase2)}`}
+                  />
+                  <Chip
+                    size="small"
+                    color="secondary"
+                    label={`Criadas Fase 3: ${formatNumber(activityTotals.createdPhase3)}`}
                   />
                   <Chip
                     size="small"
@@ -1200,8 +1230,9 @@ const NeuralTrainingRunsTab: FC<NeuralTrainingRunsTabProps> = ({
               </Stack>
               <DailyNetworkActivityChart data={dailyNetworkActivity} />
               <Typography variant="caption" color="text.secondary">
-                “Criadas” usa `trainedAt` com fallback para `createdAt`;
-                “testadas” usa `decidedAt` das decisões MUEN carregadas.
+                “Criadas Fase 2” e “Criadas Fase 3” usam `trainedAt` com
+                fallback para `createdAt`, separando Fase 3 pelo mesmo critério
+                dos cartões; “testadas” usa `decidedAt` das decisões MUEN carregadas.
               </Typography>
             </Stack>
           </Paper>
