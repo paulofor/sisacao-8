@@ -1,10 +1,12 @@
 # Próximo passo — Redes neurais MUEN
 
-**Última atualização:** 2026-07-02 17:45 UTC
+**Última atualização:** 2026-07-02 18:05 UTC
 **Protocolo:** `neural_eod_protocol_v1`
-**Status:** diversidade controlada implementada; deploy/validação pendente
+**Status:** diversidade controlada Fase 2 e Fase 3 implementada; deploy/validação pendente
 
 ## Próximo passo atual
+
+A Fase 3 também recebeu diversidade controlada: depois das configurações base das famílias `residual_mlp`, `wide_deep_mlp` e `tabular_bottleneck_mlp`, novas rodadas passam a variar learning rate, dropout, batch size, epochs e class weight em grade compacta antes de repetir apenas seed. O próximo passo de validação após o deploy é executar dry-run/rodada pequena de `strategy=phase3_new_families` e confirmar que as candidatas com sufixo `_seed` trazem hiperparâmetros variados, mantendo `max_trials=1` para controlar custo.
 
 A evolução neural agora tem fallback de `controlled_diversity` na Fase 2: depois de mutações e variantes simples de arquitetura, o orquestrador tenta novas combinações controladas de topologia MLP e hiperparâmetros antes de repetir apenas a seed. O próximo passo imediato é publicar `functions/neural_evolution_orchestrator`, disparar um dry-run/execução pequena com `phase2.controlled_diversity=true`, `include_seed_repeats=false` e `max_trials=1`, e confirmar que as próximas candidatas trazem `candidate_source=controlled_diversity` quando os grids anteriores estiverem esgotados.
 

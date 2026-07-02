@@ -1709,3 +1709,11 @@ A leitura da tela `Redes neurais — Treinos` indicou 86 redes em estágio `Cand
 - O fallback `seed_repeat_fresh` permanece como último recurso, apenas depois de `mutation`, `architecture_variant` e `controlled_diversity` não gerarem candidatas.
 - Atualizado o runbook do Scheduler para incluir `phase2.controlled_diversity=true` nos payloads recomendados, preservando `max_trials=1` e `include_seed_repeats=false` para manter custo/concorrência sob controle.
 - Comandos usados: `rg -n` para localizar fluxo da Fase 2, edição via Python, `python -m black`, `python -m pytest tests/test_neural_evolution.py tests/test_neural_evolution_orchestrator_function.py -q` e `python -m py_compile functions/neural_evolution_orchestrator/main.py sisacao8/neural_evolution.py functions/neural_evolution_orchestrator/sisacao8/neural_evolution.py`.
+
+## 2026-07-02 18:05 UTC — Diversidade controlada também na Fase 3
+- Avaliada a pergunta operacional sobre aumentar diversidade na Fase 3: a recomendação é sim, mas mantendo controle de orçamento e sem transformar a Fase 3 em busca ampla desgovernada.
+- Implementada diversidade controlada dentro de `generate_phase3_family_candidates`: a primeira rodada mantém as configurações base de `residual_mlp`, `wide_deep_mlp` e `tabular_bottleneck_mlp`; rodadas seguintes variam learning rate, dropout, batch size, epochs e class weight em uma grade compacta antes de virar repetição pura por seed.
+- Mantidos os limites já existentes de `EvolutionBudget`, `max_layers`, `max_parameter_count`, `max_trials` e deduplicação por `dedupe_hash`.
+- Atualizado teste para garantir que, após exaustão das configurações base, as novas candidatas Fase 3 continuam com seed nova e também apresentam variação real de hiperparâmetros.
+- Atualizado o runbook do Scheduler para deixar explícito que a Fase 3 agora também diversifica hiperparâmetros de forma controlada nas rodadas após a base.
+- Comandos usados: edição via Python, `python -m black`, `python -m pytest tests/test_neural_evolution.py tests/test_neural_evolution_orchestrator_function.py -q` e `python -m py_compile sisacao8/neural_evolution.py functions/neural_evolution_orchestrator/sisacao8/neural_evolution.py functions/neural_evolution_orchestrator/main.py`.

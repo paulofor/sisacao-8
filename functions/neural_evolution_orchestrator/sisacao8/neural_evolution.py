@@ -541,12 +541,11 @@ def generate_phase3_family_candidates(
                 "batch_norm": bool(family.get("batch_norm", False)),
                 "phase": "phase3_new_family",
             }
-            hyperparameters = {
+            base_hyperparameters = {
                 "dropout_rate": float(family.get("dropout_rate", 0.15)),
                 "learning_rate": float(family.get("learning_rate", 0.0005)),
                 "batch_size": int(family.get("batch_size", 256)),
                 "epochs": int(family.get("epochs", 60)),
-                "random_seed": int(budget.random_seed) + 30_000 + seed_offset,
                 "early_stopping": True,
                 "early_stopping_patience": int(
                     family.get("early_stopping_patience", 10)
@@ -554,6 +553,13 @@ def generate_phase3_family_candidates(
                 "class_weight": str(family.get("class_weight", "balanced")),
                 "architecture_type": architecture_type,
             }
+            hyperparameters = _phase3_controlled_hyperparameters(
+                base_hyperparameters,
+                repeat_round=repeat_round,
+            )
+            hyperparameters["random_seed"] = (
+                int(budget.random_seed) + 30_000 + seed_offset
+            )
             seed_offset += 1
             dedupe_hash = candidate_hash(architecture, hyperparameters)
             if dedupe_hash in seen:
@@ -588,6 +594,61 @@ def generate_phase3_family_candidates(
             )
         repeat_round += 1
     return candidates
+
+
+def _phase3_controlled_hyperparameters(
+    base: Mapping[str, Any],
+    *,
+    repeat_round: int,
+) -> dict[str, Any]:
+    """Return bounded Phase-3 hyperparameter variation for repeat rounds.
+
+    Round zero keeps the declared family configuration. Later rounds alter
+    training knobs in a compact, auditable grid before the same family falls
+    back to pure seed-only repetition.
+    """
+
+    selected = dict(base)
+    if repeat_round <= 0:
+        return selected
+
+    lr = float(base.get("learning_rate", 0.0005))
+    dropout = float(base.get("dropout_rate", 0.15))
+    batch_size = int(base.get("batch_size", 256))
+    epochs = int(base.get("epochs", 60))
+    variants = (
+        {
+            "learning_rate": max(lr * 0.75, 0.0001),
+            "dropout_rate": min(dropout + 0.05, 0.45),
+            "batch_size": batch_size,
+            "epochs": min(epochs + 20, 100),
+            "class_weight": "balanced",
+        },
+        {
+            "learning_rate": min(lr * 1.25, 0.003),
+            "dropout_rate": max(dropout - 0.05, 0.0),
+            "batch_size": batch_size,
+            "epochs": epochs,
+            "class_weight": "directional",
+        },
+        {
+            "learning_rate": lr,
+            "dropout_rate": min(max(dropout, 0.20), 0.40),
+            "batch_size": max(min(batch_size // 2, 512), 128),
+            "epochs": min(max(epochs, 80), 100),
+            "class_weight": "balanced",
+        },
+        {
+            "learning_rate": max(lr * 0.5, 0.0001),
+            "dropout_rate": min(dropout + 0.10, 0.45),
+            "batch_size": min(max(batch_size * 2, 128), 512),
+            "epochs": min(epochs + 10, 100),
+            "class_weight": str(base.get("class_weight", "balanced")),
+        },
+    )
+    variant = variants[(repeat_round - 1) % len(variants)]
+    selected.update(variant)
+    return selected
 
 
 def repeat_finalists_with_fresh_seeds(

@@ -398,6 +398,8 @@ Resultado esperado: HTTP 200, `status=ok`, `dry_run=true`, `candidate_count` ent
 
 Use esta etapa apenas se quiser materializar a rodada/configuração no BigQuery, mas sem executar TensorFlow ainda. Ela exige que os `model_version` gerados já existam no `neural_model_registry`; se não existirem, a função pode falhar ao tentar buscar o registry. Para um primeiro teste operacional, prefira pular esta etapa e ir direto para a etapa 3 com `max_trials=1`.
 
+A Fase 3 também usa diversidade controlada: após as configurações base de `residual_mlp`, `wide_deep_mlp` e `tabular_bottleneck_mlp` já existirem, novas rodadas variam learning rate, dropout, batch size, epochs e class weight antes de se tornarem apenas repetições por seed.
+
 ```bash
 curl -sS -X POST 'https://us-east1-ingestaokraken.cloudfunctions.net/neural_evolution_orchestrator' \
   -H 'Content-Type: application/json' \

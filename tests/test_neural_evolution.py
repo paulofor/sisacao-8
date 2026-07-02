@@ -89,6 +89,23 @@ def test_generate_phase3_family_candidates_repeats_with_fresh_seeds_after_exhaus
         candidate.dedupe_hash for candidate in first
     }
     assert all("_seed" in candidate.model_version for candidate in repeated)
+    first_by_architecture = {
+        candidate.architecture["type"]: candidate.hyperparameters for candidate in first
+    }
+    assert all(
+        candidate.hyperparameters["random_seed"]
+        != first_by_architecture[candidate.architecture["type"]]["random_seed"]
+        for candidate in repeated
+    )
+    assert any(
+        candidate.hyperparameters["dropout_rate"]
+        != first_by_architecture[candidate.architecture["type"]]["dropout_rate"]
+        or candidate.hyperparameters["learning_rate"]
+        != first_by_architecture[candidate.architecture["type"]]["learning_rate"]
+        or candidate.hyperparameters["epochs"]
+        != first_by_architecture[candidate.architecture["type"]]["epochs"]
+        for candidate in repeated
+    )
 
 
 def test_candidate_hash_changes_with_hyperparameters():
