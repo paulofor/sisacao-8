@@ -1678,3 +1678,34 @@ A leitura da tela `Redes neurais — Treinos` indicou 86 redes em estágio `Cand
 - O card inclui legenda/totalizadores de criadas e testadas no período e mantém implementação local em SVG/Material UI, sem adicionar nova dependência de gráficos.
 - Atualizado o próximo passo operacional das redes para registrar que a mudança visual precisa ser publicada e validada na VPS junto às demais alterações de frontend pendentes.
 - Comandos usados: `rg`, `sed -n`, edição via Python, `npm run build` e `npm run lint` em `frontend/app`.
+
+## 2026-07-02 16:25 UTC — Esclarecimento sobre uma família testada e critérios MUEN
+- Investigada a pergunta operacional baseada na tela `Últimas análises do Gate MUEN`: o endpoint publicado `GET http://34.194.252.70/api/ops/neural/gate-decisions` retornou 50 decisões recentes e as primeiras linhas recentes mostram repetição da família/candidata `neural_eod_mlp_evo2_20260702_seed_fresh_01`, todas rejeitadas por combinações de `folds_positivos_insuficientes`, `nao_supera_champion_mediana`, `drawdown_excessivo` e/ou `seeds_instaveis`.
+- Consultado também `GET http://34.194.252.70/api/ops/neural/training-runs`; as primeiras execuções recentes têm o mesmo `modelVersion`, indicando que o comportamento visível da tabela é uma sequência de tentativas recentes do fluxo MLP Fase 2 com seed fresca, não a lista completa de todas as famílias possíveis.
+- Confirmado no código que o Gate MUEN exige quantidade mínima de trades, folds positivos, mediana de ganho contra o champion, pior fold dentro do limite, drawdown máximo, estresse de custo e estabilidade entre seeds; a tabela exibe os nomes técnicos dos critérios que falharam.
+- Explicação preparada para o usuário: “família” é o conjunto de configuração/arquitetura avaliado como hipótese; “seed fresca” é uma nova inicialização aleatória da mesma hipótese para testar robustez. O painel está mostrando as últimas análises, e não necessariamente a diversidade total histórica.
+- Comandos usados: `python` com `urllib.request` para consultar `/api/ops/neural/gate-decisions` e `/api/ops/neural/training-runs`, `rg -n` para localizar critérios MUEN, `sed -n` para ler `sisacao8/neural_muen.py`, `sisacao8/neural_evolution.py` e `docs/diario/proximo-passo-redes.md`.
+
+## 2026-07-02 16:45 UTC — Top 5 problemas de rejeição no Gate MUEN na tela de Treinos
+- Atendida a solicitação de exibir na tela os 5 principais problemas que fazem as redes serem rejeitadas no gate de qualidade.
+- Implementado na aba `Redes neurais — Treinos` o card `Top 5 problemas que reprovam no Gate MUEN`, calculado a partir dos critérios presentes em `failedCriteria` das decisões MUEN carregadas e limitado aos cinco critérios mais frequentes.
+- O card mostra ranking, quantidade de ocorrências, percentual sobre as rejeições carregadas, barra visual proporcional, descrição em linguagem operacional e o nome técnico do critério para rastreabilidade.
+- Os critérios conhecidos receberam rótulos explicativos: poucos folds positivos, drawdown excessivo, instabilidade entre seeds, não superar o champion, poucos trades, fold catastrófico e ausência de stress de custo.
+- Comandos usados: `rg -n` para localizar a tela e `failedCriteria`, edição via Python em `frontend/app/src/components/tabs/NeuralTrainingRunsTab.tsx`, `npx prettier --write`, `npm run lint -- --max-warnings=0` e `npm run build` em `frontend/app`.
+
+## 2026-07-02 17:15 UTC — Gráfico diário de reprovações por critério MUEN
+- Atendida a solicitação de mostrar, além do Top 5 agregado, a quantidade diária de redes reprovadas com cada critério principal.
+- Implementado na aba `Redes neurais — Treinos` o card `Redes reprovadas por problema ao longo dos dias`, com barras empilhadas dos últimos 14 dias usando `decidedAt` das decisões MUEN carregadas e os critérios do Top 5 atual.
+- O gráfico deixa explícito que uma mesma rede pode contar em mais de um critério quando o Gate MUEN retorna múltiplas causas de rejeição.
+- Análise operacional registrada: o endpoint publicado retornou 50 decisões recentes carregadas, com 35 em 2026-07-02 e 15 em 2026-07-01; o endpoint de treinos retornou 100 treinos visíveis, com 35 em 2026-07-02 e 65 em 2026-07-01, além de agregados `totalRuns=568`, `candidateRuns=568`, `rejectedDecisions=506`, `passedDecisions=0`, `phase3Runs=90` e `pendingGateCandidateRuns=62` no recorte consultado.
+- Opinião operacional: o volume atual é suficiente para diagnosticar os principais gargalos do gate, mas não é recomendável aumentar apenas a quantidade bruta enquanto todas as decisões seguem reprovadas e há repetição de família/seed fresca; o melhor próximo aumento é aumentar diversidade controlada de famílias/arquiteturas/hiperparâmetros ou orçamento por rodada somente após validar custo, tempo e ausência de fila.
+- Comandos usados: `python` com `urllib.request` para consultar `/api/ops/neural/gate-decisions` e `/api/ops/neural/training-runs`, edição via Python em `frontend/app/src/components/tabs/NeuralTrainingRunsTab.tsx`, `npx prettier --write`, `npm run lint -- --max-warnings=0` e `npm run build` em `frontend/app`.
+
+## 2026-07-02 17:45 UTC — Aumento de diversidade controlada na evolução neural
+- Atendida a decisão operacional de aumentar diversidade controlada em vez de aumentar apenas a cadência bruta de redes.
+- Implementado o gerador `generate_controlled_diversity_candidates` no módulo neural compartilhado e no pacote embarcado da Cloud Function `neural_evolution_orchestrator`.
+- O novo fallback é acionado na Fase 2 quando mutações e variantes simples de arquitetura já estão esgotadas; ele cria candidatas `controlled_diversity` variando topologia MLP e hiperparâmetros dentro de limites de camadas, parâmetros, learning rate, dropout, batch size, epochs e class weight.
+- A lógica evita variantes puramente por seed da mesma família selecionada, usando `candidate_family_key` para não aceitar uma candidata cuja família seja equivalente à do parent ignorando `random_seed`.
+- O fallback `seed_repeat_fresh` permanece como último recurso, apenas depois de `mutation`, `architecture_variant` e `controlled_diversity` não gerarem candidatas.
+- Atualizado o runbook do Scheduler para incluir `phase2.controlled_diversity=true` nos payloads recomendados, preservando `max_trials=1` e `include_seed_repeats=false` para manter custo/concorrência sob controle.
+- Comandos usados: `rg -n` para localizar fluxo da Fase 2, edição via Python, `python -m black`, `python -m pytest tests/test_neural_evolution.py tests/test_neural_evolution_orchestrator_function.py -q` e `python -m py_compile functions/neural_evolution_orchestrator/main.py sisacao8/neural_evolution.py functions/neural_evolution_orchestrator/sisacao8/neural_evolution.py`.
