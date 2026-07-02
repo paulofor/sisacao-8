@@ -74,7 +74,8 @@ gcloud run services add-iam-policy-binding neural_evolution_orchestrator \
     "top_fraction": 1.0,
     "parent_limit": 10,
     "max_parents_per_family": 1,
-    "include_seed_repeats": false
+    "include_seed_repeats": false,
+    "controlled_diversity": true
   }
 }
 ```
@@ -184,7 +185,7 @@ Se precisar rodar diretamente a função para uma triagem pontual, use:
 ```bash
 curl -sS -X POST 'https://us-east1-ingestaokraken.cloudfunctions.net/neural_evolution_orchestrator' \
   -H 'Content-Type: application/json' \
-  --data '{"strategy":"deterministic_phase2","budget":{"max_trials":1,"max_runtime_minutes":45,"max_parameter_count":150000,"max_layers":4,"random_seed":20260621},"phase2":{"top_fraction":1.0,"parent_limit":10,"max_parents_per_family":1,"include_seed_repeats":false}}'
+  --data '{"strategy":"deterministic_phase2","budget":{"max_trials":1,"max_runtime_minutes":45,"max_parameter_count":150000,"max_layers":4,"random_seed":20260621},"phase2":{"top_fraction":1.0,"parent_limit":10,"max_parents_per_family":1,"include_seed_repeats":false,"controlled_diversity":true}}'
 ```
 
 ## Operação recorrente
@@ -192,6 +193,8 @@ curl -sS -X POST 'https://us-east1-ingestaokraken.cloudfunctions.net/neural_evol
 Para evolução contínua com controle, a cadência solicitada passa a ser de meia em meia hora (`*/30 * * * *`) no job `neural-evolution-daily`, com orçamento menor por rodada. Essa configuração avalia redes pendentes com mais rapidez sem concentrar custo/runtime em uma única execução semanal.
 
 Use `max_trials=1` como padrão para a cadência de 30 minutos. A execução passa a ter até 48 tentativas por dia, então aumentar o orçamento por rodada pode multiplicar custo e concorrência rapidamente. Se precisar ampliar, faça isso apenas depois de confirmar que cada execução termina bem abaixo de `attempt-deadline=1800s`, que não há sobreposição de treinos e que as métricas/custos continuam estáveis. Rodadas manuais continuam úteis para antecipar uma triagem pontual ou recuperar uma execução perdida.
+
+A diversidade controlada fica habilitada por `phase2.controlled_diversity=true`: quando mutações e variantes simples de arquitetura se esgotarem, o orquestrador tenta combinações novas e limitadas de topologia MLP + hiperparâmetros antes de cair para repetição pura com seed fresca.
 
 ## Alteração via MCP Server
 
@@ -214,7 +217,8 @@ Quando a versão do MCP que expõe a tool `neural_evolution_daily_scheduler_appl
         "top_fraction": 1.0,
         "parent_limit": 10,
         "max_parents_per_family": 1,
-        "include_seed_repeats": false
+        "include_seed_repeats": false,
+        "controlled_diversity": true
       },
       "pause_weekly": true
     }
@@ -266,7 +270,7 @@ gcloud scheduler jobs create http neural-evolution-daily \
   --http-method=POST \
   --attempt-deadline=1800s \
   --headers='Content-Type=application/json' \
-  --message-body='{"strategy":"deterministic_phase2","budget":{"max_trials":1,"max_runtime_minutes":45,"max_parameter_count":150000,"max_layers":4,"random_seed":20260621},"phase2":{"top_fraction":1.0,"parent_limit":10,"max_parents_per_family":1,"include_seed_repeats":false}}'
+  --message-body='{"strategy":"deterministic_phase2","budget":{"max_trials":1,"max_runtime_minutes":45,"max_parameter_count":150000,"max_layers":4,"random_seed":20260621},"phase2":{"top_fraction":1.0,"parent_limit":10,"max_parents_per_family":1,"include_seed_repeats":false,"controlled_diversity":true}}'
 ```
 
 Para alterar o job existente sem OIDC:
@@ -281,7 +285,7 @@ gcloud scheduler jobs update http neural-evolution-daily \
   --http-method=POST \
   --attempt-deadline=1800s \
   --update-headers='Content-Type=application/json' \
-  --message-body='{"strategy":"deterministic_phase2","budget":{"max_trials":1,"max_runtime_minutes":45,"max_parameter_count":150000,"max_layers":4,"random_seed":20260621},"phase2":{"top_fraction":1.0,"parent_limit":10,"max_parents_per_family":1,"include_seed_repeats":false}}'
+  --message-body='{"strategy":"deterministic_phase2","budget":{"max_trials":1,"max_runtime_minutes":45,"max_parameter_count":150000,"max_layers":4,"random_seed":20260621},"phase2":{"top_fraction":1.0,"parent_limit":10,"max_parents_per_family":1,"include_seed_repeats":false,"controlled_diversity":true}}'
 ```
 
 ## Configuração do Cloud Scheduler com OIDC
@@ -298,7 +302,7 @@ gcloud scheduler jobs create http neural-evolution-daily \
   --http-method=POST \
   --attempt-deadline=1800s \
   --headers='Content-Type=application/json' \
-  --message-body='{"strategy":"deterministic_phase2","budget":{"max_trials":1,"max_runtime_minutes":45,"max_parameter_count":150000,"max_layers":4,"random_seed":20260621},"phase2":{"top_fraction":1.0,"parent_limit":10,"max_parents_per_family":1,"include_seed_repeats":false}}' \
+  --message-body='{"strategy":"deterministic_phase2","budget":{"max_trials":1,"max_runtime_minutes":45,"max_parameter_count":150000,"max_layers":4,"random_seed":20260621},"phase2":{"top_fraction":1.0,"parent_limit":10,"max_parents_per_family":1,"include_seed_repeats":false,"controlled_diversity":true}}' \
   --oidc-service-account-email='sa-scheduler-invoker@ingestaokraken.iam.gserviceaccount.com' \
   --oidc-token-audience='https://us-east1-ingestaokraken.cloudfunctions.net/neural_evolution_orchestrator'
 ```
@@ -315,7 +319,7 @@ gcloud scheduler jobs update http neural-evolution-daily \
   --http-method=POST \
   --attempt-deadline=1800s \
   --update-headers='Content-Type=application/json' \
-  --message-body='{"strategy":"deterministic_phase2","budget":{"max_trials":1,"max_runtime_minutes":45,"max_parameter_count":150000,"max_layers":4,"random_seed":20260621},"phase2":{"top_fraction":1.0,"parent_limit":10,"max_parents_per_family":1,"include_seed_repeats":false}}' \
+  --message-body='{"strategy":"deterministic_phase2","budget":{"max_trials":1,"max_runtime_minutes":45,"max_parameter_count":150000,"max_layers":4,"random_seed":20260621},"phase2":{"top_fraction":1.0,"parent_limit":10,"max_parents_per_family":1,"include_seed_repeats":false,"controlled_diversity":true}}' \
   --oidc-service-account-email='sa-scheduler-invoker@ingestaokraken.iam.gserviceaccount.com' \
   --oidc-token-audience='https://us-east1-ingestaokraken.cloudfunctions.net/neural_evolution_orchestrator'
 ```
@@ -393,6 +397,8 @@ Resultado esperado: HTTP 200, `status=ok`, `dry_run=true`, `candidate_count` ent
 ### 2. Rodada pequena sem chamar treino
 
 Use esta etapa apenas se quiser materializar a rodada/configuração no BigQuery, mas sem executar TensorFlow ainda. Ela exige que os `model_version` gerados já existam no `neural_model_registry`; se não existirem, a função pode falhar ao tentar buscar o registry. Para um primeiro teste operacional, prefira pular esta etapa e ir direto para a etapa 3 com `max_trials=1`.
+
+A Fase 3 também usa diversidade controlada: após as configurações base de `residual_mlp`, `wide_deep_mlp` e `tabular_bottleneck_mlp` já existirem, novas rodadas variam learning rate, dropout, batch size, epochs e class weight antes de se tornarem apenas repetições por seed.
 
 ```bash
 curl -sS -X POST 'https://us-east1-ingestaokraken.cloudfunctions.net/neural_evolution_orchestrator' \
