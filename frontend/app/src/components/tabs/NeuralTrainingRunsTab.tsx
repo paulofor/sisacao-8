@@ -37,6 +37,11 @@ interface DailyNetworkActivityPoint {
   tested: number;
 }
 
+interface DailyGateProblemPoint {
+  date: string;
+  counts: Record<string, number>;
+}
+
 const toDateKey = (value: string | null | undefined) => {
   if (!value) return null;
   const parsed = dayjs(value);
@@ -183,6 +188,120 @@ const DailyNetworkActivityChart: FC<{ data: DailyNetworkActivityPoint[] }> = ({
             ) : null}
           </g>
         ))}
+      </Box>
+    </Box>
+  );
+};
+
+const DailyGateProblemChart: FC<{
+  data: DailyGateProblemPoint[];
+  problems: GateProblemSummary[];
+}> = ({ data, problems }) => {
+  const width = 760;
+  const height = 280;
+  const padding = { top: 18, right: 28, bottom: 48, left: 44 };
+  const innerWidth = width - padding.left - padding.right;
+  const innerHeight = height - padding.top - padding.bottom;
+  const barGap = 8;
+  const barWidth = Math.max(
+    12,
+    (innerWidth - barGap * Math.max(0, data.length - 1)) /
+      Math.max(1, data.length),
+  );
+  const dailyTotals = data.map((point) =>
+    problems.reduce(
+      (total, problem) => total + (point.counts[problem.criterion] ?? 0),
+      0,
+    ),
+  );
+  const maxTotal = Math.max(1, ...dailyTotals);
+  const yTicks = Array.from(new Set([0, Math.ceil(maxTotal / 2), maxTotal]));
+  const x = (index: number) => padding.left + index * (barWidth + barGap);
+  const y = (value: number) =>
+    padding.top + innerHeight - (value / maxTotal) * innerHeight;
+
+  return (
+    <Box sx={{ width: "100%", overflowX: "auto" }}>
+      <Box
+        component="svg"
+        viewBox={`0 0 ${width} ${height}`}
+        role="img"
+        aria-label="Gráfico diário de redes reprovadas por critério do Gate MUEN"
+        sx={{ minWidth: 680, width: "100%", height: "auto", display: "block" }}
+      >
+        {yTicks.map((tick) => (
+          <g key={tick}>
+            <line
+              x1={padding.left}
+              x2={width - padding.right}
+              y1={y(tick)}
+              y2={y(tick)}
+              stroke="#e0e0e0"
+              strokeDasharray="4 4"
+            />
+            <text
+              x={padding.left - 10}
+              y={y(tick) + 4}
+              textAnchor="end"
+              fontSize="12"
+              fill="#667085"
+            >
+              {tick}
+            </text>
+          </g>
+        ))}
+        <line
+          x1={padding.left}
+          x2={padding.left}
+          y1={padding.top}
+          y2={height - padding.bottom}
+          stroke="#cfd4dc"
+        />
+        <line
+          x1={padding.left}
+          x2={width - padding.right}
+          y1={height - padding.bottom}
+          y2={height - padding.bottom}
+          stroke="#cfd4dc"
+        />
+        {data.map((point, pointIndex) => {
+          let stackedValue = 0;
+          return (
+            <g key={point.date}>
+              {problems.map((problem, problemIndex) => {
+                const count = point.counts[problem.criterion] ?? 0;
+                if (count <= 0) return null;
+                const yTop = y(stackedValue + count);
+                const segmentHeight = y(stackedValue) - yTop;
+                stackedValue += count;
+                return (
+                  <rect
+                    key={problem.criterion}
+                    x={x(pointIndex)}
+                    y={yTop}
+                    width={barWidth}
+                    height={Math.max(1, segmentHeight)}
+                    fill={criterionColor(problemIndex)}
+                    rx="2"
+                  >
+                    <title>{`${formatShortDate(point.date)} — ${problem.label}: ${count}`}</title>
+                  </rect>
+                );
+              })}
+              {pointIndex % 2 === 0 || pointIndex === data.length - 1 ? (
+                <text
+                  x={x(pointIndex) + barWidth / 2}
+                  y={height - 18}
+                  textAnchor="middle"
+                  fontSize="12"
+                  fill="#667085"
+                >
+                  {formatShortDate(point.date)}
+                </text>
+              ) : null}
+            </g>
+          );
+        })}
       </Box>
     </Box>
   );
@@ -435,6 +554,17 @@ const splitCriteria = (value: string | null | undefined) =>
 const criterionLabel = (criterion: string) =>
   CRITERIA_LABELS[criterion]?.label ?? criterion.replaceAll("_", " ");
 
+const GATE_PROBLEM_COLORS = [
+  "#d32f2f",
+  "#ed6c02",
+  "#9c27b0",
+  "#1976d2",
+  "#2e7d32",
+];
+
+const criterionColor = (index: number) =>
+  GATE_PROBLEM_COLORS[index % GATE_PROBLEM_COLORS.length];
+
 const criterionDescription = (criterion: string) =>
   CRITERIA_LABELS[criterion]?.description ??
   "Critério técnico retornado pelo Gate MUEN.";
@@ -467,6 +597,41 @@ const topGateProblems = (
       description: criterionDescription(criterion),
       count,
     }));
+};
+
+const buildDailyGateProblemActivity = (
+  gateDecisions: NeuralGateDecisionAttempt[],
+  problems: GateProblemSummary[],
+  days = 14,
+): DailyGateProblemPoint[] => {
+  const selectedCriteria = new Set(
+    problems.map((problem) => problem.criterion),
+  );
+  const start = dayjs()
+    .subtract(days - 1, "day")
+    .startOf("day");
+  const points: DailyGateProblemPoint[] = Array.from(
+    { length: days },
+    (_, index) => {
+      const date = start.add(index, "day").format("YYYY-MM-DD");
+      return { date, counts: {} };
+    },
+  );
+  const byDate = new Map(points.map((point) => [point.date, point]));
+
+  gateDecisions.forEach((attempt) => {
+    if (attempt.passed || attempt.decisionStatus?.toLowerCase() === "passed")
+      return;
+    const key = toDateKey(attempt.decidedAt);
+    const point = key ? byDate.get(key) : undefined;
+    if (!point) return;
+    splitCriteria(attempt.failedCriteria).forEach((criterion) => {
+      if (!selectedCriteria.has(criterion)) return;
+      point.counts[criterion] = (point.counts[criterion] ?? 0) + 1;
+    });
+  });
+
+  return points;
 };
 
 interface StageTotal {
@@ -643,6 +808,70 @@ const GateProblemsCard: FC<{
     </Paper>
   );
 };
+
+const GateProblemTrendCard: FC<{
+  data: DailyGateProblemPoint[];
+  problems: GateProblemSummary[];
+  loading?: boolean;
+  error?: Error | null;
+}> = ({ data, problems, loading = false, error }) => (
+  <Paper
+    elevation={0}
+    sx={{
+      p: 2.5,
+      border: "1px solid",
+      borderColor: "divider",
+      borderRadius: 2,
+    }}
+  >
+    <Stack spacing={1.5}>
+      <Stack spacing={0.5}>
+        <Typography variant="h6" fontWeight={800}>
+          Redes reprovadas por problema ao longo dos dias
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          Barras empilhadas dos últimos 14 dias. Uma mesma rede pode aparecer em
+          mais de um critério quando o Gate MUEN registra múltiplas causas de
+          rejeição.
+        </Typography>
+      </Stack>
+      {loading ? <LinearProgress /> : null}
+      {error ? (
+        <Alert severity="warning">
+          Não foi possível carregar a série diária dos critérios de rejeição.
+        </Alert>
+      ) : null}
+      {!loading && !error && problems.length === 0 ? (
+        <Alert severity="info">
+          Ainda não há critérios carregados para montar o gráfico diário.
+        </Alert>
+      ) : null}
+      {problems.length > 0 ? (
+        <>
+          <Stack direction="row" flexWrap="wrap" gap={1}>
+            {problems.map((problem, index) => (
+              <Chip
+                key={problem.criterion}
+                size="small"
+                label={problem.label}
+                sx={{
+                  bgcolor: criterionColor(index),
+                  color: "common.white",
+                  fontWeight: 700,
+                }}
+              />
+            ))}
+          </Stack>
+          <DailyGateProblemChart data={data} problems={problems} />
+          <Typography variant="caption" color="text.secondary">
+            A série usa `decidedAt` das decisões MUEN carregadas e considera
+            apenas os critérios do Top 5 atual.
+          </Typography>
+        </>
+      ) : null}
+    </Stack>
+  </Paper>
+);
 
 const SummaryCard: FC<{ title: string; value: string; helper?: string }> = ({
   title,
@@ -861,6 +1090,10 @@ const NeuralTrainingRunsTab: FC<NeuralTrainingRunsTabProps> = ({
     () => topGateProblems(gateDecisions),
     [gateDecisions],
   );
+  const dailyGateProblemActivity = useMemo(
+    () => buildDailyGateProblemActivity(gateDecisions, topRejectionProblems),
+    [gateDecisions, topRejectionProblems],
+  );
   const dailyNetworkActivity = useMemo(
     () => buildDailyNetworkActivity(runs, gateDecisions),
     [runs, gateDecisions],
@@ -976,6 +1209,13 @@ const NeuralTrainingRunsTab: FC<NeuralTrainingRunsTabProps> = ({
           <GateProblemsCard
             problems={topRejectionProblems}
             totalRejected={rejectedGateDecisions.length}
+            loading={gateDecisionsLoading}
+            error={gateDecisionsError}
+          />
+
+          <GateProblemTrendCard
+            data={dailyGateProblemActivity}
+            problems={topRejectionProblems}
             loading={gateDecisionsLoading}
             error={gateDecisionsError}
           />

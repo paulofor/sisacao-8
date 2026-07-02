@@ -1,10 +1,12 @@
 # Próximo passo — Redes neurais MUEN
 
-**Última atualização:** 2026-07-02 16:45 UTC
+**Última atualização:** 2026-07-02 17:15 UTC
 **Protocolo:** `neural_eod_protocol_v1`
-**Status:** Fase 3 gerando candidatas; top 5 de rejeição MUEN pendente de publicação
+**Status:** Fase 3 gerando candidatas; gráfico diário de rejeições MUEN pendente de publicação
 
 ## Próximo passo atual
+
+A aba `Redes neurais — Treinos` recebeu também o card `Redes reprovadas por problema ao longo dos dias`, com barras empilhadas dos últimos 14 dias para os critérios do Top 5 de rejeição MUEN. A leitura operacional atual é: o volume recente já é suficiente para diagnosticar gargalos, mas o aumento recomendado não é apenas mais cadência; é aumentar diversidade controlada de famílias/arquiteturas/hiperparâmetros e só ampliar `max_trials`/cadência depois de validar custo, tempo de execução e ausência de fila.
 
 A aba `Redes neurais — Treinos` recebeu um card `Top 5 problemas que reprovam no Gate MUEN`, mostrando os critérios de rejeição mais frequentes nas decisões carregadas, com quantidade, percentual, barra visual e explicação operacional. O próximo passo imediato é publicar o frontend atualizado na VPS e validar visualmente se o ranking aparece acima da tabela `Últimas análises do Gate MUEN`.
 
