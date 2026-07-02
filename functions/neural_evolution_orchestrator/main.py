@@ -17,6 +17,7 @@ from sisacao8.neural_evolution import (
     EvaluationScore,
     EvolutionBudget,
     generate_architecture_variant_candidates,
+    generate_controlled_diversity_candidates,
     generate_deterministic_candidates,
     generate_phase3_family_candidates,
     mutate_top_candidates,
@@ -385,6 +386,7 @@ def _generate_phase2_candidates(
     parent_limit = int(phase2_options.get("parent_limit", 10))
     max_parents_per_family = int(phase2_options.get("max_parents_per_family", 1))
     include_seed_repeats = bool(phase2_options.get("include_seed_repeats", True))
+    enable_controlled_diversity = bool(phase2_options.get("controlled_diversity", True))
     scored_parents = _phase2_parent_candidates(client, limit=parent_limit)
     top_candidates = select_diverse_top_candidates(
         scored_parents,
@@ -425,9 +427,23 @@ def _generate_phase2_candidates(
             existing_hashes=existing_hashes,
             model_version_prefix=f"{model_version_prefix}_arch",
         )
+    if not candidates and enable_controlled_diversity:
+        logging.warning(
+            "Phase-2 architecture variants exhausted; generating controlled "
+            "diversity candidates for %s selected parents",
+            len(top_candidates),
+        )
+        candidates = generate_controlled_diversity_candidates(
+            top_candidates,
+            evolution_run_id=evolution_run_id,
+            dataset_snapshot=dataset_snapshot,
+            budget=budget,
+            existing_hashes=existing_hashes,
+            model_version_prefix=f"{model_version_prefix}_diversity",
+        )
     if not candidates:
         logging.warning(
-            "Phase-2 architecture variants exhausted; generating fresh seed "
+            "Phase-2 controlled diversity exhausted; generating fresh seed "
             "repeats for %s selected parents",
             len(top_candidates),
         )

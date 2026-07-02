@@ -348,6 +348,84 @@ def generate_architecture_variant_candidates(
     return candidates
 
 
+def generate_controlled_diversity_candidates(
+    finalists: Sequence[CandidateConfig],
+    *,
+    evolution_run_id: str,
+    dataset_snapshot: str,
+    budget: EvolutionBudget,
+    existing_hashes: Iterable[str] | None = None,
+    model_version_prefix: str = "neural_eod_mlp_evo2_diversity",
+) -> list[CandidateConfig]:
+    """Return bounded candidates that vary architecture and training knobs.
+
+    This fallback is intentionally more diverse than a fresh-seed repeat, but
+    still controlled: it keeps MLP/tabular EOD assumptions, respects layer and
+    parameter budgets, avoids pure seed-only variants of the selected parents,
+    and limits exploration to a compact grid around known finalists.
+    """
+
+    seen_hashes = set(existing_hashes or [])
+    seen_family_keys = {
+        candidate_family_key(parent.architecture, parent.hyperparameters)
+        for parent in finalists
+    }
+    candidates: list[CandidateConfig] = []
+    seed_offset = 0
+
+    for parent_index, parent in enumerate(finalists, start=1):
+        parent_hidden = tuple(int(item) for item in parent.architecture["hidden_units"])
+        parent_hp = parent.hyperparameters
+        for hidden_units in _controlled_diversity_architecture_space(parent_hidden):
+            if len(hidden_units) > budget.max_layers:
+                continue
+            if estimate_parameter_count(hidden_units) > budget.max_parameter_count:
+                continue
+            for hp_variant in _controlled_diversity_hyperparameter_space(parent_hp):
+                if len(candidates) >= budget.max_trials:
+                    return candidates
+                architecture = dict(parent.architecture)
+                architecture["hidden_units"] = list(hidden_units)
+                architecture["type"] = str(architecture.get("type", "mlp"))
+                hyperparameters = {**parent_hp, **hp_variant}
+                hyperparameters["random_seed"] = (
+                    int(budget.random_seed) + 40_000 + seed_offset
+                )
+                hyperparameters["early_stopping"] = True
+                hyperparameters.setdefault("early_stopping_patience", 8)
+                seed_offset += 1
+
+                family_key = candidate_family_key(architecture, hyperparameters)
+                if family_key in seen_family_keys:
+                    continue
+                dedupe_hash = candidate_hash(architecture, hyperparameters)
+                if dedupe_hash in seen_hashes:
+                    continue
+                seen_family_keys.add(family_key)
+                seen_hashes.add(dedupe_hash)
+                index = len(candidates) + 1
+                candidates.append(
+                    _candidate_from_parts(
+                        evolution_run_id=evolution_run_id,
+                        dataset_snapshot=dataset_snapshot,
+                        model_version=f"{model_version_prefix}_{index:02d}",
+                        candidate_source="controlled_diversity",
+                        architecture=architecture,
+                        hyperparameters=hyperparameters,
+                        dedupe_hash=dedupe_hash,
+                        notes=(
+                            "Fase 2 diversidade controlada; "
+                            f"parent={parent.model_version}; "
+                            f"parent_index={parent_index}; "
+                            f"hidden_units={list(hidden_units)}; "
+                            f"candidate_index={index}"
+                        ),
+                    )
+                )
+
+    return candidates
+
+
 def _architecture_variant_space(
     hidden_units: Sequence[int],
 ) -> tuple[tuple[int, ...], ...]:
@@ -373,6 +451,50 @@ def _architecture_variant_space(
     add(tuple(sorted(base, reverse=True)))
 
     return tuple(variants)
+
+
+def _controlled_diversity_architecture_space(
+    hidden_units: Sequence[int],
+) -> tuple[tuple[int, ...], ...]:
+    base = tuple(int(item) for item in hidden_units if int(item) > 0)
+    variants = list(_architecture_variant_space(base))
+    for candidate in HIDDEN_UNITS_SPACE:
+        normalized = tuple(int(item) for item in candidate)
+        if normalized != base and normalized not in variants:
+            variants.append(normalized)
+    return tuple(variants)
+
+
+def _controlled_diversity_hyperparameter_space(
+    hyperparameters: Mapping[str, Any],
+) -> tuple[dict[str, Any], ...]:
+    lr = float(hyperparameters.get("learning_rate", 0.001))
+    dropout = float(hyperparameters.get("dropout_rate", 0.15))
+    batch_size = int(hyperparameters.get("batch_size", 256))
+    epochs = int(hyperparameters.get("epochs", 40))
+    return (
+        {
+            "learning_rate": max(lr / 2, 0.0001),
+            "dropout_rate": min(dropout + 0.10, 0.45),
+            "batch_size": batch_size,
+            "epochs": min(epochs + 20, 100),
+            "class_weight": "balanced",
+        },
+        {
+            "learning_rate": min(lr * 1.5, 0.003),
+            "dropout_rate": max(dropout - 0.05, 0.0),
+            "batch_size": min(max(batch_size * 2, 128), 512),
+            "epochs": epochs,
+            "class_weight": "directional",
+        },
+        {
+            "learning_rate": max(lr, 0.0003),
+            "dropout_rate": min(max(dropout, 0.15), 0.35),
+            "batch_size": max(min(batch_size // 2, 512), 128),
+            "epochs": min(max(epochs, 60), 100),
+            "class_weight": "balanced",
+        },
+    )
 
 
 def generate_phase3_family_candidates(

@@ -155,6 +155,7 @@ def test_score_candidate_keeps_candidate_with_oos_evidence():
 def test_select_top_mutate_and_repeat_finalists():
     from sisacao8.neural_evolution import (
         generate_architecture_variant_candidates,
+        generate_controlled_diversity_candidates,
         mutate_top_candidates,
         penalized_score,
         repeat_finalists_with_fresh_seeds,
@@ -204,6 +205,16 @@ def test_select_top_mutate_and_repeat_finalists():
         existing_hashes={candidate.dedupe_hash for candidate in mutations},
         model_version_prefix="arch_test",
     )
+    controlled_diversity = generate_controlled_diversity_candidates(
+        top,
+        evolution_run_id="run-2",
+        dataset_snapshot="snapshot-1",
+        budget=EvolutionBudget(max_trials=3, random_seed=20260621),
+        existing_hashes={
+            candidate.dedupe_hash for candidate in [*mutations, *architecture_variants]
+        },
+        model_version_prefix="diversity_test",
+    )
     repeated = repeat_finalists_with_seeds(
         top,
         evolution_run_id="run-2",
@@ -245,6 +256,14 @@ def test_select_top_mutate_and_repeat_finalists():
         candidate.architecture["hidden_units"] != top[0].architecture["hidden_units"]
         for candidate in architecture_variants
     )
+    assert len(controlled_diversity) == 3
+    assert {candidate.candidate_source for candidate in controlled_diversity} == {
+        "controlled_diversity"
+    }
+    assert not {
+        candidate_family_key(candidate.architecture, candidate.hyperparameters)
+        for candidate in controlled_diversity
+    } & {candidate_family_key(top[0].architecture, top[0].hyperparameters)}
     assert all(candidate.training_request["early_stopping"] for candidate in mutations)
     assert {candidate.training_request["class_weight"] for candidate in mutations} <= {
         "balanced",
