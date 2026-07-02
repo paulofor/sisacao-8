@@ -1685,3 +1685,10 @@ A leitura da tela `Redes neurais — Treinos` indicou 86 redes em estágio `Cand
 - Confirmado no código que o Gate MUEN exige quantidade mínima de trades, folds positivos, mediana de ganho contra o champion, pior fold dentro do limite, drawdown máximo, estresse de custo e estabilidade entre seeds; a tabela exibe os nomes técnicos dos critérios que falharam.
 - Explicação preparada para o usuário: “família” é o conjunto de configuração/arquitetura avaliado como hipótese; “seed fresca” é uma nova inicialização aleatória da mesma hipótese para testar robustez. O painel está mostrando as últimas análises, e não necessariamente a diversidade total histórica.
 - Comandos usados: `python` com `urllib.request` para consultar `/api/ops/neural/gate-decisions` e `/api/ops/neural/training-runs`, `rg -n` para localizar critérios MUEN, `sed -n` para ler `sisacao8/neural_muen.py`, `sisacao8/neural_evolution.py` e `docs/diario/proximo-passo-redes.md`.
+
+## 2026-07-02 16:45 UTC — Top 5 problemas de rejeição no Gate MUEN na tela de Treinos
+- Atendida a solicitação de exibir na tela os 5 principais problemas que fazem as redes serem rejeitadas no gate de qualidade.
+- Implementado na aba `Redes neurais — Treinos` o card `Top 5 problemas que reprovam no Gate MUEN`, calculado a partir dos critérios presentes em `failedCriteria` das decisões MUEN carregadas e limitado aos cinco critérios mais frequentes.
+- O card mostra ranking, quantidade de ocorrências, percentual sobre as rejeições carregadas, barra visual proporcional, descrição em linguagem operacional e o nome técnico do critério para rastreabilidade.
+- Os critérios conhecidos receberam rótulos explicativos: poucos folds positivos, drawdown excessivo, instabilidade entre seeds, não superar o champion, poucos trades, fold catastrófico e ausência de stress de custo.
+- Comandos usados: `rg -n` para localizar a tela e `failedCriteria`, edição via Python em `frontend/app/src/components/tabs/NeuralTrainingRunsTab.tsx`, `npx prettier --write`, `npm run lint -- --max-warnings=0` e `npm run build` em `frontend/app`.

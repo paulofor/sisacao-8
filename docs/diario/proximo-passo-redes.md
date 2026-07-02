@@ -1,10 +1,12 @@
 # Próximo passo — Redes neurais MUEN
 
-**Última atualização:** 2026-07-02 16:25 UTC
+**Última atualização:** 2026-07-02 16:45 UTC
 **Protocolo:** `neural_eod_protocol_v1`
-**Status:** Fase 3 gerando candidatas; ajuste visual pendente de publicação
+**Status:** Fase 3 gerando candidatas; top 5 de rejeição MUEN pendente de publicação
 
 ## Próximo passo atual
+
+A aba `Redes neurais — Treinos` recebeu um card `Top 5 problemas que reprovam no Gate MUEN`, mostrando os critérios de rejeição mais frequentes nas decisões carregadas, com quantidade, percentual, barra visual e explicação operacional. O próximo passo imediato é publicar o frontend atualizado na VPS e validar visualmente se o ranking aparece acima da tabela `Últimas análises do Gate MUEN`.
 
 A verificação operacional mais recente da tabela `Últimas análises do Gate MUEN` mostrou que as decisões recentes estão concentradas na família/candidata `neural_eod_mlp_evo2_20260702_seed_fresh_01`. Isso é coerente com o fluxo recorrente de Fase 2/MLP testando uma hipótese por execução com seed fresca; a tabela de últimas análises é um recorte temporal de auditoria, não uma prova de que só exista uma família no projeto. O próximo passo operacional permanece publicar/validar as melhorias visuais pendentes e acompanhar se as próximas execuções continuam trazendo diversidade suficiente de famílias/seeds.
 
