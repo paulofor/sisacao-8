@@ -1733,3 +1733,8 @@ A leitura da tela `Redes neurais — Treinos` indicou 86 redes em estágio `Cand
 ## 2026-07-02 17:05:47 UTC-3
 - Validação complementar da alteração visual: `npm run build` em `frontend/app` executou com sucesso e confirmou compilação TypeScript/Vite.
 - Tentativa de captura de screenshot local foi bloqueada porque o pacote `playwright` não está instalado no app (`Cannot find module 'playwright'`); não foi adicionada dependência nem versionada evidência visual.
+
+## 2026-07-03 16:35 UTC — Limite visual da tabela de treinos neurais
+- Ajustada a aba `Redes neurais — Treinos` para exibir apenas as 10 execuções mais recentes na tabela de treinos, reduzindo a altura do card conforme solicitação visual.
+- Adicionado texto auxiliar informando quando há mais registros carregados além das 10 linhas exibidas.
+- Comandos usados: edição via Python, `npm run lint` e `npm run build` em `frontend/app`.
