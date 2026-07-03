@@ -22,6 +22,8 @@ import type {
   NeuralTrainingRun,
 } from "../../api/ops";
 
+const TRAINING_RUNS_TABLE_ROWS = 10;
+
 interface NeuralTrainingRunsTabProps {
   runs: NeuralTrainingRun[];
   runsError?: Error | null;
@@ -1130,6 +1132,10 @@ const NeuralTrainingRunsTab: FC<NeuralTrainingRunsTabProps> = ({
     }),
     { createdPhase2: 0, createdPhase3: 0, tested: 0 },
   );
+  const visibleRuns = useMemo(
+    () => runs.slice(0, TRAINING_RUNS_TABLE_ROWS),
+    [runs],
+  );
   const latestTrain = latestTrainMetrics(runs);
   const latestTest = latestTestMetrics(runs);
 
@@ -1497,7 +1503,7 @@ const NeuralTrainingRunsTab: FC<NeuralTrainingRunsTabProps> = ({
                 </TableRow>
               </TableHead>
               <TableBody>
-                {runs.map((run) => (
+                {visibleRuns.map((run) => (
                   <TableRow key={`${run.modelId}-${run.modelVersion}`} hover>
                     <TableCell>
                       <Stack spacing={0.25}>
@@ -1597,6 +1603,11 @@ const NeuralTrainingRunsTab: FC<NeuralTrainingRunsTabProps> = ({
               </TableBody>
             </Table>
           </TableContainer>
+          {runs.length > TRAINING_RUNS_TABLE_ROWS ? (
+            <Typography variant="caption" color="text.secondary">
+              Mostrando as {TRAINING_RUNS_TABLE_ROWS} execuções mais recentes de {formatNumber(runs.length)} registros carregados.
+            </Typography>
+          ) : null}
         </>
       ) : null}
     </Stack>
