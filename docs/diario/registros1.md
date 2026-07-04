@@ -1809,3 +1809,10 @@ A leitura da tela `Redes neurais — Treinos` indicou 86 redes em estágio `Cand
 - A correção também aceita `limit` como alias de `max_rows`, compatível com os exemplos operacionais que chamavam MCP com `arguments.limit`.
 - Observação operacional: para validar em produção será necessário publicar o MCP Java atualizado na VPS/Cloud Run do MCP e repetir a consulta `bigquery_query`; antes do deploy, o endpoint remoto continuará executando a versão antiga.
 - Comandos usados: `rg -n` para localizar `bigquery_query`/`gcloud`, `sed -n` para inspecionar `McpController.java`, `docker-entrypoint.sh`, `Dockerfile`, `AGENTS.md` do MCP e `pom.xml`; edição via Python; `mvn -q -f mcp-server-java/pom.xml test`.
+
+## 2026-07-04 23:30 UTC — Correção de timeout no pull do MCP Java na VPS
+- Investigado o erro informado no GitHub Actions durante o deploy `Deploy MCP Server Java to VPS`: o passo `appleboy/ssh-action@v1.0.3` falhou em `docker pull "${MCP_IMAGE}"` com `failed to copy: read tcp ... -> 185.199.110.154:443: read: connection timed out`.
+- Causa provável confirmada por inspeção do log e do workflow `.github/workflows/deploy-mcp-java-vps.yml`: a falha ocorreu durante download/cópia de camadas do GHCR antes da remoção do container antigo, indicando instabilidade transitória de rede/registry e ausência de retry no `docker pull`.
+- Correção aplicada: adicionado helper `retry_command` no script SSH do deploy, com backoff exponencial para `docker login` e até 5 tentativas para `docker pull`, mantendo a remoção/recriação do container somente depois de uma imagem nova ser baixada com sucesso.
+- Observação operacional: se o GHCR ou a rede da VPS ficarem indisponíveis por todas as tentativas, o workflow ainda falhará de forma explícita, mas sem derrubar o container atual antes de concluir o pull.
+- Comandos usados: `rg -n` para localizar o workflow de deploy, `sed -n` para inspecionar `.github/workflows/deploy-mcp-java-vps.yml`, edição via Python e `git diff` para conferir a alteração.
