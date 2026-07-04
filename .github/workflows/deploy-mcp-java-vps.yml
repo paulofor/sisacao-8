@@ -68,9 +68,32 @@ jobs:
           script: |
             set -euo pipefail
 
-            echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USER}" --password-stdin
+            retry_command() {
+              max_attempts="$1"
+              delay_seconds="$2"
+              shift 2
 
-            docker pull "${MCP_IMAGE}"
+              attempt=1
+              while true; do
+                if "$@"; then
+                  return 0
+                fi
+
+                if [ "${attempt}" -ge "${max_attempts}" ]; then
+                  echo "[deploy] comando falhou após ${attempt}/${max_attempts} tentativas: $*" >&2
+                  return 1
+                fi
+
+                echo "[deploy] comando falhou; nova tentativa em ${delay_seconds}s (${attempt}/${max_attempts}): $*" >&2
+                sleep "${delay_seconds}"
+                attempt=$((attempt + 1))
+                delay_seconds=$((delay_seconds * 2))
+              done
+            }
+
+            retry_command 3 5 sh -c 'echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USER}" --password-stdin'
+
+            retry_command 5 10 docker pull "${MCP_IMAGE}"
             docker rm -f sisacao8-mcp-server-java sisacao8-mcp-server-cpp || true
 
             PORT_80_CONTAINERS="$(docker ps --filter publish=80 --format '{{.ID}} {{.Names}} {{.Image}}')"
