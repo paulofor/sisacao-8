@@ -3,9 +3,14 @@ package com.sisacao.mcpserver;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.servlet.http.HttpServletRequest;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -761,23 +766,37 @@ public class McpController {
             return Map.of("status", "error", "message", "apenas queries read-only iniciadas com SELECT ou WITH", "project", FIXED_PROJECT_ID);
         }
 
-        int maxRows = clampInt(arguments.get("max_rows"), 200, 1, 2000);
+        int maxRows = clampInt(arguments.getOrDefault("max_rows", arguments.get("limit")), 200, 1, 2000);
+        Map<String, Object> bqCliResult = bigqueryQueryViaBqCli(sql, maxRows);
+        if ("ok".equals(bqCliResult.get("status"))) {
+            return bqCliResult;
+        }
+
+        String message = String.valueOf(bqCliResult.getOrDefault("message", ""));
+        if (message.contains("private_key_id") || message.contains("Credentials")) {
+            Map<String, Object> restResult = new LinkedHashMap<>(bigqueryQueryViaRestApi(sql, maxRows));
+            restResult.put("bq_cli_error", message);
+            return restResult;
+        }
+        return bqCliResult;
+    }
+
+    private Map<String, Object> bigqueryQueryViaBqCli(String sql, int maxRows) {
         List<String> command = List.of(
                 "bq", "query", "--project_id=" + FIXED_PROJECT_ID,
                 "--use_legacy_sql=false", "--format=json", "--max_rows=" + maxRows, sql);
         try {
             Process process = new ProcessBuilder(command).start();
-            String stdout = new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))
-                    .lines().reduce("", (a, b) -> a.isEmpty() ? b : a + "\n" + b);
-            String stderr = new BufferedReader(new InputStreamReader(process.getErrorStream(), StandardCharsets.UTF_8))
-                    .lines().reduce("", (a, b) -> a.isEmpty() ? b : a + "\n" + b);
+            String stdout = readProcessStream(process.getInputStream());
+            String stderr = readProcessStream(process.getErrorStream());
             int exitCode = process.waitFor();
             if (exitCode != 0) {
                 return Map.of(
                         "status", "error",
                         "project", FIXED_PROJECT_ID,
                         "message", stderr.isBlank() ? "Falha ao executar bq query." : stderr,
-                        "sql", sql);
+                        "sql", sql,
+                        "source", "bq_cli");
             }
             List<Map<String, Object>> rows = stdout.isBlank()
                     ? List.of()
@@ -795,8 +814,111 @@ public class McpController {
                     "status", "error",
                     "project", FIXED_PROJECT_ID,
                     "message", exc.getMessage(),
-                    "sql", sql);
+                    "sql", sql,
+                    "source", "bq_cli");
         }
+    }
+
+    private Map<String, Object> bigqueryQueryViaRestApi(String sql, int maxRows) {
+        try {
+            String accessToken = gcloudAccessToken();
+            if (accessToken.isBlank()) {
+                return Map.of(
+                        "status", "error",
+                        "project", FIXED_PROJECT_ID,
+                        "message", "não foi possível obter access token via gcloud",
+                        "sql", sql,
+                        "source", "bigquery_rest_api");
+            }
+            Map<String, Object> requestBody = Map.of(
+                    "query", sql,
+                    "useLegacySql", false,
+                    "maxResults", maxRows);
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create("https://bigquery.googleapis.com/bigquery/v2/projects/" + FIXED_PROJECT_ID + "/queries"))
+                    .header("Authorization", "Bearer " + accessToken)
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(requestBody)))
+                    .build();
+            HttpResponse<String> response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+            JsonNode root = objectMapper.readTree(response.body());
+            if (response.statusCode() < 200 || response.statusCode() >= 300 || root.has("error")) {
+                String apiMessage = root.path("error").path("message").asText(response.body());
+                return Map.of(
+                        "status", "error",
+                        "project", FIXED_PROJECT_ID,
+                        "message", apiMessage,
+                        "http_status", response.statusCode(),
+                        "sql", sql,
+                        "source", "bigquery_rest_api");
+            }
+            if (!root.path("jobComplete").asBoolean(true)) {
+                return Map.of(
+                        "status", "error",
+                        "project", FIXED_PROJECT_ID,
+                        "message", "BigQuery REST API retornou jobComplete=false; reduza a consulta ou use uma janela menor",
+                        "sql", sql,
+                        "source", "bigquery_rest_api");
+            }
+            List<Map<String, Object>> rows = bigqueryRestRows(root);
+            return new LinkedHashMap<>(Map.of(
+                    "status", "ok",
+                    "project", FIXED_PROJECT_ID,
+                    "row_count", rows.size(),
+                    "max_rows", maxRows,
+                    "rows", rows,
+                    "sql", sql,
+                    "source", "bigquery_rest_api"));
+        } catch (Exception exc) {
+            return Map.of(
+                    "status", "error",
+                    "project", FIXED_PROJECT_ID,
+                    "message", exc.getMessage(),
+                    "sql", sql,
+                    "source", "bigquery_rest_api");
+        }
+    }
+
+    private String gcloudAccessToken() throws Exception {
+        Process process = new ProcessBuilder("gcloud", "auth", "print-access-token").start();
+        String stdout = readProcessStream(process.getInputStream());
+        String stderr = readProcessStream(process.getErrorStream());
+        int exitCode = process.waitFor();
+        if (exitCode != 0) {
+            LOGGER.warn("Falha ao obter access token via gcloud: {}", stderr);
+            return "";
+        }
+        return stdout.trim();
+    }
+
+    private List<Map<String, Object>> bigqueryRestRows(JsonNode root) {
+        List<String> fieldNames = new ArrayList<>();
+        root.path("schema").path("fields").forEach(field -> fieldNames.add(field.path("name").asText()));
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (JsonNode rowNode : root.path("rows")) {
+            Map<String, Object> row = new LinkedHashMap<>();
+            JsonNode values = rowNode.path("f");
+            for (int i = 0; i < fieldNames.size() && i < values.size(); i++) {
+                row.put(fieldNames.get(i), bigqueryRestValue(values.get(i).path("v")));
+            }
+            rows.add(row);
+        }
+        return rows;
+    }
+
+    private Object bigqueryRestValue(JsonNode valueNode) {
+        if (valueNode.isNull() || valueNode.isMissingNode()) {
+            return null;
+        }
+        if (valueNode.isValueNode()) {
+            return valueNode.asText();
+        }
+        return objectMapper.convertValue(valueNode, Object.class);
+    }
+
+    private String readProcessStream(java.io.InputStream inputStream) {
+        return new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))
+                .lines().reduce("", (a, b) -> a.isEmpty() ? b : a + "\n" + b);
     }
 
     private ResponseEntity<Map<String, Object>> toolResult(Object id, Map<String, Object> content) {
