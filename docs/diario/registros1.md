@@ -1800,3 +1800,12 @@ A leitura da tela `Redes neurais — Treinos` indicou 86 redes em estágio `Cand
 - Evidência complementar fora do MCP: o endpoint publicado `/api/ops/neural/training-runs` ainda retornou 742 treinos, com os registros mais recentes em 2026-07-04 02:00 UTC usando `feature_eod_tabular_v2`, 19 features e snapshot `neural_eod_training_dataset_2026-06-27_313c9df2`.
 - Conclusão operacional: não há evidência de que o primeiro passo tenha sido concluído; pelo contrário, logs ausentes e treinos publicados ainda em v2 indicam que a materialização `feature_eod_tabular_v3` deve permanecer como pendente até validação BigQuery bem-sucedida.
 - Comandos/ferramentas usados: Python `urllib.request` para MCP HTTP/JSON-RPC (`initialize`, `tools/call` com `bigquery_query` e `cloud_run_function_logs`) e Python `urllib.request` para consultar `http://34.194.252.70/api/ops/neural/training-runs`.
+
+
+## 2026-07-04 23:10 UTC — Correção do erro `private_key_id` no MCP BigQuery
+- Investigado o erro do MCP `bigquery_query` que retornava `gcloud crashed (AttributeError): 'Credentials' object has no attribute 'private_key_id'`, apesar de essa consulta já ter funcionado anteriormente.
+- Causa provável confirmada no código: a ferramenta `bigquery_query` dependia exclusivamente do CLI `bq query`; quando o runtime do MCP fica com credencial ativa suficiente para `gcloud run services logs read`, mas o componente Python do `bq/gcloud` quebra ao ler a credencial, a ferramenta inteira retornava erro sem fallback.
+- Correção aplicada em `mcp-server-java/src/main/java/com/sisacao/mcpserver/McpController.java`: `bigquery_query` agora tenta primeiro o `bq` CLI como antes; se a falha mencionar `private_key_id`/`Credentials`, faz fallback para a API REST do BigQuery usando token de `gcloud auth print-access-token`.
+- A correção também aceita `limit` como alias de `max_rows`, compatível com os exemplos operacionais que chamavam MCP com `arguments.limit`.
+- Observação operacional: para validar em produção será necessário publicar o MCP Java atualizado na VPS/Cloud Run do MCP e repetir a consulta `bigquery_query`; antes do deploy, o endpoint remoto continuará executando a versão antiga.
+- Comandos usados: `rg -n` para localizar `bigquery_query`/`gcloud`, `sed -n` para inspecionar `McpController.java`, `docker-entrypoint.sh`, `Dockerfile`, `AGENTS.md` do MCP e `pom.xml`; edição via Python; `mvn -q -f mcp-server-java/pom.xml test`.
