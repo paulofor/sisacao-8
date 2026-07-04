@@ -53,6 +53,17 @@ Nova verificação confirmou o mesmo estado: schema v3 pronto, mas ainda sem mat
 
 Próxima ação objetiva: publicar/confirmar o deploy de `functions/neural_training_dataset` com o código v3 e executar a função para gerar um snapshot novo. A validação de sucesso será observar `feature_eod_tabular_v3` na agregação por `feature_version` e um manifesto v3 correspondente em `neural_dataset_manifests`.
 
+## Primeiro passo recomendado — 2026-07-04 03:20 UTC
+
+Antes de mexer em treino, aprovação ou parâmetros do Gate MUEN, faça primeiro uma única ação: **publicar/confirmar o deploy de `functions/neural_training_dataset` com o código que gera `feature_eod_tabular_v3` e executar essa função para materializar o primeiro snapshot v3**. Sem esse snapshot, qualquer treino novo continuará usando o dataset v2 mais recente e não testará as novas variáveis de entrada.
+
+Critério objetivo para considerar o primeiro passo concluído: a consulta por `feature_version` em `ingestaokraken.cotacao_intraday.neural_eod_training_dataset` deve mostrar linhas `feature_eod_tabular_v3`, e `neural_dataset_manifests` deve ter um manifesto v3 correspondente. Só depois disso vale redeployar/rodar `neural_training` e `neural_evolution_orchestrator` para comparar v2 versus v3.
+
+
+## Verificação MCP — 2026-07-04 23:00 UTC
+
+O MCP Server respondeu ao `initialize` por HTTP e a chamada `cloud_run_function_logs` para `neural_training_dataset` retornou `row_count=0` nas últimas 12 horas. As consultas `bigquery_query` pelo MCP não conseguiram validar as tabelas porque o próprio MCP retornou erro de credencial do `gcloud` (`Credentials` sem `private_key_id`). Como evidência complementar, o endpoint publicado de treinos ainda mostra as execuções mais recentes com `feature_eod_tabular_v2`, 19 features e snapshot `neural_eod_training_dataset_2026-06-27_313c9df2`. Portanto, o primeiro passo ainda deve ser tratado como pendente até uma consulta BigQuery bem-sucedida mostrar linhas/manifesto `feature_eod_tabular_v3`.
+
 ## Regra operacional
 
 Não automatizar `approve_if_passed` nem promover modelos para `approved` sem decisão MUEN `passed` e autorização humana explícita. As candidatas Fase 3 devem permanecer em pesquisa/shadow até passarem pelo gate econômico governado.

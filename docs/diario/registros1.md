@@ -1775,3 +1775,28 @@ A leitura da tela `Redes neurais — Treinos` indicou 86 redes em estágio `Cand
 - Logs da Cloud Function Gen2 `neural_training_dataset` nas últimas 6 horas retornaram 0 linhas, indicando que não houve execução recente registrada da função para criar o snapshot v3 nesse intervalo.
 - Conclusão operacional: as tabelas estão prontas; falta executar/deployar o fluxo que materializa `feature_eod_tabular_v3`. Próxima ação: redeployar `functions/neural_training_dataset` se ainda não foi publicado e chamar a função para gerar novo snapshot v3; em seguida repetir as consultas de `feature_version` e manifestos.
 - Comandos/ferramentas usados: MCP HTTP/JSON-RPC por HTTP com `initialize`, `tools/call`/`bigquery_query` para schema, contagem por `feature_version`, manifestos e perfil nulo v3; `tools/call`/`cloud_run_function_logs` para `neural_training_dataset` com janela de 6 horas.
+
+## 2026-07-04 03:05 UTC — Resposta operacional sobre treino com novas combinações de variáveis
+- Verificada a pergunta se já estamos conseguindo treinar redes com novas combinações de variáveis de entrada.
+- Evidência do endpoint publicado `GET http://34.194.252.70/api/ops/neural/training-runs`: há 742 treinos carregados, com execuções recentes em 2026-07-04 02:00 UTC, porém as redes recentes ainda usam `featureVersion=feature_eod_tabular_v2`, `trainingDatasetSnapshot=neural_eod_training_dataset_2026-06-27_313c9df2` e `featureColumnsCount=19`.
+- Evidência do endpoint publicado `GET http://34.194.252.70/api/ops/neural/gate-decisions`: há 680 decisões MUEN carregadas, 680 rejeitadas e 0 aprovadas; as decisões mais recentes seguem falhando principalmente por `folds_positivos_insuficientes`, `drawdown_excessivo` e `seeds_instaveis`.
+- Conclusão operacional: estamos conseguindo variar famílias/arquiteturas/hiperparâmetros em Fase 2/Fase 3, mas ainda não estamos treinando em produção com o novo conjunto de variáveis de entrada `feature_eod_tabular_v3`; falta materializar o snapshot v3 e fazer o redeploy/execução das funções neurais antes da comparação v2 versus v3.
+- O próximo passo operacional registrado em `docs/diario/proximo-passo-redes.md` permanece válido: publicar/confirmar deploy de `neural_training_dataset`, gerar o primeiro snapshot `feature_eod_tabular_v3`, validar tabela/manifesto v3 e só então iniciar a comparação walk-forward.
+- Comandos usados: `python` com `urllib.request` para consultar `/api/ops/neural/training-runs` e `/api/ops/neural/gate-decisions`; `sed -n`/`tail` para conferir `AGENTS.md`, `docs/diario/proximo-passo-redes.md` e `docs/diario/registros1.md`.
+
+
+## 2026-07-04 03:20 UTC — Orientação do primeiro passo para variáveis neurais v3
+- Respondida a dúvida operacional sobre o que fazer em primeiro lugar para conseguir treinar redes com novas variáveis de entrada.
+- Orientação objetiva: começar pelo deploy/validação de `functions/neural_training_dataset` e pela execução da função para materializar o primeiro snapshot `feature_eod_tabular_v3`; ainda não começar por ajuste de Gate MUEN, promoção, aumento de cadência ou treino comparativo.
+- Motivo: a verificação anterior mostrou que o schema v3 está pronto, mas os treinos publicados seguem usando dataset v2; sem snapshot v3, qualquer treinamento novo continua preso às 19 features antigas.
+- Critério de sucesso do primeiro passo: observar linhas `feature_eod_tabular_v3` em `neural_eod_training_dataset` e manifesto v3 em `neural_dataset_manifests`; depois disso, seguir para redeploy/execução de `neural_training` e `neural_evolution_orchestrator` para comparação v2 versus v3.
+- Comandos usados: `git status --short`, `git log --oneline -5`, `sed -n` para conferir `AGENTS.md`, edição via Python em `docs/diario/proximo-passo-redes.md` e `docs/diario/registros1.md`.
+
+
+## 2026-07-04 23:00 UTC — Verificação via MCP do primeiro passo neural v3
+- Acessado o MCP Server obrigatoriamente por HTTP/JSON-RPC em `http://mcpserversisacao.shop/mcp`; o `initialize` retornou sessão válida.
+- Tentadas consultas `bigquery_query` para agregação por `feature_version`, manifestos v3 e últimos manifestos; as três chamadas retornaram erro no próprio MCP/gcloud: `Credentials` sem atributo `private_key_id`, impedindo confirmação direta pelo BigQuery nesta rodada.
+- A chamada MCP `cloud_run_function_logs` para `function_name=neural_training_dataset`, janela de 12 horas e limite 80 retornou `row_count=0`, sem logs recentes da função.
+- Evidência complementar fora do MCP: o endpoint publicado `/api/ops/neural/training-runs` ainda retornou 742 treinos, com os registros mais recentes em 2026-07-04 02:00 UTC usando `feature_eod_tabular_v2`, 19 features e snapshot `neural_eod_training_dataset_2026-06-27_313c9df2`.
+- Conclusão operacional: não há evidência de que o primeiro passo tenha sido concluído; pelo contrário, logs ausentes e treinos publicados ainda em v2 indicam que a materialização `feature_eod_tabular_v3` deve permanecer como pendente até validação BigQuery bem-sucedida.
+- Comandos/ferramentas usados: Python `urllib.request` para MCP HTTP/JSON-RPC (`initialize`, `tools/call` com `bigquery_query` e `cloud_run_function_logs`) e Python `urllib.request` para consultar `http://34.194.252.70/api/ops/neural/training-runs`.
