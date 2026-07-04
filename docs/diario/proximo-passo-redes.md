@@ -1,6 +1,7 @@
 # Próximo passo — Redes neurais MUEN
 
 **Última atualização:** 2026-07-04 02:45 UTC
+**Última atualização:** 2026-07-04 00:45 UTC
 **Protocolo:** `neural_eod_protocol_v1`
 **Status:** diversidade controlada Fase 2 e Fase 3 implementada; deploy/validação pendente
 
