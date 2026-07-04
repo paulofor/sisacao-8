@@ -1757,3 +1757,21 @@ A leitura da tela `Redes neurais — Treinos` indicou 86 redes em estágio `Cand
 - Atualizados os pacotes embarcados das Cloud Functions `neural_training` e `neural_training_dataset`, o contrato de carga `TRAINING_DATASET_COLUMNS`, o DDL BigQuery `infra/bq/17_neural_eod_training_dataset.sql` e a estimativa de parâmetros da evolução neural para 30 features.
 - Próximo passo operacional atualizado: aplicar o DDL v3 no BigQuery, redeployar `neural_training_dataset`, `neural_training` e `neural_evolution_orchestrator`, materializar um novo snapshot v3 e comparar v2 versus v3 em walk-forward antes de qualquer promoção.
 - Comandos usados: `rg -n`, `sed -n`, edições via Python, `cp` para sincronizar pacotes embarcados, `python -m black`, `python -m pytest tests/test_neural_dataset.py tests/test_neural_training.py tests/test_neural_inference.py tests/test_neural_training_dataset_function.py -q`.
+
+## 2026-07-04 02:30 UTC — Verificação BigQuery do schema feature_eod_tabular_v3
+- Verificada diretamente no BigQuery via MCP HTTP/JSON-RPC a tabela `ingestaokraken.cotacao_intraday.neural_eod_training_dataset` após a migração esperada para `feature_eod_tabular_v3`.
+- Resultado do schema: as 11 colunas novas do v3 existem e estão como `FLOAT64` nullable: `return_1d`, `volatility_5d`, `volatility_60d`, `downside_volatility_20d`, `volume_ratio_5d`, `financial_volume_ratio_20d`, `trend_sma_5_20_pct`, `distance_high_60d_pct`, `distance_low_60d_pct`, `distance_sma_50d_pct` e `range_volatility_20d`.
+- Verificação de dados: a tabela de dataset ainda não contém linhas `feature_eod_tabular_v3`; há apenas `feature_eod_tabular_v1` com 16.136 linhas em 2 snapshots e `feature_eod_tabular_v2` com 26.080 linhas em 3 snapshots.
+- Verificação de manifestos: `neural_dataset_manifests` existe com o schema esperado e contém 3 manifestos, todos `feature_eod_tabular_v2`; ainda não há manifesto v3.
+- Conclusão operacional: as tabelas ficaram corretas em schema para receber o v3, mas o experimento ainda não foi materializado. O próximo passo é redeployar as funções que geram/treinam com v3 e executar `neural_training_dataset` para criar um novo snapshot `feature_eod_tabular_v3`.
+- Comandos/ferramentas usados: MCP HTTP/JSON-RPC em `http://mcpserversisacao.shop/mcp` com `initialize` e `tools/call`/`bigquery_query` em `INFORMATION_SCHEMA.COLUMNS`, agregação por `feature_version` em `neural_eod_training_dataset` e consulta de `neural_dataset_manifests`; `sed -n` para conferir `infra/bq/17_neural_eod_training_dataset.sql` e `docs/diario/proximo-passo-redes.md`.
+
+## 2026-07-04 02:45 UTC — Rechecagem BigQuery após nova solicitação
+- Reexecutada a verificação no BigQuery via MCP HTTP/JSON-RPC para confirmar se o snapshot `feature_eod_tabular_v3` já havia sido materializado.
+- O schema segue correto: as 11 colunas novas do v3 continuam presentes em `neural_eod_training_dataset` como `FLOAT64` nullable.
+- A agregação por `feature_version` ainda mostra somente `feature_eod_tabular_v1` (16.136 linhas, 2 snapshots, datas de 2026-03-30 a 2026-06-17) e `feature_eod_tabular_v2` (26.080 linhas, 3 snapshots, datas de 2026-03-30 a 2026-06-25); não há linhas `feature_eod_tabular_v3`.
+- A consulta de perfil nulo para `feature_eod_tabular_v3` retornou `rows_count=0`, confirmando ausência de dados v3 materializados.
+- `neural_dataset_manifests` ainda contém apenas 3 manifestos, todos `feature_eod_tabular_v2`, com o mais recente `neural_eod_training_dataset_2026-06-27_313c9df2` criado em 2026-06-28 06:00:09.
+- Logs da Cloud Function Gen2 `neural_training_dataset` nas últimas 6 horas retornaram 0 linhas, indicando que não houve execução recente registrada da função para criar o snapshot v3 nesse intervalo.
+- Conclusão operacional: as tabelas estão prontas; falta executar/deployar o fluxo que materializa `feature_eod_tabular_v3`. Próxima ação: redeployar `functions/neural_training_dataset` se ainda não foi publicado e chamar a função para gerar novo snapshot v3; em seguida repetir as consultas de `feature_version` e manifestos.
+- Comandos/ferramentas usados: MCP HTTP/JSON-RPC por HTTP com `initialize`, `tools/call`/`bigquery_query` para schema, contagem por `feature_version`, manifestos e perfil nulo v3; `tools/call`/`cloud_run_function_logs` para `neural_training_dataset` com janela de 6 horas.

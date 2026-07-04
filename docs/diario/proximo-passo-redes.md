@@ -1,5 +1,6 @@
 # Próximo passo — Redes neurais MUEN
 
+**Última atualização:** 2026-07-04 02:45 UTC
 **Última atualização:** 2026-07-04 00:45 UTC
 **Protocolo:** `neural_eod_protocol_v1`
 **Status:** diversidade controlada Fase 2 e Fase 3 implementada; deploy/validação pendente
@@ -37,6 +38,20 @@ Próximo passo operacional imediato:
 4. Rodar uma comparação controlada v2 versus v3 em walk-forward, mantendo o Gate MUEN inalterado.
 5. Repetir somente as melhores famílias v3 com 3 a 5 seeds antes de esperar aprovação, porque avaliações com `seeds=1` continuam sujeitas ao bloqueio `seeds_instaveis`.
 6. Só considerar novo `label_version` se a comparação v3 ainda mantiver drawdown incompatível com o limite econômico.
+
+
+## Verificação BigQuery — 2026-07-04 02:30 UTC
+
+O schema produtivo de `ingestaokraken.cotacao_intraday.neural_eod_training_dataset` já está pronto para o v3: as 11 colunas novas de `feature_eod_tabular_v3` existem como `FLOAT64` nullable. Porém, a materialização ainda não aconteceu: a tabela contém apenas linhas `feature_eod_tabular_v1` e `feature_eod_tabular_v2`, e `neural_dataset_manifests` ainda contém somente manifestos v2.
+
+Próximo passo agora: redeployar `functions/neural_training_dataset`, `functions/neural_training` e `functions/neural_evolution_orchestrator`; em seguida executar `neural_training_dataset` para criar o primeiro snapshot `feature_eod_tabular_v3` e validar que a tabela e o manifesto passam a mostrar v3 antes de iniciar comparação walk-forward v2 versus v3.
+
+
+## Rechecagem BigQuery — 2026-07-04 02:45 UTC
+
+Nova verificação confirmou o mesmo estado: schema v3 pronto, mas ainda sem materialização. `neural_eod_training_dataset` continua sem linhas `feature_eod_tabular_v3`; `neural_dataset_manifests` continua somente com manifestos v2; e `neural_training_dataset` não apresentou logs nas últimas 6 horas.
+
+Próxima ação objetiva: publicar/confirmar o deploy de `functions/neural_training_dataset` com o código v3 e executar a função para gerar um snapshot novo. A validação de sucesso será observar `feature_eod_tabular_v3` na agregação por `feature_version` e um manifesto v3 correspondente em `neural_dataset_manifests`.
 
 ## Regra operacional
 
