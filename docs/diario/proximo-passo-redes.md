@@ -1,6 +1,6 @@
 # Próximo passo — Redes neurais MUEN
 
-**Última atualização:** 2026-07-02 20:04 UTC
+**Última atualização:** 2026-07-04 00:45 UTC
 **Protocolo:** `neural_eod_protocol_v1`
 **Status:** diversidade controlada Fase 2 e Fase 3 implementada; deploy/validação pendente
 
@@ -23,6 +23,20 @@ A aba `Redes neurais — Treinos` recebeu um card visual adicional com gráfico 
 As redes da Fase 3 estão incluídas no endpoint/tabela de Treinos. A validação mais recente do endpoint publicado `GET http://34.194.252.70/api/ops/neural/training-runs` mostrou 100 treinos visíveis, dos quais 13 são Fase 3 pelo prefixo `neural_eod_phase3_` e pelas famílias `residual_mlp`, `wide_deep_mlp` e `tabular_bottleneck_mlp`, todas ainda como `candidate`.
 
 O próximo passo imediato é publicar o frontend atualizado na VPS para que a aba `Redes neurais — Treinos` destaque explicitamente a Fase 3 com o cartão “Fase 3 visíveis” e a coluna “Fase/família”. Depois da publicação, confirmar visualmente a contagem na tela e seguir monitorando a cadência de geração, as decisões MUEN e eventuais HTTP 500.
+
+
+## Experimento v3 em execução — 2026-07-04 00:45 UTC
+
+A recomendação de testar outro conjunto de variáveis foi executada no código: o contrato padrão passou para `feature_eod_tabular_v3`, com 30 features de treino. O v3 adiciona retornos/log-retornos, volatilidades de curto/longo prazo, downside volatility, razões de volume/liquidez, inclinação de médias, distâncias de máximas/mínimas de 60 dias e volatilidade do range diário. O Gate MUEN permanece inalterado.
+
+Próximo passo operacional imediato:
+
+1. Aplicar `infra/bq/17_neural_eod_training_dataset.sql` no BigQuery para adicionar as colunas v3.
+2. Redeployar `functions/neural_training_dataset`, `functions/neural_training` e `functions/neural_evolution_orchestrator`.
+3. Materializar um novo snapshot com `feature_eod_tabular_v3`/`label_eod_barrier_v2`.
+4. Rodar uma comparação controlada v2 versus v3 em walk-forward, mantendo o Gate MUEN inalterado.
+5. Repetir somente as melhores famílias v3 com 3 a 5 seeds antes de esperar aprovação, porque avaliações com `seeds=1` continuam sujeitas ao bloqueio `seeds_instaveis`.
+6. Só considerar novo `label_version` se a comparação v3 ainda mantiver drawdown incompatível com o limite econômico.
 
 ## Regra operacional
 
