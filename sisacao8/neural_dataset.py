@@ -20,7 +20,7 @@ from sisacao8.trade_engine import TradeEngineConfig, simulate_eod_barrier_trade
 
 LabelClass = Literal["up", "down", "neutral"]
 
-FEATURE_VERSION = "feature_eod_tabular_v2"
+FEATURE_VERSION = "feature_eod_tabular_v3"
 LABEL_VERSION = "label_eod_barrier_v2"
 DEFAULT_MIN_HISTORY_DAYS = 20
 
@@ -425,11 +425,16 @@ def _build_features(candles: pd.DataFrame, min_history_days: int) -> pd.DataFram
         group["log_return_5d"] = np.log(close / close.shift(5))
         group["log_return_10d"] = np.log(close / close.shift(10))
         group["log_return_20d"] = np.log(close / close.shift(20))
+        group["return_1d"] = close.pct_change(1)
         group["return_5d"] = close.pct_change(5)
         group["return_10d"] = close.pct_change(10)
         group["return_20d"] = close.pct_change(20)
+        group["volatility_5d"] = returns.rolling(5).std()
         group["volatility_10d"] = returns.rolling(10).std()
         group["volatility_20d"] = returns.rolling(20).std()
+        group["volatility_60d"] = returns.rolling(60).std()
+        negative_returns = returns.where(returns < 0, 0.0)
+        group["downside_volatility_20d"] = negative_returns.rolling(20).std()
         group["daily_range_pct"] = (group["high"] - group["low"]) / close
         group["intraday_return_pct"] = (close - group["open"]) / group["open"]
         group["gap_open_pct"] = (group["open"] - close.shift(1)) / close.shift(1)
@@ -440,12 +445,24 @@ def _build_features(candles: pd.DataFrame, min_history_days: int) -> pd.DataFram
         ) / fin_volume_std_20
         group["log_financial_volume"] = np.log1p(fin_volume.clip(lower=0))
         group["log_volume"] = np.log1p(volume.clip(lower=0))
+        group["volume_ratio_5d"] = volume / volume.rolling(5).mean()
         group["volume_ratio_20d"] = volume / volume.rolling(20).mean()
+        group["financial_volume_ratio_20d"] = fin_volume / fin_volume.rolling(20).mean()
+        sma_5 = close.rolling(5).mean()
+        sma_20 = close.rolling(20).mean()
+        sma_50 = close.rolling(50).mean()
+        group["trend_sma_5_20_pct"] = (sma_5 - sma_20) / close
         group["distance_high_20d_pct"] = (
             close - group["high"].rolling(20).max()
         ) / close
         group["distance_low_20d_pct"] = (close - group["low"].rolling(20).min()) / close
-        group["distance_sma_20d_pct"] = (close - close.rolling(20).mean()) / close
+        group["distance_high_60d_pct"] = (
+            close - group["high"].rolling(60).max()
+        ) / close
+        group["distance_low_60d_pct"] = (close - group["low"].rolling(60).min()) / close
+        group["distance_sma_20d_pct"] = (close - sma_20) / close
+        group["distance_sma_50d_pct"] = (close - sma_50) / close
+        group["range_volatility_20d"] = group["daily_range_pct"].rolling(20).std()
         group["history_days"] = range(1, len(group) + 1)
         group["has_missing_ohlcv"] = (
             group[["open", "high", "low", "close", "volume"]].isna().any(axis=1)
@@ -477,21 +494,32 @@ def _build_features(candles: pd.DataFrame, min_history_days: int) -> pd.DataFram
             "log_return_5d",
             "log_return_10d",
             "log_return_20d",
+            "return_1d",
             "return_5d",
             "return_10d",
             "return_20d",
+            "volatility_5d",
             "volatility_10d",
             "volatility_20d",
+            "volatility_60d",
+            "downside_volatility_20d",
             "daily_range_pct",
             "intraday_return_pct",
             "gap_open_pct",
             "financial_volume_z20",
             "log_financial_volume",
             "log_volume",
+            "volume_ratio_5d",
             "volume_ratio_20d",
+            "financial_volume_ratio_20d",
+            "trend_sma_5_20_pct",
             "distance_high_20d_pct",
             "distance_low_20d_pct",
+            "distance_high_60d_pct",
+            "distance_low_60d_pct",
             "distance_sma_20d_pct",
+            "distance_sma_50d_pct",
+            "range_volatility_20d",
             "has_missing_ohlcv",
             "has_zero_volume",
             "is_suspicious_candle",
