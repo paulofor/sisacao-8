@@ -29,7 +29,7 @@ LABEL_CLASSES: tuple[str, ...] = ("down", "neutral", "up")
 MODEL_ID = "neural_eod_mlp"
 MODEL_VERSION = "neural_eod_mlp_v1_20260618"
 
-FEATURE_COLUMNS: tuple[str, ...] = (
+FEATURE_COLUMNS_V2: tuple[str, ...] = (
     "open",
     "high",
     "low",
@@ -49,6 +49,48 @@ FEATURE_COLUMNS: tuple[str, ...] = (
     "distance_high_20d_pct",
     "distance_low_20d_pct",
     "distance_sma_20d_pct",
+)
+
+FEATURE_COLUMNS_V3: tuple[str, ...] = (
+    "log_return_1d",
+    "log_return_5d",
+    "log_return_10d",
+    "log_return_20d",
+    "log_financial_volume",
+    "log_volume",
+    "return_1d",
+    "return_5d",
+    "return_10d",
+    "return_20d",
+    "volatility_5d",
+    "volatility_10d",
+    "volatility_20d",
+    "volatility_60d",
+    "downside_volatility_20d",
+    "daily_range_pct",
+    "intraday_return_pct",
+    "gap_open_pct",
+    "financial_volume_z20",
+    "volume_ratio_5d",
+    "volume_ratio_20d",
+    "financial_volume_ratio_20d",
+    "trend_sma_5_20_pct",
+    "distance_high_20d_pct",
+    "distance_low_20d_pct",
+    "distance_high_60d_pct",
+    "distance_low_60d_pct",
+    "distance_sma_20d_pct",
+    "distance_sma_50d_pct",
+    "range_volatility_20d",
+)
+
+FEATURE_COLUMNS_BY_VERSION: dict[str, tuple[str, ...]] = {
+    "feature_eod_tabular_v2": FEATURE_COLUMNS_V2,
+    "feature_eod_tabular_v3": FEATURE_COLUMNS_V3,
+}
+
+FEATURE_COLUMNS: tuple[str, ...] = FEATURE_COLUMNS_BY_VERSION.get(
+    FEATURE_VERSION, FEATURE_COLUMNS_V3
 )
 
 
@@ -180,7 +222,12 @@ def train_baseline_mlp(
     import tensorflow as tf
 
     tf.keras.utils.set_random_seed(config.random_seed)
-    x_by_split, y_by_split, scaler = prepare_training_arrays(dataset)
+    feature_columns = FEATURE_COLUMNS_BY_VERSION.get(
+        config.feature_version, FEATURE_COLUMNS
+    )
+    x_by_split, y_by_split, scaler = prepare_training_arrays(
+        dataset, feature_columns=feature_columns
+    )
     model = _build_model(x_by_split["train"].shape[1], config)
     validation_data = None
     if config.validation_split_name in x_by_split:
@@ -358,7 +405,7 @@ def build_artifact_manifest(
         "feature_version": config.feature_version,
         "label_version": config.label_version,
         "label_classes": LABEL_CLASSES,
-        "feature_columns": FEATURE_COLUMNS,
+        "feature_columns": scaler.feature_columns,
         "hyperparameters": asdict(config),
         "dataset_snapshot": _dataset_snapshot(materialized),
         "dataset_rows": int(len(materialized)),

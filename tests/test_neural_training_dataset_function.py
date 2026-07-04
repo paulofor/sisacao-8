@@ -120,7 +120,7 @@ def test_neural_training_dataset_materializes_and_loads_rows(monkeypatch):
         and row.get("manifest_json") is not None
     ]
     assert len(manifest_rows) == 1
-    assert manifest_rows[0]["feature_version"] == "feature_eod_tabular_v2"
+    assert manifest_rows[0]["feature_version"] == "feature_eod_tabular_v3"
     loaded_splits = {row["dataset_split"] for row in dataset_rows}
     assert {"train", "validation", "test"}.issubset(loaded_splits)
 

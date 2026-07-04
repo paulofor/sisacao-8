@@ -12,8 +12,12 @@ import numpy as np
 import pandas as pd
 
 from sisacao8.neural_dataset import FEATURE_VERSION, build_inference_features
-from sisacao8.neural_training import (FEATURE_COLUMNS, LABEL_CLASSES,
-                                      FeatureScaler)
+from sisacao8.neural_training import (
+    FEATURE_COLUMNS,
+    FEATURE_COLUMNS_BY_VERSION,
+    LABEL_CLASSES,
+    FeatureScaler,
+)
 
 INFERENCE_CONFIG_VERSION = "neural_eod_inference_config_v1"
 DEFAULT_DECISION_THRESHOLD = 0.60
@@ -40,7 +44,8 @@ def scaler_from_manifest(manifest: Mapping[str, Any]) -> FeatureScaler:
     columns = tuple(str(item) for item in scaler.get("feature_columns", ()))
     means = tuple(float(item) for item in scaler.get("means", ()))
     stds = tuple(float(item) for item in scaler.get("stds", ()))
-    if columns != FEATURE_COLUMNS:
+    known_contracts = set(FEATURE_COLUMNS_BY_VERSION.values()) | {FEATURE_COLUMNS}
+    if columns not in known_contracts:
         raise ValueError("manifest feature columns differ from inference contract")
     if len(means) != len(columns) or len(stds) != len(columns):
         raise ValueError("manifest scaler dimensions are invalid")
@@ -59,13 +64,13 @@ def predict_neural_eod(
     """Generate audit-ready prediction rows without creating operational signals."""
 
     config = config or NeuralInferenceConfig()
+    scaler = scaler_from_manifest(manifest)
     features = build_inference_features(candles)
     features = features[
         pd.to_datetime(features["reference_date"]).dt.date.eq(reference_date)
     ]
     if features.empty:
         return _empty_predictions_frame()
-    scaler = scaler_from_manifest(manifest)
     probabilities = np.asarray(model.predict(scaler.transform(features), verbose=0))
     if probabilities.shape != (len(features), len(LABEL_CLASSES)):
         raise ValueError("model probabilities must have shape (n_rows, 3)")
@@ -98,7 +103,9 @@ def predict_neural_eod(
                 "decision_threshold": config.decision_threshold,
                 "close": _optional_float(row.get("close")),
                 "financial_volume": _optional_float(row.get("financial_volume")),
-                "feature_snapshot": compute_feature_snapshot(row),
+                "feature_snapshot": compute_feature_snapshot(
+                    row, scaler.feature_columns
+                ),
                 "source_snapshot": source_snapshot,
                 "job_run_id": job_run_id,
                 "created_at": created_at,
@@ -143,12 +150,14 @@ def compute_source_snapshot(features: pd.DataFrame) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
-def compute_feature_snapshot(row: Mapping[str, Any]) -> str:
+def compute_feature_snapshot(
+    row: Mapping[str, Any], feature_columns: tuple[str, ...] = FEATURE_COLUMNS
+) -> str:
     """Hash one ticker/date feature vector for row-level audit."""
 
     payload = {
         column: _json_safe(row.get(column))
-        for column in ("ticker", "reference_date", *FEATURE_COLUMNS)
+        for column in ("ticker", "reference_date", *feature_columns)
     }
     return hashlib.sha256(
         json.dumps(payload, sort_keys=True).encode("utf-8")
