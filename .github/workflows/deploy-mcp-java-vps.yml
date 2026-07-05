@@ -64,6 +64,8 @@ jobs:
           username: ${{ secrets.VPS_SSH_USER }}
           key: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
           port: ${{ env.VPS_PORT }}
+          timeout: 60s
+          command_timeout: 30m
           envs: MCP_IMAGE,GHCR_USER,GHCR_TOKEN
           script: |
             set -euo pipefail
