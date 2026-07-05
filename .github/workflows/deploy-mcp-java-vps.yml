@@ -53,6 +53,33 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
+      - name: Build fallback image archive
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: mcp-server-java/Dockerfile
+          load: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Export fallback image archive
+        run: |
+          set -euo pipefail
+          docker save "${REGISTRY}/${IMAGE_NAME}:latest" -o mcp-server-java-latest.tar
+
+      - name: Upload fallback image archive to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ env.VPS_HOST }}
+          username: ${{ secrets.VPS_SSH_USER }}
+          key: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          port: ${{ env.VPS_PORT }}
+          source: mcp-server-java-latest.tar
+          target: /tmp/sisacao8-mcp-deploy
+          overwrite: true
+          timeout: 15m
+          command_timeout: 30m
+
       - name: Deploy container on VPS
         uses: appleboy/ssh-action@v1.0.3
         env:
@@ -95,7 +122,12 @@ jobs:
 
             retry_command 3 5 sh -c 'echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USER}" --password-stdin'
 
-            retry_command 5 10 docker pull "${MCP_IMAGE}"
+            if ! retry_command 5 10 docker pull "${MCP_IMAGE}"; then
+              echo "[deploy] pull do GHCR falhou após retries; carregando imagem enviada pelo workflow." >&2
+              test -s /tmp/sisacao8-mcp-deploy/mcp-server-java-latest.tar
+              docker load -i /tmp/sisacao8-mcp-deploy/mcp-server-java-latest.tar
+            fi
+
             docker rm -f sisacao8-mcp-server-java sisacao8-mcp-server-cpp || true
 
             PORT_80_CONTAINERS="$(docker ps --filter publish=80 --format '{{.ID}} {{.Names}} {{.Image}}')"
