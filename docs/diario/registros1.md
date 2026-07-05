@@ -1829,3 +1829,9 @@ A leitura da tela `Redes neurais — Treinos` indicou 86 redes em estágio `Cand
 - Correção aplicada em `.github/workflows/deploy-mcp-java-vps.yml`: além de publicar a imagem no GHCR, o workflow agora constrói/carrega a imagem no runner, exporta `/tmp/mcp-server-java-latest.tar`, envia esse arquivo à VPS por `scp-action` e usa `docker load` como fallback se o `docker pull` remoto esgotar os retries.
 - O container antigo continua sendo removido somente depois de `docker pull` bem-sucedido ou `docker load` do fallback, reduzindo risco de indisponibilidade quando o GHCR estiver instável para a VPS.
 - Comandos usados: `find .. -name AGENTS.md -print`, `cat AGENTS.md`, `sed -n '1,260p' .github/workflows/deploy-mcp-java-vps.yml`, `tail -n 60 docs/diario/registros1.md`, edição via Python, `git diff --check` e `git diff`.
+
+## 2026-07-05 01:45 UTC — Correção de permissão no fallback SCP do MCP Java
+- Investigado o novo erro do passo `appleboy/scp-action@v0.1.7`: o container do action tentou empacotar `mcp-server-java-latest.tar`, mas o `tar` retornou `Permission denied` ao abrir o arquivo.
+- Causa confirmada pelo log fornecido e pelo workflow: o arquivo exportado por `docker save` era produzido no workspace antes do `scp-action`, mas não havia normalização explícita de permissão para leitura pelo container do action.
+- Correção aplicada em `.github/workflows/deploy-mcp-java-vps.yml`: após `docker save`, o workflow agora executa `chmod 0644 mcp-server-java-latest.tar` e lista o arquivo com `ls -lh` antes do upload, garantindo leitura pelo `drone-scp` e facilitando diagnóstico de tamanho/permissões em novas falhas.
+- Comandos usados: `git status --short`, `sed -n '45,90p' .github/workflows/deploy-mcp-java-vps.yml`, `tail -n 20 docs/diario/registros1.md`, edição via Python, `git diff --check` e validação YAML com Ruby.

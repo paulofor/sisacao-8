@@ -66,6 +66,8 @@ jobs:
         run: |
           set -euo pipefail
           docker save "${REGISTRY}/${IMAGE_NAME}:latest" -o mcp-server-java-latest.tar
+          chmod 0644 mcp-server-java-latest.tar
+          ls -lh mcp-server-java-latest.tar
 
       - name: Upload fallback image archive to VPS
         uses: appleboy/scp-action@v0.1.7
