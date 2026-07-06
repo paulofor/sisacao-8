@@ -158,6 +158,34 @@ jobs:
 
           wait_for_idle_function "${{ matrix.name }}"
 
+          source_dir="${{ matrix.source }}"
+          echo "Preparing source package from ${source_dir}"
+          if [ ! -d "${source_dir}" ]; then
+            echo "Source directory ${source_dir} does not exist." >&2
+            exit 1
+          fi
+
+          source_fingerprint=$(find "${source_dir}" -type f -print0 \
+            | sort -z \
+            | xargs -0 sha256sum \
+            | sha256sum \
+            | cut -d ' ' -f 1)
+          echo "Source fingerprint for ${{ matrix.name }}: ${source_fingerprint}"
+
+          if [ "${{ matrix.name }}" = "neural_training" ]; then
+            vendored_training="${source_dir}/sisacao8/neural_training.py"
+            if [ ! -f "${vendored_training}" ]; then
+              echo "Missing vendored neural training helper: ${vendored_training}" >&2
+              exit 1
+            fi
+            if ! grep -q "align_config_to_dataset" "${vendored_training}"; then
+              echo "Vendored neural_training.py does not contain align_config_to_dataset; refusing stale deploy." >&2
+              exit 1
+            fi
+            echo "Vendored neural_training.py fingerprint: $(sha256sum "${vendored_training}")"
+            nl -ba "${vendored_training}" | sed -n '180,260p'
+          fi
+
           service_account_arg=$(resolve_service_account_arg "${{ matrix.service_account }}")
 
           deploy_cmd=(
@@ -166,10 +194,10 @@ jobs:
             --trigger-http
             --allow-unauthenticated
             --entry-point "${{ matrix.entry_point }}"
-            --source "${{ matrix.source }}"
+            --source "${source_dir}"
             --project "${PROJECT_ID}"
             --region "${REGION}"
-            --set-env-vars="${{ matrix.env }}"
+            --set-env-vars="${{ matrix.env }},DEPLOY_SOURCE_FINGERPRINT=${source_fingerprint},DEPLOY_GITHUB_SHA=${GITHUB_SHA}"
             --quiet
           )
 
