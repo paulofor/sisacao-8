@@ -208,6 +208,14 @@ def _training_config(payload: Mapping[str, Any]) -> BaselineMlpConfig:
         architecture_type=str(
             payload.get("architecture_type") or defaults.architecture_type
         ),
+        min_directional_probability=_float_value(
+            payload.get("min_directional_probability"),
+            defaults.min_directional_probability,
+        ),
+        min_directional_margin=_float_value(
+            payload.get("min_directional_margin"),
+            defaults.min_directional_margin,
+        ),
     )
 
 
