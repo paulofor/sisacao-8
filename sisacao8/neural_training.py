@@ -114,6 +114,8 @@ class BaselineMlpConfig:
     early_stopping_patience: int = 8
     class_weight: str = "none"
     architecture_type: str = "mlp"
+    min_directional_probability: float = 0.45
+    min_directional_margin: float = 0.05
 
     def __post_init__(self) -> None:
         if not self.hidden_units:
@@ -132,6 +134,10 @@ class BaselineMlpConfig:
             raise ValueError("early_stopping_patience must be positive")
         if self.class_weight not in {"none", "balanced", "directional"}:
             raise ValueError("class_weight must be none, balanced, or directional")
+        if not 0 <= self.min_directional_probability <= 1:
+            raise ValueError("min_directional_probability must be in the [0, 1] range")
+        if self.min_directional_margin < 0:
+            raise ValueError("min_directional_margin must be non-negative")
         allowed_architectures = {
             "mlp",
             "residual_mlp",
@@ -316,11 +322,13 @@ def build_muen_economics_from_predictions(
                 "probability rows must match split rows for "
                 f"{split}: got {len(probabilities)} and {len(split_frame)}"
             )
-        predictions = probabilities.argmax(axis=1)
+        labels = conservative_directional_labels(
+            probabilities,
+            min_directional_probability=config.min_directional_probability,
+            min_directional_margin=config.min_directional_margin,
+        )
         evaluation_frame = split_frame.copy()
-        evaluation_frame["predicted_label"] = [
-            LABEL_CLASSES[int(i)] for i in predictions
-        ]
+        evaluation_frame["predicted_label"] = labels.tolist()
         for cost_multiplier in cost_multipliers:
             metrics = evaluate_fold_economics(
                 evaluation_frame,
@@ -345,6 +353,52 @@ def build_muen_economics_from_predictions(
             seed_count=1,
         ).to_json_dict()
     return payload
+
+
+def conservative_directional_labels(
+    probabilities: np.ndarray,
+    *,
+    min_directional_probability: float = 0.45,
+    min_directional_margin: float = 0.05,
+) -> np.ndarray:
+    """Convert probabilities into risk-aware BUY/SELL/neutral labels.
+
+    Directional trades are emitted only when the best directional class (down/up)
+    clears both an absolute probability threshold and a margin over neutral. This
+    deliberately increases ``neutral`` decisions for low-conviction rows, reducing
+    turnover and drawdown pressure in MUEN economic evaluation.
+    """
+
+    if probabilities.ndim != 2 or probabilities.shape[1] != len(LABEL_CLASSES):
+        raise ValueError("probabilities must have shape (n_rows, 3)")
+    if not 0 <= min_directional_probability <= 1:
+        raise ValueError("min_directional_probability must be in the [0, 1] range")
+    if min_directional_margin < 0:
+        raise ValueError("min_directional_margin must be non-negative")
+
+    down_index = LABEL_CLASSES.index("down")
+    neutral_index = LABEL_CLASSES.index("neutral")
+    up_index = LABEL_CLASSES.index("up")
+    labels = np.full(len(probabilities), "neutral", dtype=object)
+    directional_probabilities = probabilities[:, [down_index, up_index]]
+    directional_indexes = np.array([down_index, up_index])
+    best_directional_offsets = directional_probabilities.argmax(axis=1)
+    best_directional_indexes = directional_indexes[best_directional_offsets]
+    best_directional_probabilities = directional_probabilities[
+        np.arange(len(probabilities)), best_directional_offsets
+    ]
+    neutral_probabilities = probabilities[:, neutral_index]
+    confident_directional = (
+        best_directional_probabilities >= min_directional_probability
+    ) & (
+        (best_directional_probabilities - neutral_probabilities)
+        >= min_directional_margin
+    )
+    labels[confident_directional] = [
+        LABEL_CLASSES[int(index)]
+        for index in best_directional_indexes[confident_directional]
+    ]
+    return labels
 
 
 def evaluate_probabilities_by_split(

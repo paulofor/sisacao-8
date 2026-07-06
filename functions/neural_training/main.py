@@ -183,8 +183,8 @@ def _training_config(payload: Mapping[str, Any]) -> BaselineMlpConfig:
     return BaselineMlpConfig(
         model_id=str(payload.get("model_id") or defaults.model_id),
         model_version=model_version,
-        feature_version=defaults.feature_version,
-        label_version=defaults.label_version,
+        feature_version=str(payload.get("feature_version") or defaults.feature_version),
+        label_version=str(payload.get("label_version") or defaults.label_version),
         hidden_units=_hidden_units(payload.get("hidden_units"), defaults.hidden_units),
         dropout_rate=_float_value(payload.get("dropout_rate"), defaults.dropout_rate),
         learning_rate=_float_value(
@@ -207,6 +207,14 @@ def _training_config(payload: Mapping[str, Any]) -> BaselineMlpConfig:
         class_weight=str(payload.get("class_weight") or defaults.class_weight),
         architecture_type=str(
             payload.get("architecture_type") or defaults.architecture_type
+        ),
+        min_directional_probability=_float_value(
+            payload.get("min_directional_probability"),
+            defaults.min_directional_probability,
+        ),
+        min_directional_margin=_float_value(
+            payload.get("min_directional_margin"),
+            defaults.min_directional_margin,
         ),
     )
 
