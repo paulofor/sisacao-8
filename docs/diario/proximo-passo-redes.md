@@ -87,6 +87,18 @@ Ação que precisa ser feita fora do código local: **redeployar `functions/neur
 
 Se o painel continuar mostrando `drawdown_excessivo` em massa, o próximo ajuste recomendado é subir os limiares no payload para `min_directional_probability=0.50` e `min_directional_margin=0.08`; se ainda não resolver, testar `0.55` e `0.10`. Não alterar o limite do Gate MUEN.
 
+
+
+## Validação pós-deploy — 2026-07-06 18:20 UTC
+
+Depois do deploy informado, o dry-run produtivo de `neural_evolution_orchestrator` com `strategy=phase3_new_families`, `dry_run=true` e `max_trials=1` funcionou: retornou HTTP 200 e gerou uma candidata `phase3_family`.
+
+A rodada pequena treinada ainda falhou porque `neural_training` validou o dataset como `feature_eod_tabular_v3`, mas o orquestrador selecionou o snapshot `neural_eod_training_dataset_2026-06-27_313c9df2`, que ainda é `feature_eod_tabular_v2`. A causa foi confirmada nos logs via MCP: `ValueError: feature_version must be feature_eod_tabular_v3`.
+
+Correção local aplicada: o orquestrador agora injeta `feature_version`/`label_version` reais do snapshot no payload de treino, e `neural_training` aceita esses campos. Também foi corrigido `train_candidates=false` para persistir configurações sem tentar avaliar registry inexistente.
+
+Ação necessária agora: **fazer novo deploy de `functions/neural_training` e `functions/neural_evolution_orchestrator` com esta correção**. Depois, repetir a rodada pequena treinada. A materialização do snapshot `feature_eod_tabular_v3` continua sendo o passo estrutural para testar as novas variáveis, mas esta correção desbloqueia o treino com snapshot v2 enquanto o v3 não existe.
+
 ## Regra operacional
 
 Não automatizar `approve_if_passed` nem promover modelos para `approved` sem decisão MUEN `passed` e autorização humana explícita. As candidatas Fase 3 devem permanecer em pesquisa/shadow até passarem pelo gate econômico governado.

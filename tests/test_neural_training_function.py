@@ -147,6 +147,7 @@ def test_neural_training_trains_uploads_and_registers(monkeypatch, tmp_path):
             {
                 "dataset_snapshot": "snapshot_2026",
                 "model_version": "neural_eod_mlp_test",
+                "feature_version": "feature_eod_tabular_v1",
                 "epochs": 1,
                 "batch_size": 2,
                 "early_stopping": True,
@@ -171,6 +172,7 @@ def test_neural_training_trains_uploads_and_registers(monkeypatch, tmp_path):
     row = fake_client.loaded_rows[0]
     assert row["model_version"] == "neural_eod_mlp_test"
     assert row["status"] == "candidate"
+    assert row["feature_version"] == "feature_eod_tabular_v1"
     assert row["hyperparameters_json"]["early_stopping"] is True
     assert row["hyperparameters_json"]["class_weight"] == "balanced"
     assert row["hyperparameters_json"]["min_directional_probability"] == 0.55
