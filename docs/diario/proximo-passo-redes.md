@@ -129,6 +129,22 @@ Foi aplicado hardening adicional diretamente em `sisacao8/neural_training.train_
 
 Ação necessária agora: **redeployar `functions/neural_training` garantindo que a cópia vendorizada `functions/neural_training/sisacao8/neural_training.py` entre no pacote**. Depois disso, repetir primeiro uma chamada direta pequena de `neural_training` ou a rodada pequena do orquestrador.
 
+
+
+## Evidência de pacote vendorizado antigo — 2026-07-06 21:35 UTC
+
+Mesmo após o deploy informado, uma chamada direta pequena para `neural_training` com `feature_version=feature_eod_tabular_v2`, `hidden_units=[8]` e `epochs=1` ainda retornou HTTP 500. O stack trace produtivo aponta `train_baseline_mlp` em `/workspace/sisacao8/neural_training.py` linha 234, mas no código atual essa linha local já não corresponde a `train_baseline_mlp`; isso indica que a Cloud Function ainda está executando uma cópia vendorizada antiga de `sisacao8/neural_training.py`.
+
+Ação necessária agora: revisar o workflow/comando de deploy de `neural_training` para garantir que o source enviado é **a pasta completa `functions/neural_training/`**, incluindo `functions/neural_training/sisacao8/neural_training.py`. Depois de corrigir o pacote de deploy, repetir primeiro a chamada direta pequena de `neural_training` antes de acionar o orquestrador.
+
+
+
+## Workflow de deploy revisado — 2026-07-06 21:50 UTC
+
+O workflow `.github/workflows/deploy.yml` já apontava `neural_training` para `source: functions/neural_training`, mas não provava no log qual conteúdo vendorizado estava sendo empacotado. Foi adicionada uma validação antes do `gcloud functions deploy`: para `neural_training`, o workflow agora exige que `functions/neural_training/sisacao8/neural_training.py` exista e contenha `align_config_to_dataset`; também imprime fingerprint SHA-256 do source e do arquivo vendorizado, além das linhas 180-260 desse arquivo.
+
+Ação necessária agora: executar novamente o workflow `Deploy`. Se o pacote estiver correto, o log de `neural_training` deve mostrar `align_config_to_dataset` nas linhas impressas e a função receberá `DEPLOY_SOURCE_FINGERPRINT`/`DEPLOY_GITHUB_SHA` como env vars para auditoria. Depois disso, repetir a chamada direta pequena de `neural_training`.
+
 ## Regra operacional
 
 Não automatizar `approve_if_passed` nem promover modelos para `approved` sem decisão MUEN `passed` e autorização humana explícita. As candidatas Fase 3 devem permanecer em pesquisa/shadow até passarem pelo gate econômico governado.
