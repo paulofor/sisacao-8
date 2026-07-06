@@ -99,6 +99,16 @@ Correção local aplicada: o orquestrador agora injeta `feature_version`/`label_
 
 Ação necessária agora: **fazer novo deploy de `functions/neural_training` e `functions/neural_evolution_orchestrator` com esta correção**. Depois, repetir a rodada pequena treinada. A materialização do snapshot `feature_eod_tabular_v3` continua sendo o passo estrutural para testar as novas variáveis, mas esta correção desbloqueia o treino com snapshot v2 enquanto o v3 não existe.
 
+
+
+## Validação após deploy final informado — 2026-07-06 18:55 UTC
+
+A validação produtiva mostrou avanço parcial: o orquestrador está atualizado. O dry-run Fase 3 retornou HTTP 200; o modo `train_candidates=false` também retornou HTTP 200 com `skipped_count=1`; e o BigQuery confirmou que `training_request_json` já está sendo gravado com `feature_version=feature_eod_tabular_v2`, `label_version=label_eod_barrier_v2`, `min_directional_probability=0.45` e `min_directional_margin=0.05`.
+
+A execução treinada pequena ainda falhou porque `neural_training` continua registrando nos logs `ValueError: feature_version must be feature_eod_tabular_v3`. Como o payload gravado pelo orquestrador já contém `feature_eod_tabular_v2`, a pendência agora está isolada em `functions/neural_training`: a revisão publicada ainda não está usando `feature_version`/`label_version` do payload ou não recebeu o deploy correto dessa alteração.
+
+Ação necessária agora: **redeployar especificamente `functions/neural_training` a partir do commit que altera `_training_config` para usar `payload.get("feature_version")` e `payload.get("label_version")`**. Depois disso, repetir a execução treinada pequena com `strategy=phase3_new_families` e `max_trials=1`.
+
 ## Regra operacional
 
 Não automatizar `approve_if_passed` nem promover modelos para `approved` sem decisão MUEN `passed` e autorização humana explícita. As candidatas Fase 3 devem permanecer em pesquisa/shadow até passarem pelo gate econômico governado.
