@@ -90,6 +90,18 @@ def _dataset() -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def test_training_config_aligns_with_dataset_versions_when_payload_omits_them():
+    payload = {"model_version": "model_align"}
+    dataset = _dataset().copy()
+
+    config = module._align_config_with_dataset(
+        module._training_config(payload), dataset, payload
+    )
+
+    assert config.feature_version == "feature_eod_tabular_v1"
+    assert config.label_version == "label_eod_barrier_v2"
+
+
 class _Request:
     args = {}
 

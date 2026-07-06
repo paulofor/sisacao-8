@@ -109,6 +109,16 @@ A execução treinada pequena ainda falhou porque `neural_training` continua reg
 
 Ação necessária agora: **redeployar especificamente `functions/neural_training` a partir do commit que altera `_training_config` para usar `payload.get("feature_version")` e `payload.get("label_version")`**. Depois disso, repetir a execução treinada pequena com `strategy=phase3_new_families` e `max_trials=1`.
 
+
+
+## Revalidação após novo deploy — 2026-07-06 20:05 UTC
+
+Após o novo deploy, a rodada pequena treinada ainda falhou em `neural_training` com `ValueError: feature_version must be feature_eod_tabular_v3`. O BigQuery confirmou novamente que o orquestrador já envia/grava `feature_version=feature_eod_tabular_v2`; portanto o problema continua isolado no runtime de `neural_training`.
+
+Foi aplicado hardening adicional no código de `functions/neural_training`: depois de carregar o dataset, a função passa a alinhar a configuração ao contrato real do snapshot (`feature_version`/`label_version`) usando os valores únicos do próprio dataset quando o payload não trouxer versões.
+
+Ação necessária agora: **redeployar `functions/neural_training` com este hardening** e repetir a rodada pequena. Se o mesmo erro continuar depois desse deploy, validar o pacote-fonte efetivamente enviado ao Cloud Functions, porque o runtime publicado estará divergindo do código esperado.
+
 ## Regra operacional
 
 Não automatizar `approve_if_passed` nem promover modelos para `approved` sem decisão MUEN `passed` e autorização humana explícita. As candidatas Fase 3 devem permanecer em pesquisa/shadow até passarem pelo gate econômico governado.
