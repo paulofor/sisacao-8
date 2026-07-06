@@ -9,6 +9,7 @@ import math
 import os
 import shutil
 import tempfile
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, Dict, Mapping
 
@@ -66,7 +67,7 @@ def neural_training(request: Any) -> tuple[Dict[str, Any], int]:
     if dataset.empty:
         raise ValueError("No neural training rows found for the requested snapshot")
 
-    config = _training_config(payload)
+    config = _align_config_with_dataset(_training_config(payload), dataset, payload)
     status = str(payload.get("status") or DEFAULT_MODEL_STATUS)
     notes = _optional_str(payload.get("notes"))
 
@@ -173,6 +174,44 @@ def _coerce_dataset(dataset: pd.DataFrame) -> pd.DataFrame:
     return prepared
 
 
+def _align_config_with_dataset(
+    config: BaselineMlpConfig, dataset: pd.DataFrame, payload: Mapping[str, Any]
+) -> BaselineMlpConfig:
+    """Keep training config compatible with the materialized snapshot contract."""
+
+    dataset_feature_version = _single_dataset_value(dataset, "feature_version")
+    dataset_label_version = _single_dataset_value(dataset, "label_version")
+    feature_version = str(
+        payload.get("feature_version")
+        or dataset_feature_version
+        or config.feature_version
+    )
+    label_version = str(
+        payload.get("label_version") or dataset_label_version or config.label_version
+    )
+    if (
+        feature_version == config.feature_version
+        and label_version == config.label_version
+    ):
+        return config
+    return replace(
+        config,
+        feature_version=feature_version,
+        label_version=label_version,
+    )
+
+
+def _single_dataset_value(dataset: pd.DataFrame, column: str) -> str | None:
+    if column not in dataset.columns:
+        return None
+    values = {str(value) for value in dataset[column].dropna().unique()}
+    if not values:
+        return None
+    if len(values) > 1:
+        raise ValueError(f"dataset contains multiple {column} values: {sorted(values)}")
+    return next(iter(values))
+
+
 def _training_config(payload: Mapping[str, Any]) -> BaselineMlpConfig:
     defaults = BaselineMlpConfig()
     model_version = str(
@@ -183,8 +222,8 @@ def _training_config(payload: Mapping[str, Any]) -> BaselineMlpConfig:
     return BaselineMlpConfig(
         model_id=str(payload.get("model_id") or defaults.model_id),
         model_version=model_version,
-        feature_version=defaults.feature_version,
-        label_version=defaults.label_version,
+        feature_version=str(payload.get("feature_version") or defaults.feature_version),
+        label_version=str(payload.get("label_version") or defaults.label_version),
         hidden_units=_hidden_units(payload.get("hidden_units"), defaults.hidden_units),
         dropout_rate=_float_value(payload.get("dropout_rate"), defaults.dropout_rate),
         learning_rate=_float_value(
@@ -207,6 +246,14 @@ def _training_config(payload: Mapping[str, Any]) -> BaselineMlpConfig:
         class_weight=str(payload.get("class_weight") or defaults.class_weight),
         architecture_type=str(
             payload.get("architecture_type") or defaults.architecture_type
+        ),
+        min_directional_probability=_float_value(
+            payload.get("min_directional_probability"),
+            defaults.min_directional_probability,
+        ),
+        min_directional_margin=_float_value(
+            payload.get("min_directional_margin"),
+            defaults.min_directional_margin,
         ),
     )
 

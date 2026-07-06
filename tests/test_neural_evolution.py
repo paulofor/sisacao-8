@@ -31,6 +31,8 @@ def test_generate_deterministic_candidates_is_reproducible_and_within_budget():
     assert len(first) == 5
     assert len({candidate.dedupe_hash for candidate in first}) == 5
     assert first[0].training_request["dataset_snapshot"] == "snapshot-1"
+    assert first[0].training_request["min_directional_probability"] == 0.45
+    assert first[0].training_request["min_directional_margin"] == 0.05
     assert all(
         len(candidate.architecture["hidden_units"]) <= budget.max_layers
         for candidate in first
@@ -130,12 +132,16 @@ def test_candidate_family_key_ignores_seed_but_keeps_model_knobs():
 
     repeated_hp = {**base_hp, "random_seed": 20260701}
     changed_hp = {**base_hp, "dropout_rate": 0.25}
+    changed_policy_hp = {**base_hp, "min_directional_probability": 0.55}
 
     assert candidate_family_key(architecture, base_hp) == candidate_family_key(
         architecture, repeated_hp
     )
     assert candidate_family_key(architecture, base_hp) != candidate_family_key(
         architecture, changed_hp
+    )
+    assert candidate_family_key(architecture, base_hp) != candidate_family_key(
+        architecture, changed_policy_hp
     )
 
 
