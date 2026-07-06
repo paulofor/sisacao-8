@@ -119,6 +119,16 @@ Foi aplicado hardening adicional no código de `functions/neural_training`: depo
 
 Ação necessária agora: **redeployar `functions/neural_training` com este hardening** e repetir a rodada pequena. Se o mesmo erro continuar depois desse deploy, validar o pacote-fonte efetivamente enviado ao Cloud Functions, porque o runtime publicado estará divergindo do código esperado.
 
+
+
+## Nova tentativa produtiva — 2026-07-06 21:20 UTC
+
+A nova tentativa após deploy ainda retornou HTTP 500 em `neural_training`, com o mesmo erro `ValueError: feature_version must be feature_eod_tabular_v3`. A consulta ao BigQuery confirmou que o orquestrador continua enviando `feature_version=feature_eod_tabular_v2`, então o ponto de falha restante está dentro do pacote de treino carregado pela função.
+
+Foi aplicado hardening adicional diretamente em `sisacao8/neural_training.train_baseline_mlp`: antes de escolher as colunas por versão e validar o dataset, o helper agora realinha `BaselineMlpConfig.feature_version`/`label_version` aos valores únicos encontrados no próprio dataset carregado.
+
+Ação necessária agora: **redeployar `functions/neural_training` garantindo que a cópia vendorizada `functions/neural_training/sisacao8/neural_training.py` entre no pacote**. Depois disso, repetir primeiro uma chamada direta pequena de `neural_training` ou a rodada pequena do orquestrador.
+
 ## Regra operacional
 
 Não automatizar `approve_if_passed` nem promover modelos para `approved` sem decisão MUEN `passed` e autorização humana explícita. As candidatas Fase 3 devem permanecer em pesquisa/shadow até passarem pelo gate econômico governado.

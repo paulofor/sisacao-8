@@ -10,6 +10,7 @@ from sisacao8.neural_training import (
     FEATURE_COLUMNS,
     BaselineMlpConfig,
     FeatureScaler,
+    align_config_to_dataset,
     _build_model,
     build_artifact_manifest,
     build_muen_economics_from_predictions,
@@ -38,6 +39,21 @@ def _training_dataset() -> pd.DataFrame:
                 }
             )
     return build_training_dataset(pd.DataFrame(rows), min_history_days=20)
+
+
+def test_align_config_to_dataset_uses_snapshot_versions() -> None:
+    dataset = pd.DataFrame(
+        {
+            "feature_version": ["feature_eod_tabular_v2", "feature_eod_tabular_v2"],
+            "label_version": ["label_eod_barrier_v2", "label_eod_barrier_v2"],
+        }
+    )
+    config = BaselineMlpConfig(feature_version="feature_eod_tabular_v3")
+
+    aligned = align_config_to_dataset(config, dataset)
+
+    assert aligned.feature_version == "feature_eod_tabular_v2"
+    assert aligned.label_version == "label_eod_barrier_v2"
 
 
 def test_prepare_training_arrays_scales_train_split_and_encodes_labels() -> None:

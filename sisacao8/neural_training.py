@@ -11,7 +11,7 @@ from __future__ import annotations
 import datetime as dt
 import hashlib
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -184,6 +184,34 @@ class FeatureScaler:
         return asdict(self)
 
 
+def align_config_to_dataset(
+    config: BaselineMlpConfig, dataset: pd.DataFrame
+) -> BaselineMlpConfig:
+    """Return a config compatible with the loaded dataset snapshot versions."""
+
+    feature_version = _single_dataset_value(dataset, "feature_version")
+    label_version = _single_dataset_value(dataset, "label_version")
+    updates: dict[str, str] = {}
+    if feature_version and feature_version != config.feature_version:
+        updates["feature_version"] = feature_version
+    if label_version and label_version != config.label_version:
+        updates["label_version"] = label_version
+    if not updates:
+        return config
+    return replace(config, **updates)
+
+
+def _single_dataset_value(dataset: pd.DataFrame, column: str) -> str | None:
+    if column not in dataset.columns:
+        return None
+    values = {str(value) for value in dataset[column].dropna().unique()}
+    if not values:
+        return None
+    if len(values) > 1:
+        raise ValueError(f"dataset contains multiple {column} values: {sorted(values)}")
+    return next(iter(values))
+
+
 def prepare_training_arrays(
     dataset: pd.DataFrame,
     feature_columns: tuple[str, ...] = FEATURE_COLUMNS,
@@ -222,7 +250,7 @@ def train_baseline_mlp(
 ) -> dict[str, object]:
     """Train the baseline MLP and save a versioned Keras artifact + manifest."""
 
-    config = config or BaselineMlpConfig()
+    config = align_config_to_dataset(config or BaselineMlpConfig(), dataset)
     np.random.seed(config.random_seed)
 
     import tensorflow as tf
