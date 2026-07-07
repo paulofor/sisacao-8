@@ -255,6 +255,10 @@ def _training_config(payload: Mapping[str, Any]) -> BaselineMlpConfig:
             payload.get("min_directional_margin"),
             defaults.min_directional_margin,
         ),
+        max_trades_per_fold=_optional_int_value(
+            payload.get("max_trades_per_fold"),
+            defaults.max_trades_per_fold,
+        ),
     )
 
 
@@ -291,6 +295,12 @@ def _float_value(value: Any, default: float) -> float:
     if value is None or value == "":
         return default
     return float(value)
+
+
+def _optional_int_value(value: Any, default: int | None) -> int | None:
+    if value is None or value == "":
+        return default
+    return int(value)
 
 
 def _publish_artifact(

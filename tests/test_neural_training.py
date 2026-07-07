@@ -12,6 +12,7 @@ from sisacao8.neural_training import (
     FeatureScaler,
     align_config_to_dataset,
     _build_model,
+    apply_fold_trade_budget,
     build_artifact_manifest,
     build_muen_economics_from_predictions,
     conservative_directional_labels,
@@ -103,6 +104,26 @@ def test_conservative_directional_labels_requires_confidence_and_margin() -> Non
     )
 
     assert labels.tolist() == ["neutral", "down", "neutral", "up", "neutral"]
+
+
+def test_apply_fold_trade_budget_keeps_strongest_directional_rows() -> None:
+    labels = np.array(["up", "down", "up", "neutral"], dtype=object)
+    probabilities = np.array(
+        [
+            [0.10, 0.20, 0.70],
+            [0.72, 0.18, 0.10],
+            [0.10, 0.40, 0.50],
+            [0.10, 0.80, 0.10],
+        ]
+    )
+
+    capped = apply_fold_trade_budget(
+        labels,
+        probabilities,
+        max_trades_per_fold=2,
+    )
+
+    assert capped.tolist() == ["up", "down", "neutral", "neutral"]
 
 
 def test_build_model_supports_phase3_architecture_types():
@@ -249,3 +270,45 @@ def test_build_muen_economics_from_predictions_uses_non_train_splits() -> None:
     assert validation["trades"] == 2
     assert validation["expectancy_net"] == 0.06
     assert economics["family_evaluation"]["total_trades"] == 4
+
+
+def test_build_muen_economics_applies_max_trades_per_fold_budget() -> None:
+    dataset = pd.DataFrame(
+        [
+            {
+                "dataset_split": "validation",
+                "reference_date": dt.date(2026, 1, day),
+                "ticker": f"AAA{day}",
+                "label_class": "up",
+                "buy_net_return": 0.01 * day,
+                "sell_net_return": -0.01,
+            }
+            for day in range(1, 5)
+        ]
+    )
+    probabilities = {
+        "validation": np.array(
+            [
+                [0.10, 0.20, 0.70],
+                [0.68, 0.20, 0.12],
+                [0.10, 0.35, 0.55],
+                [0.52, 0.40, 0.08],
+            ]
+        )
+    }
+    config = BaselineMlpConfig(
+        model_version="risk_capped",
+        min_directional_probability=0.45,
+        min_directional_margin=0.05,
+        max_trades_per_fold=2,
+    )
+
+    economics = build_muen_economics_from_predictions(
+        dataset,
+        probabilities,
+        config=config,
+        cost_multipliers=(1.0,),
+    )
+
+    assert economics["fold_metrics"][0]["trades"] == 2
+    assert economics["family_evaluation"]["total_trades"] == 2

@@ -137,6 +137,7 @@ def test_neural_training_trains_uploads_and_registers(monkeypatch, tmp_path):
                 "class_weight": config.class_weight,
                 "min_directional_probability": config.min_directional_probability,
                 "min_directional_margin": config.min_directional_margin,
+                "max_trades_per_fold": config.max_trades_per_fold,
             },
             "dataset_snapshot": "content_hash",
             "dataset_rows": len(dataset),
@@ -167,6 +168,7 @@ def test_neural_training_trains_uploads_and_registers(monkeypatch, tmp_path):
                 "class_weight": "balanced",
                 "min_directional_probability": 0.55,
                 "min_directional_margin": 0.08,
+                "max_trades_per_fold": 60,
             }
         )
     )
@@ -189,6 +191,7 @@ def test_neural_training_trains_uploads_and_registers(monkeypatch, tmp_path):
     assert row["hyperparameters_json"]["class_weight"] == "balanced"
     assert row["hyperparameters_json"]["min_directional_probability"] == 0.55
     assert row["hyperparameters_json"]["min_directional_margin"] == 0.08
+    assert row["hyperparameters_json"]["max_trades_per_fold"] == 60
     assert row["training_dataset_snapshot"] == "snapshot_2026"
     assert row["artifact_uri"] == response["artifact_uri"]
     assert row["test_accuracy"] == 0.6

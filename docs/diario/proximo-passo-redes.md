@@ -383,3 +383,25 @@ A aba `Redes neurais — Treinos` agora tem um grupo adicional de totalizações
 
 ## 2026-07-02 19:20 UTC — Próximo passo após diagnóstico do gráfico diário
 O gráfico `Redes criadas x testadas por dia` não estava refletindo todo o histórico recente porque os endpoints publicados truncavam os payloads em 100 treinos e 50 decisões MUEN. A correção no backend amplia ambos os limites para 1000 registros. Próximo passo operacional: publicar o backend atualizado na VPS e validar novamente os endpoints `/api/ops/neural/training-runs` e `/api/ops/neural/gate-decisions`; depois recarregar a tela de treinos para confirmar que os dias 28/06, 29/06, 30/06 e 01/07 deixam de aparecer zerados/incorretos quando há dados no BigQuery.
+
+## Próximo passo após validação produtiva da correção v2/v3 — 2026-07-07 01:10 UTC
+
+O deploy mais recente corrigiu o problema operacional que impedia treinos com o snapshot produtivo v2: uma chamada direta pequena para `neural_training` retornou HTTP 200 e uma rodada real mínima do `neural_evolution_orchestrator` com `strategy=phase3_new_families` treinou, persistiu e avaliou a candidata `neural_eod_phase3_20260707_residual_mlp_01` sem falhas de função.
+
+A candidata nova foi corretamente rejeitada pelo Gate MUEN por `folds_positivos_insuficientes`, `drawdown_excessivo` e `seeds_instaveis`: `maxDrawdown=0.38696099591144445`, `totalTrades=354`, `positiveFolds=2` e `stableAcrossSeeds=false`. Portanto, o problema deixou de ser deploy/compatibilidade de versão e voltou a ser qualidade financeira da política/modelo.
+
+Próximo passo operacional: manter o Gate MUEN inalterado e executar a próxima rodada com política de decisão mais conservadora que o padrão atual, começando por `min_directional_probability=0.50` e `min_directional_margin=0.08`. Se o drawdown continuar acima de 20%, subir para `0.55/0.10`. Só repetir por 3 a 5 seeds as famílias que reduzirem drawdown, mantiverem trades suficientes e melhorarem folds positivos; não promover nenhum modelo sem decisão MUEN `passed` e autorização humana explícita.
+
+## Próximo passo após experimento conservador `0.50/0.08` versus `0.55/0.10` — 2026-07-07 01:20 UTC
+
+Foram executadas duas rodadas reais mínimas da família `residual_mlp` com política de decisão mais conservadora. A rodada `0.50/0.08` (`neural_eod_phase3_20260707_residual_mlp_seed20290708_01`) melhorou a consistência temporal: `positiveFolds=4`, `positiveFoldRatio=1.0` e `medianDeltaExpectancyVsChampion=0.009812008442294535`, mas ainda foi rejeitada por `drawdown_excessivo` e `seeds_instaveis`, com `maxDrawdown=0.32282251255370137` e `totalTrades=420`.
+
+A rodada mais rígida `0.55/0.10` (`neural_eod_phase3_20260707_residual_mlp_seed20290709_01`) piorou: voltou para `positiveFolds=2`, `positiveFoldRatio=0.5`, `maxDrawdown=0.6774098920768425` e `totalTrades=676`. Portanto, o melhor ponto testado nesta etapa é `0.50/0.08`, mas ele ainda não passa no Gate MUEN.
+
+Próximo passo operacional: parar de subir apenas o limiar de probabilidade/margem e implementar controle econômico explícito antes da avaliação MUEN — limite de trades/exposição por fold, volatility targeting ou stop/cap de perda acumulada por fold. O Gate MUEN permanece inalterado. Só repetir `0.50/0.08` em 3 a 5 seeds se uma variação com drawdown abaixo de 20% for obtida.
+
+## Próximo passo após implementar limitador de trades por fold — 2026-07-07 01:45 UTC
+
+Foi implementado o controle econômico explícito `max_trades_per_fold`. Ele atua depois da política conservadora de labels e antes da economia MUEN: mantém somente as operações direcionais de maior convicção por fold e transforma o excedente em `neutral`, reduzindo exposição/turnover sem alterar o Gate MUEN.
+
+Próximo passo operacional: publicar `functions/neural_training` e `functions/neural_evolution_orchestrator`; em seguida executar uma rodada real mínima com a melhor política anterior (`min_directional_probability=0.50`, `min_directional_margin=0.08`) e `max_trades_per_fold=60`. Se `maxDrawdown` continuar acima de 20%, repetir com `max_trades_per_fold=40` e depois `30`. Só considerar repetição multi-seed quando uma combinação ficar abaixo de 20% de drawdown e mantiver folds positivos suficientes.

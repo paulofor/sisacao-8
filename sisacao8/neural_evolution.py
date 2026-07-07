@@ -162,6 +162,7 @@ def generate_deterministic_candidates(
             "class_weight": hyperparameters["class_weight"],
             "min_directional_probability": DEFAULT_MIN_DIRECTIONAL_PROBABILITY,
             "min_directional_margin": DEFAULT_MIN_DIRECTIONAL_MARGIN,
+            "max_trades_per_fold": None,
             "status": "candidate",
             "notes": f"Fase 1 evolução determinística; candidate_index={index}",
         }
@@ -557,6 +558,10 @@ def generate_phase3_family_candidates(
                 "class_weight": str(family.get("class_weight", "balanced")),
                 "architecture_type": architecture_type,
             }
+            if family.get("max_trades_per_fold") is not None:
+                base_hyperparameters["max_trades_per_fold"] = _optional_int(
+                    family.get("max_trades_per_fold")
+                )
             hyperparameters = _phase3_controlled_hyperparameters(
                 base_hyperparameters,
                 repeat_round=repeat_round,
@@ -833,6 +838,9 @@ def _candidate_from_parts(
                 DEFAULT_MIN_DIRECTIONAL_MARGIN,
             )
         ),
+        "max_trades_per_fold": _optional_int(
+            hyperparameters.get("max_trades_per_fold")
+        ),
         "status": "candidate",
         "notes": notes,
     }
@@ -885,6 +893,9 @@ def candidate_family_key(
                     DEFAULT_MIN_DIRECTIONAL_PROBABILITY,
                 ),
                 4,
+            ),
+            "max_trades_per_fold": _optional_int(
+                hyperparameters.get("max_trades_per_fold")
             ),
         },
     }

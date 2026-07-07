@@ -33,6 +33,7 @@ def test_generate_deterministic_candidates_is_reproducible_and_within_budget():
     assert first[0].training_request["dataset_snapshot"] == "snapshot-1"
     assert first[0].training_request["min_directional_probability"] == 0.45
     assert first[0].training_request["min_directional_margin"] == 0.05
+    assert first[0].training_request["max_trades_per_fold"] is None
     assert all(
         len(candidate.architecture["hidden_units"]) <= budget.max_layers
         for candidate in first
@@ -67,6 +68,33 @@ def test_generate_phase3_family_candidates_creates_new_family_payloads():
     assert all(
         candidate.training_request["status"] == "candidate" for candidate in candidates
     )
+
+
+def test_generate_phase3_family_candidates_accepts_trade_budget_policy():
+    candidates = generate_phase3_family_candidates(
+        evolution_run_id="run-phase3-risk",
+        dataset_snapshot="snapshot-1",
+        budget=EvolutionBudget(max_trials=1, random_seed=7),
+        model_version_prefix="phase3_risk",
+        family_space=[
+            {
+                "architecture_type": "residual_mlp",
+                "model_id": "neural_eod_residual_mlp",
+                "hidden_units": (128, 64),
+                "dropout_rate": 0.15,
+                "learning_rate": 0.0005,
+                "batch_size": 256,
+                "epochs": 60,
+                "class_weight": "balanced",
+                "min_directional_probability": 0.50,
+                "min_directional_margin": 0.08,
+                "max_trades_per_fold": 60,
+            }
+        ],
+    )
+
+    assert candidates[0].training_request["max_trades_per_fold"] == 60
+    assert candidates[0].hyperparameters["max_trades_per_fold"] == 60
 
 
 def test_generate_phase3_family_candidates_repeats_with_fresh_seeds_after_exhaustion():
@@ -133,6 +161,7 @@ def test_candidate_family_key_ignores_seed_but_keeps_model_knobs():
     repeated_hp = {**base_hp, "random_seed": 20260701}
     changed_hp = {**base_hp, "dropout_rate": 0.25}
     changed_policy_hp = {**base_hp, "min_directional_probability": 0.55}
+    changed_budget_hp = {**base_hp, "max_trades_per_fold": 60}
 
     assert candidate_family_key(architecture, base_hp) == candidate_family_key(
         architecture, repeated_hp
@@ -142,6 +171,9 @@ def test_candidate_family_key_ignores_seed_but_keeps_model_knobs():
     )
     assert candidate_family_key(architecture, base_hp) != candidate_family_key(
         architecture, changed_policy_hp
+    )
+    assert candidate_family_key(architecture, base_hp) != candidate_family_key(
+        architecture, changed_budget_hp
     )
 
 
