@@ -65,6 +65,8 @@ LEARNING_RATE_SPACE = (0.0003, 0.0005, 0.001, 0.002)
 BATCH_SIZE_SPACE = (128, 256, 512)
 EPOCHS_SPACE = (20, 40, 80)
 FINALIST_SEEDS = (20260701, 20260702, 20260703)
+DEFAULT_MIN_DIRECTIONAL_PROBABILITY = 0.45
+DEFAULT_MIN_DIRECTIONAL_MARGIN = 0.05
 PHASE3_FAMILY_SPACE: tuple[dict[str, Any], ...] = (
     {
         "architecture_type": "residual_mlp",
@@ -158,6 +160,9 @@ def generate_deterministic_candidates(
             "early_stopping": hyperparameters["early_stopping"],
             "early_stopping_patience": hyperparameters["early_stopping_patience"],
             "class_weight": hyperparameters["class_weight"],
+            "min_directional_probability": DEFAULT_MIN_DIRECTIONAL_PROBABILITY,
+            "min_directional_margin": DEFAULT_MIN_DIRECTIONAL_MARGIN,
+            "max_trades_per_fold": None,
             "status": "candidate",
             "notes": f"Fase 1 evolução determinística; candidate_index={index}",
         }
@@ -553,6 +558,18 @@ def generate_phase3_family_candidates(
                 "class_weight": str(family.get("class_weight", "balanced")),
                 "architecture_type": architecture_type,
             }
+            if family.get("min_directional_probability") is not None:
+                base_hyperparameters["min_directional_probability"] = float(
+                    family.get("min_directional_probability")
+                )
+            if family.get("min_directional_margin") is not None:
+                base_hyperparameters["min_directional_margin"] = float(
+                    family.get("min_directional_margin")
+                )
+            if family.get("max_trades_per_fold") is not None:
+                base_hyperparameters["max_trades_per_fold"] = _optional_int(
+                    family.get("max_trades_per_fold")
+                )
             hyperparameters = _phase3_controlled_hyperparameters(
                 base_hyperparameters,
                 repeat_round=repeat_round,
@@ -571,13 +588,14 @@ def generate_phase3_family_candidates(
                 if repeat_round == 0
                 else f"_seed{int(hyperparameters['random_seed'])}"
             )
+            policy_suffix = _phase3_policy_suffix(hyperparameters)
             candidates.append(
                 _candidate_from_parts(
                     evolution_run_id=evolution_run_id,
                     dataset_snapshot=dataset_snapshot,
                     model_version=(
                         f"{model_version_prefix}_{architecture_type}"
-                        f"{repeat_suffix}_{index:02d}"
+                        f"{policy_suffix}{repeat_suffix}_{index:02d}"
                     ),
                     candidate_source="phase3_family",
                     architecture=architecture,
@@ -594,6 +612,33 @@ def generate_phase3_family_candidates(
             )
         repeat_round += 1
     return candidates
+
+
+def _phase3_policy_suffix(hyperparameters: Mapping[str, Any]) -> str:
+    """Return a compact model-version suffix for non-default trading policies."""
+
+    parts: list[str] = []
+    probability = float(
+        hyperparameters.get(
+            "min_directional_probability", DEFAULT_MIN_DIRECTIONAL_PROBABILITY
+        )
+    )
+    margin = float(
+        hyperparameters.get("min_directional_margin", DEFAULT_MIN_DIRECTIONAL_MARGIN)
+    )
+    max_trades = _optional_int(hyperparameters.get("max_trades_per_fold"))
+    if round(probability, 4) != round(DEFAULT_MIN_DIRECTIONAL_PROBABILITY, 4) or round(
+        margin, 4
+    ) != round(DEFAULT_MIN_DIRECTIONAL_MARGIN, 4):
+        parts.extend(
+            [
+                f"p{int(round(probability * 100)):02d}",
+                f"m{int(round(margin * 100)):02d}",
+            ]
+        )
+    if max_trades is not None:
+        parts.append(f"t{max_trades}")
+    return "" if not parts else "_" + "_".join(parts)
 
 
 def _phase3_controlled_hyperparameters(
@@ -817,6 +862,21 @@ def _candidate_from_parts(
         "early_stopping_patience": hyperparameters["early_stopping_patience"],
         "class_weight": hyperparameters["class_weight"],
         "architecture_type": architecture.get("type", "mlp"),
+        "min_directional_probability": float(
+            hyperparameters.get(
+                "min_directional_probability",
+                DEFAULT_MIN_DIRECTIONAL_PROBABILITY,
+            )
+        ),
+        "min_directional_margin": float(
+            hyperparameters.get(
+                "min_directional_margin",
+                DEFAULT_MIN_DIRECTIONAL_MARGIN,
+            )
+        ),
+        "max_trades_per_fold": _optional_int(
+            hyperparameters.get("max_trades_per_fold")
+        ),
         "status": "candidate",
         "notes": notes,
     }
@@ -857,6 +917,22 @@ def candidate_family_key(
             "dropout_rate": _rounded_float(hyperparameters.get("dropout_rate"), 4),
             "epochs": _optional_int(hyperparameters.get("epochs")),
             "learning_rate": _rounded_float(hyperparameters.get("learning_rate"), 6),
+            "min_directional_margin": _rounded_float(
+                hyperparameters.get(
+                    "min_directional_margin", DEFAULT_MIN_DIRECTIONAL_MARGIN
+                ),
+                4,
+            ),
+            "min_directional_probability": _rounded_float(
+                hyperparameters.get(
+                    "min_directional_probability",
+                    DEFAULT_MIN_DIRECTIONAL_PROBABILITY,
+                ),
+                4,
+            ),
+            "max_trades_per_fold": _optional_int(
+                hyperparameters.get("max_trades_per_fold")
+            ),
         },
     }
     return hashlib.sha256(

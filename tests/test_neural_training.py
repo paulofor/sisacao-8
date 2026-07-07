@@ -10,9 +10,12 @@ from sisacao8.neural_training import (
     FEATURE_COLUMNS,
     BaselineMlpConfig,
     FeatureScaler,
+    align_config_to_dataset,
     _build_model,
+    apply_fold_trade_budget,
     build_artifact_manifest,
     build_muen_economics_from_predictions,
+    conservative_directional_labels,
     encode_labels,
     evaluate_predictions,
     prepare_training_arrays,
@@ -37,6 +40,21 @@ def _training_dataset() -> pd.DataFrame:
                 }
             )
     return build_training_dataset(pd.DataFrame(rows), min_history_days=20)
+
+
+def test_align_config_to_dataset_uses_snapshot_versions() -> None:
+    dataset = pd.DataFrame(
+        {
+            "feature_version": ["feature_eod_tabular_v2", "feature_eod_tabular_v2"],
+            "label_version": ["label_eod_barrier_v2", "label_eod_barrier_v2"],
+        }
+    )
+    config = BaselineMlpConfig(feature_version="feature_eod_tabular_v3")
+
+    aligned = align_config_to_dataset(config, dataset)
+
+    assert aligned.feature_version == "feature_eod_tabular_v2"
+    assert aligned.label_version == "label_eod_barrier_v2"
 
 
 def test_prepare_training_arrays_scales_train_split_and_encodes_labels() -> None:
@@ -68,6 +86,44 @@ def test_evaluate_predictions_reports_confusion_and_coverage() -> None:
     assert metrics["directional_precision"] == 2 / 3
     assert metrics["confusion_matrix"] == [[1, 0, 0], [0, 1, 0], [1, 0, 1]]
     assert metrics["per_class"]["up"]["support"] == 2
+
+
+def test_conservative_directional_labels_requires_confidence_and_margin() -> None:
+    probabilities = np.array(
+        [
+            [0.48, 0.47, 0.05],  # SELL: clears probability but not margin
+            [0.51, 0.40, 0.09],  # SELL: clears both
+            [0.10, 0.45, 0.49],  # BUY: clears probability but not margin
+            [0.10, 0.30, 0.60],  # BUY: clears both
+            [0.20, 0.60, 0.20],  # Neutral is dominant
+        ]
+    )
+
+    labels = conservative_directional_labels(
+        probabilities, min_directional_probability=0.45, min_directional_margin=0.05
+    )
+
+    assert labels.tolist() == ["neutral", "down", "neutral", "up", "neutral"]
+
+
+def test_apply_fold_trade_budget_keeps_strongest_directional_rows() -> None:
+    labels = np.array(["up", "down", "up", "neutral"], dtype=object)
+    probabilities = np.array(
+        [
+            [0.10, 0.20, 0.70],
+            [0.72, 0.18, 0.10],
+            [0.10, 0.40, 0.50],
+            [0.10, 0.80, 0.10],
+        ]
+    )
+
+    capped = apply_fold_trade_budget(
+        labels,
+        probabilities,
+        max_trades_per_fold=2,
+    )
+
+    assert capped.tolist() == ["up", "down", "neutral", "neutral"]
 
 
 def test_build_model_supports_phase3_architecture_types():
@@ -159,6 +215,14 @@ def test_build_muen_economics_from_predictions_uses_non_train_splits() -> None:
                 "sell_net_return": 0.04,
             },
             {
+                "dataset_split": "validation",
+                "reference_date": dt.date(2026, 1, 5),
+                "ticker": "CCC3",
+                "label_class": "up",
+                "buy_net_return": -0.50,
+                "sell_net_return": -0.20,
+            },
+            {
                 "dataset_split": "test",
                 "reference_date": dt.date(2026, 1, 4),
                 "ticker": "AAA3",
@@ -170,7 +234,13 @@ def test_build_muen_economics_from_predictions_uses_non_train_splits() -> None:
     )
     probabilities = {
         "train": np.array([[0.1, 0.1, 0.8]]),
-        "validation": np.array([[0.1, 0.1, 0.8], [0.8, 0.1, 0.1]]),
+        "validation": np.array(
+            [
+                [0.1, 0.1, 0.8],
+                [0.8, 0.1, 0.1],
+                [0.44, 0.40, 0.16],
+            ]
+        ),
         "test": np.array([[0.1, 0.8, 0.1]]),
     }
     config = BaselineMlpConfig(model_version="model_v1", random_seed=123)
@@ -200,3 +270,45 @@ def test_build_muen_economics_from_predictions_uses_non_train_splits() -> None:
     assert validation["trades"] == 2
     assert validation["expectancy_net"] == 0.06
     assert economics["family_evaluation"]["total_trades"] == 4
+
+
+def test_build_muen_economics_applies_max_trades_per_fold_budget() -> None:
+    dataset = pd.DataFrame(
+        [
+            {
+                "dataset_split": "validation",
+                "reference_date": dt.date(2026, 1, day),
+                "ticker": f"AAA{day}",
+                "label_class": "up",
+                "buy_net_return": 0.01 * day,
+                "sell_net_return": -0.01,
+            }
+            for day in range(1, 5)
+        ]
+    )
+    probabilities = {
+        "validation": np.array(
+            [
+                [0.10, 0.20, 0.70],
+                [0.68, 0.20, 0.12],
+                [0.10, 0.35, 0.55],
+                [0.52, 0.40, 0.08],
+            ]
+        )
+    }
+    config = BaselineMlpConfig(
+        model_version="risk_capped",
+        min_directional_probability=0.45,
+        min_directional_margin=0.05,
+        max_trades_per_fold=2,
+    )
+
+    economics = build_muen_economics_from_predictions(
+        dataset,
+        probabilities,
+        config=config,
+        cost_multipliers=(1.0,),
+    )
+
+    assert economics["fold_metrics"][0]["trades"] == 2
+    assert economics["family_evaluation"]["total_trades"] == 2
