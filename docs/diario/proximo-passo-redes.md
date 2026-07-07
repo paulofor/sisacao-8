@@ -64,6 +64,97 @@ Critério objetivo para considerar o primeiro passo concluído: a consulta por `
 
 O MCP Server respondeu ao `initialize` por HTTP e a chamada `cloud_run_function_logs` para `neural_training_dataset` retornou `row_count=0` nas últimas 12 horas. As consultas `bigquery_query` pelo MCP não conseguiram validar as tabelas porque o próprio MCP retornou erro de credencial do `gcloud` (`Credentials` sem `private_key_id`). Como evidência complementar, o endpoint publicado de treinos ainda mostra as execuções mais recentes com `feature_eod_tabular_v2`, 19 features e snapshot `neural_eod_training_dataset_2026-06-27_313c9df2`. Portanto, o primeiro passo ainda deve ser tratado como pendente até uma consulta BigQuery bem-sucedida mostrar linhas/manifesto `feature_eod_tabular_v3`.
 
+
+
+## Diagnóstico operacional — 2026-07-06 13:25 UTC
+
+O painel mostra uma falha sistêmica, não um erro pontual de UI: as 680 decisões MUEN carregadas estão rejeitadas. Os bloqueios dominantes são `drawdown_excessivo` e `seeds_instaveis` em 100% das rejeições, seguidos de `folds_positivos_insuficientes` em 566/680 e `nao_supera_champion_mediana` em 104/680.
+
+O próximo passo operacional muda para uma correção em duas frentes antes de aumentar cadência ou promover qualquer modelo:
+
+1. **Dados:** materializar e validar o primeiro snapshot `feature_eod_tabular_v3`, pois os treinos publicados continuam majoritariamente em `feature_eod_tabular_v2` com 19 features.
+2. **Risco/estabilidade:** rodar uma rodada pequena com política de decisão conservadora: limiar mínimo de confiança/margem para BUY/SELL, mais classe `neutral`, limite de exposição/trades por fold, stop/volatility targeting no avaliador econômico e repetição de finalistas por 3 a 5 seeds da mesma família.
+
+Não afrouxar `max_drawdown` nem `require_stable_seeds` do Gate MUEN. Se uma candidata tem expectancy mediana positiva mas drawdown de 45% a 90% e `seeds=1`, ela deve continuar reprovada.
+
+
+
+## Implementação aplicada — 2026-07-06 14:05 UTC
+
+Foi implementada a primeira melhoria técnica para atacar as reprovações sem afrouxar o Gate MUEN: o treino neural agora usa uma política econômica conservadora antes de calcular as métricas MUEN. BUY/SELL só são considerados quando a melhor classe direcional supera `min_directional_probability=0.45` e também fica pelo menos `min_directional_margin=0.05` acima da classe `neutral`; previsões fracas viram `neutral`.
+
+Ação que precisa ser feita fora do código local: **redeployar `functions/neural_training` e `functions/neural_evolution_orchestrator`**. Depois do deploy, rodar uma execução pequena e validar em `neural_model_registry.hyperparameters_json` que as novas candidatas trazem `min_directional_probability` e `min_directional_margin`.
+
+Se o painel continuar mostrando `drawdown_excessivo` em massa, o próximo ajuste recomendado é subir os limiares no payload para `min_directional_probability=0.50` e `min_directional_margin=0.08`; se ainda não resolver, testar `0.55` e `0.10`. Não alterar o limite do Gate MUEN.
+
+
+
+## Validação pós-deploy — 2026-07-06 18:20 UTC
+
+Depois do deploy informado, o dry-run produtivo de `neural_evolution_orchestrator` com `strategy=phase3_new_families`, `dry_run=true` e `max_trials=1` funcionou: retornou HTTP 200 e gerou uma candidata `phase3_family`.
+
+A rodada pequena treinada ainda falhou porque `neural_training` validou o dataset como `feature_eod_tabular_v3`, mas o orquestrador selecionou o snapshot `neural_eod_training_dataset_2026-06-27_313c9df2`, que ainda é `feature_eod_tabular_v2`. A causa foi confirmada nos logs via MCP: `ValueError: feature_version must be feature_eod_tabular_v3`.
+
+Correção local aplicada: o orquestrador agora injeta `feature_version`/`label_version` reais do snapshot no payload de treino, e `neural_training` aceita esses campos. Também foi corrigido `train_candidates=false` para persistir configurações sem tentar avaliar registry inexistente.
+
+Ação necessária agora: **fazer novo deploy de `functions/neural_training` e `functions/neural_evolution_orchestrator` com esta correção**. Depois, repetir a rodada pequena treinada. A materialização do snapshot `feature_eod_tabular_v3` continua sendo o passo estrutural para testar as novas variáveis, mas esta correção desbloqueia o treino com snapshot v2 enquanto o v3 não existe.
+
+
+
+## Validação após deploy final informado — 2026-07-06 18:55 UTC
+
+A validação produtiva mostrou avanço parcial: o orquestrador está atualizado. O dry-run Fase 3 retornou HTTP 200; o modo `train_candidates=false` também retornou HTTP 200 com `skipped_count=1`; e o BigQuery confirmou que `training_request_json` já está sendo gravado com `feature_version=feature_eod_tabular_v2`, `label_version=label_eod_barrier_v2`, `min_directional_probability=0.45` e `min_directional_margin=0.05`.
+
+A execução treinada pequena ainda falhou porque `neural_training` continua registrando nos logs `ValueError: feature_version must be feature_eod_tabular_v3`. Como o payload gravado pelo orquestrador já contém `feature_eod_tabular_v2`, a pendência agora está isolada em `functions/neural_training`: a revisão publicada ainda não está usando `feature_version`/`label_version` do payload ou não recebeu o deploy correto dessa alteração.
+
+Ação necessária agora: **redeployar especificamente `functions/neural_training` a partir do commit que altera `_training_config` para usar `payload.get("feature_version")` e `payload.get("label_version")`**. Depois disso, repetir a execução treinada pequena com `strategy=phase3_new_families` e `max_trials=1`.
+
+
+
+## Revalidação após novo deploy — 2026-07-06 20:05 UTC
+
+Após o novo deploy, a rodada pequena treinada ainda falhou em `neural_training` com `ValueError: feature_version must be feature_eod_tabular_v3`. O BigQuery confirmou novamente que o orquestrador já envia/grava `feature_version=feature_eod_tabular_v2`; portanto o problema continua isolado no runtime de `neural_training`.
+
+Foi aplicado hardening adicional no código de `functions/neural_training`: depois de carregar o dataset, a função passa a alinhar a configuração ao contrato real do snapshot (`feature_version`/`label_version`) usando os valores únicos do próprio dataset quando o payload não trouxer versões.
+
+Ação necessária agora: **redeployar `functions/neural_training` com este hardening** e repetir a rodada pequena. Se o mesmo erro continuar depois desse deploy, validar o pacote-fonte efetivamente enviado ao Cloud Functions, porque o runtime publicado estará divergindo do código esperado.
+
+
+
+## Nova tentativa produtiva — 2026-07-06 21:20 UTC
+
+A nova tentativa após deploy ainda retornou HTTP 500 em `neural_training`, com o mesmo erro `ValueError: feature_version must be feature_eod_tabular_v3`. A consulta ao BigQuery confirmou que o orquestrador continua enviando `feature_version=feature_eod_tabular_v2`, então o ponto de falha restante está dentro do pacote de treino carregado pela função.
+
+Foi aplicado hardening adicional diretamente em `sisacao8/neural_training.train_baseline_mlp`: antes de escolher as colunas por versão e validar o dataset, o helper agora realinha `BaselineMlpConfig.feature_version`/`label_version` aos valores únicos encontrados no próprio dataset carregado.
+
+Ação necessária agora: **redeployar `functions/neural_training` garantindo que a cópia vendorizada `functions/neural_training/sisacao8/neural_training.py` entre no pacote**. Depois disso, repetir primeiro uma chamada direta pequena de `neural_training` ou a rodada pequena do orquestrador.
+
+
+
+## Evidência de pacote vendorizado antigo — 2026-07-06 21:35 UTC
+
+Mesmo após o deploy informado, uma chamada direta pequena para `neural_training` com `feature_version=feature_eod_tabular_v2`, `hidden_units=[8]` e `epochs=1` ainda retornou HTTP 500. O stack trace produtivo aponta `train_baseline_mlp` em `/workspace/sisacao8/neural_training.py` linha 234, mas no código atual essa linha local já não corresponde a `train_baseline_mlp`; isso indica que a Cloud Function ainda está executando uma cópia vendorizada antiga de `sisacao8/neural_training.py`.
+
+Ação necessária agora: revisar o workflow/comando de deploy de `neural_training` para garantir que o source enviado é **a pasta completa `functions/neural_training/`**, incluindo `functions/neural_training/sisacao8/neural_training.py`. Depois de corrigir o pacote de deploy, repetir primeiro a chamada direta pequena de `neural_training` antes de acionar o orquestrador.
+
+
+
+## Workflow de deploy revisado — 2026-07-06 21:50 UTC
+
+O workflow `.github/workflows/deploy.yml` já apontava `neural_training` para `source: functions/neural_training`, mas não provava no log qual conteúdo vendorizado estava sendo empacotado. Foi adicionada uma validação antes do `gcloud functions deploy`: para `neural_training`, o workflow agora exige que `functions/neural_training/sisacao8/neural_training.py` exista e contenha `align_config_to_dataset`; também imprime fingerprint SHA-256 do source e do arquivo vendorizado, além das linhas 180-260 desse arquivo.
+
+Ação necessária agora: executar novamente o workflow `Deploy`. Se o pacote estiver correto, o log de `neural_training` deve mostrar `align_config_to_dataset` nas linhas impressas e a função receberá `DEPLOY_SOURCE_FINGERPRINT`/`DEPLOY_GITHUB_SHA` como env vars para auditoria. Depois disso, repetir a chamada direta pequena de `neural_training`.
+
+
+
+## Causa no validador de dataset — 2026-07-06 23:45 UTC
+
+O deploy com fingerprint mostrou que a cópia vendorizada atualizada já entrou, mas a chamada direta ainda falhou. A causa remanescente está no validador: `train_baseline_mlp` realinhava o `config.feature_version`, porém `_validate_dataset` ainda comparava o dataset contra as constantes globais `FEATURE_VERSION`/`LABEL_VERSION` do código.
+
+Correção aplicada: `prepare_training_arrays` passa a aceitar `expected_feature_version`/`expected_label_version`; `train_baseline_mlp` envia `config.feature_version`/`config.label_version`; e `_validate_dataset` usa esses valores parametrizados.
+
+Ação necessária agora: redeployar `functions/neural_training` mais uma vez e repetir a chamada direta pequena.
+
 ## Regra operacional
 
 Não automatizar `approve_if_passed` nem promover modelos para `approved` sem decisão MUEN `passed` e autorização humana explícita. As candidatas Fase 3 devem permanecer em pesquisa/shadow até passarem pelo gate econômico governado.
@@ -292,3 +383,53 @@ A aba `Redes neurais — Treinos` agora tem um grupo adicional de totalizações
 
 ## 2026-07-02 19:20 UTC — Próximo passo após diagnóstico do gráfico diário
 O gráfico `Redes criadas x testadas por dia` não estava refletindo todo o histórico recente porque os endpoints publicados truncavam os payloads em 100 treinos e 50 decisões MUEN. A correção no backend amplia ambos os limites para 1000 registros. Próximo passo operacional: publicar o backend atualizado na VPS e validar novamente os endpoints `/api/ops/neural/training-runs` e `/api/ops/neural/gate-decisions`; depois recarregar a tela de treinos para confirmar que os dias 28/06, 29/06, 30/06 e 01/07 deixam de aparecer zerados/incorretos quando há dados no BigQuery.
+
+## Próximo passo após validação produtiva da correção v2/v3 — 2026-07-07 01:10 UTC
+
+O deploy mais recente corrigiu o problema operacional que impedia treinos com o snapshot produtivo v2: uma chamada direta pequena para `neural_training` retornou HTTP 200 e uma rodada real mínima do `neural_evolution_orchestrator` com `strategy=phase3_new_families` treinou, persistiu e avaliou a candidata `neural_eod_phase3_20260707_residual_mlp_01` sem falhas de função.
+
+A candidata nova foi corretamente rejeitada pelo Gate MUEN por `folds_positivos_insuficientes`, `drawdown_excessivo` e `seeds_instaveis`: `maxDrawdown=0.38696099591144445`, `totalTrades=354`, `positiveFolds=2` e `stableAcrossSeeds=false`. Portanto, o problema deixou de ser deploy/compatibilidade de versão e voltou a ser qualidade financeira da política/modelo.
+
+Próximo passo operacional: manter o Gate MUEN inalterado e executar a próxima rodada com política de decisão mais conservadora que o padrão atual, começando por `min_directional_probability=0.50` e `min_directional_margin=0.08`. Se o drawdown continuar acima de 20%, subir para `0.55/0.10`. Só repetir por 3 a 5 seeds as famílias que reduzirem drawdown, mantiverem trades suficientes e melhorarem folds positivos; não promover nenhum modelo sem decisão MUEN `passed` e autorização humana explícita.
+
+## Próximo passo após experimento conservador `0.50/0.08` versus `0.55/0.10` — 2026-07-07 01:20 UTC
+
+Foram executadas duas rodadas reais mínimas da família `residual_mlp` com política de decisão mais conservadora. A rodada `0.50/0.08` (`neural_eod_phase3_20260707_residual_mlp_seed20290708_01`) melhorou a consistência temporal: `positiveFolds=4`, `positiveFoldRatio=1.0` e `medianDeltaExpectancyVsChampion=0.009812008442294535`, mas ainda foi rejeitada por `drawdown_excessivo` e `seeds_instaveis`, com `maxDrawdown=0.32282251255370137` e `totalTrades=420`.
+
+A rodada mais rígida `0.55/0.10` (`neural_eod_phase3_20260707_residual_mlp_seed20290709_01`) piorou: voltou para `positiveFolds=2`, `positiveFoldRatio=0.5`, `maxDrawdown=0.6774098920768425` e `totalTrades=676`. Portanto, o melhor ponto testado nesta etapa é `0.50/0.08`, mas ele ainda não passa no Gate MUEN.
+
+Próximo passo operacional: parar de subir apenas o limiar de probabilidade/margem e implementar controle econômico explícito antes da avaliação MUEN — limite de trades/exposição por fold, volatility targeting ou stop/cap de perda acumulada por fold. O Gate MUEN permanece inalterado. Só repetir `0.50/0.08` em 3 a 5 seeds se uma variação com drawdown abaixo de 20% for obtida.
+
+## Próximo passo após implementar limitador de trades por fold — 2026-07-07 01:45 UTC
+
+Foi implementado o controle econômico explícito `max_trades_per_fold`. Ele atua depois da política conservadora de labels e antes da economia MUEN: mantém somente as operações direcionais de maior convicção por fold e transforma o excedente em `neutral`, reduzindo exposição/turnover sem alterar o Gate MUEN.
+
+Próximo passo operacional: publicar `functions/neural_training` e `functions/neural_evolution_orchestrator`; em seguida executar uma rodada real mínima com a melhor política anterior (`min_directional_probability=0.50`, `min_directional_margin=0.08`) e `max_trades_per_fold=60`. Se `maxDrawdown` continuar acima de 20%, repetir com `max_trades_per_fold=40` e depois `30`. Só considerar repetição multi-seed quando uma combinação ficar abaixo de 20% de drawdown e mantiver folds positivos suficientes.
+
+## Próximo passo após validação do cap 60 e correção de sufixo de política — 2026-07-07 02:55 UTC
+
+A rodada pós-deploy com `max_trades_per_fold=60` treinou e avaliou sem erro, e o cap foi efetivo para reduzir trades (`totalTrades=240`), mas a candidata ainda foi rejeitada pelo Gate MUEN com `maxDrawdown=0.3401409399120135`. A validação também revelou que o gerador Fase 3 não estava propagando `min_directional_probability`/`min_directional_margin` de `phase3.family_space` para os hiperparâmetros e reutilizava `model_version` sem sufixo da política, causando colisão com versões anteriores.
+
+A correção local já foi aplicada: Fase 3 agora propaga `min_directional_probability`, `min_directional_margin` e `max_trades_per_fold` para os hiperparâmetros, e `model_version` passa a incluir sufixos como `_p50_m08_t60` quando a política de trading difere do padrão.
+
+Próximo passo operacional: redeployar `functions/neural_evolution_orchestrator`; depois repetir `residual_mlp` com `min_directional_probability=0.50`, `min_directional_margin=0.08` e `max_trades_per_fold=60`. Se `maxDrawdown` continuar acima de 20%, testar `max_trades_per_fold=40` e `30`. Não repetir seeds nem promover modelos até uma combinação ficar abaixo do limite de drawdown e manter folds positivos suficientes.
+
+## Próximo passo após caps 60/40/30/20/18 — 2026-07-07 03:35 UTC
+
+As rodadas com sufixo de política confirmaram que o versionamento está correto e que `max_trades_per_fold` atua na economia MUEN. Resultado: `t60` e `t40` mantiveram `positiveFolds=4`, mas ainda falharam por drawdown (`0.3030` e `0.2424`); `t18` removeu `drawdown_excessivo` (`maxDrawdown=0.1850`), mas caiu para `positiveFolds=2` e falhou por `folds_positivos_insuficientes`.
+
+Próximo passo operacional: não promover nem repetir seeds dessas candidatas ainda. Implementar um stop/limitador de drawdown intrafold antes da economia MUEN, buscando preservar a cobertura/folds positivos do cap 40 enquanto bloqueia novas operações quando o drawdown acumulado se aproximar de 18%–20%. Depois do deploy desse stop, repetir primeiro `p50/m08/t40` com stop de 18% e comparar contra `t18`.
+
+## Regra de parada — congelar família atual e priorizar v3/features/labels — 2026-07-07 04:05 UTC
+
+Regra oficial: não continuar criando camadas adicionais de contenção para tentar aprovar a família atual quando a evidência mostra falta de edge robusto. A família `residual_mlp` com política `p50/m08` e caps por fold fica congelada para promoção, repetição multi-seed e novas variações incrementais de risco.
+
+Leitura dos resultados: `t40` preservou folds positivos, mas ainda ficou acima do limite de drawdown; `t18` removeu `drawdown_excessivo`, mas perdeu consistência temporal. Isso indica que o problema não é apenas calibragem de risco, e sim insuficiência da hipótese/modelo/dados atuais.
+
+Novo próximo passo operacional: executar no máximo um último diagnóstico simples e, em seguida, priorizar `feature_eod_tabular_v3`, revisão de labels, novas features e segmentação por regimes de mercado. Só voltar a treinar/promover famílias neurais quando houver nova hipótese estrutural de dados ou target; não promover nenhum modelo sem decisão MUEN `passed` e autorização humana explícita.
+
+## Próximo passo após congelar `residual_mlp` e testar outras famílias — 2026-07-07 04:20 UTC
+
+A `residual_mlp p50/m08` fica congelada. O diagnóstico pequeno em outras famílias mostrou que `wide_deep_mlp p50/m08/t40` ainda tem drawdown alto (`0.2811`), enquanto `tabular_bottleneck_mlp` é mais promissora. O melhor ponto foi `tabular_bottleneck_mlp p50/m08/t35`: `positiveFolds=4`, `maxDrawdown=0.1706`, `totalTrades=90` e `medianDeltaExpectancyVsChampion=0.01915`, falhando apenas por `seeds_instaveis`.
+
+Novo próximo passo operacional: não promover ainda. Rodar diagnóstico multi-seed controlado da família `tabular_bottleneck_mlp p50/m08/t35`. Antes de promoção, confirmar que a avaliação consolida seeds por família/política; se o runtime continuar registrando `seed_count=1` por `model_version`, corrigir a agregação multi-seed antes de aprovar qualquer modelo.

@@ -11,7 +11,7 @@ from __future__ import annotations
 import datetime as dt
 import hashlib
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -114,6 +114,9 @@ class BaselineMlpConfig:
     early_stopping_patience: int = 8
     class_weight: str = "none"
     architecture_type: str = "mlp"
+    min_directional_probability: float = 0.45
+    min_directional_margin: float = 0.05
+    max_trades_per_fold: int | None = None
 
     def __post_init__(self) -> None:
         if not self.hidden_units:
@@ -132,6 +135,12 @@ class BaselineMlpConfig:
             raise ValueError("early_stopping_patience must be positive")
         if self.class_weight not in {"none", "balanced", "directional"}:
             raise ValueError("class_weight must be none, balanced, or directional")
+        if not 0 <= self.min_directional_probability <= 1:
+            raise ValueError("min_directional_probability must be in the [0, 1] range")
+        if self.min_directional_margin < 0:
+            raise ValueError("min_directional_margin must be non-negative")
+        if self.max_trades_per_fold is not None and self.max_trades_per_fold <= 0:
+            raise ValueError("max_trades_per_fold must be positive when provided")
         allowed_architectures = {
             "mlp",
             "residual_mlp",
@@ -178,13 +187,49 @@ class FeatureScaler:
         return asdict(self)
 
 
+def align_config_to_dataset(
+    config: BaselineMlpConfig, dataset: pd.DataFrame
+) -> BaselineMlpConfig:
+    """Return a config compatible with the loaded dataset snapshot versions."""
+
+    feature_version = _single_dataset_value(dataset, "feature_version")
+    label_version = _single_dataset_value(dataset, "label_version")
+    updates: dict[str, str] = {}
+    if feature_version and feature_version != config.feature_version:
+        updates["feature_version"] = feature_version
+    if label_version and label_version != config.label_version:
+        updates["label_version"] = label_version
+    if not updates:
+        return config
+    return replace(config, **updates)
+
+
+def _single_dataset_value(dataset: pd.DataFrame, column: str) -> str | None:
+    if column not in dataset.columns:
+        return None
+    values = {str(value) for value in dataset[column].dropna().unique()}
+    if not values:
+        return None
+    if len(values) > 1:
+        raise ValueError(f"dataset contains multiple {column} values: {sorted(values)}")
+    return next(iter(values))
+
+
 def prepare_training_arrays(
     dataset: pd.DataFrame,
     feature_columns: tuple[str, ...] = FEATURE_COLUMNS,
+    *,
+    expected_feature_version: str = FEATURE_VERSION,
+    expected_label_version: str = LABEL_VERSION,
 ) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray], FeatureScaler]:
     """Return scaled X/y arrays grouped by chronological dataset split."""
 
-    _validate_dataset(dataset, feature_columns)
+    _validate_dataset(
+        dataset,
+        feature_columns,
+        expected_feature_version=expected_feature_version,
+        expected_label_version=expected_label_version,
+    )
     train = dataset[dataset["dataset_split"].eq("train")].copy()
     if train.empty:
         raise ValueError("dataset must contain rows with dataset_split='train'")
@@ -216,7 +261,7 @@ def train_baseline_mlp(
 ) -> dict[str, object]:
     """Train the baseline MLP and save a versioned Keras artifact + manifest."""
 
-    config = config or BaselineMlpConfig()
+    config = align_config_to_dataset(config or BaselineMlpConfig(), dataset)
     np.random.seed(config.random_seed)
 
     import tensorflow as tf
@@ -226,7 +271,10 @@ def train_baseline_mlp(
         config.feature_version, FEATURE_COLUMNS
     )
     x_by_split, y_by_split, scaler = prepare_training_arrays(
-        dataset, feature_columns=feature_columns
+        dataset,
+        feature_columns=feature_columns,
+        expected_feature_version=config.feature_version,
+        expected_label_version=config.label_version,
     )
     model = _build_model(x_by_split["train"].shape[1], config)
     validation_data = None
@@ -316,11 +364,18 @@ def build_muen_economics_from_predictions(
                 "probability rows must match split rows for "
                 f"{split}: got {len(probabilities)} and {len(split_frame)}"
             )
-        predictions = probabilities.argmax(axis=1)
+        labels = conservative_directional_labels(
+            probabilities,
+            min_directional_probability=config.min_directional_probability,
+            min_directional_margin=config.min_directional_margin,
+        )
+        labels = apply_fold_trade_budget(
+            labels,
+            probabilities,
+            max_trades_per_fold=config.max_trades_per_fold,
+        )
         evaluation_frame = split_frame.copy()
-        evaluation_frame["predicted_label"] = [
-            LABEL_CLASSES[int(i)] for i in predictions
-        ]
+        evaluation_frame["predicted_label"] = labels.tolist()
         for cost_multiplier in cost_multipliers:
             metrics = evaluate_fold_economics(
                 evaluation_frame,
@@ -345,6 +400,103 @@ def build_muen_economics_from_predictions(
             seed_count=1,
         ).to_json_dict()
     return payload
+
+
+def conservative_directional_labels(
+    probabilities: np.ndarray,
+    *,
+    min_directional_probability: float = 0.45,
+    min_directional_margin: float = 0.05,
+) -> np.ndarray:
+    """Convert probabilities into risk-aware BUY/SELL/neutral labels.
+
+    Directional trades are emitted only when the best directional class (down/up)
+    clears both an absolute probability threshold and a margin over neutral. This
+    deliberately increases ``neutral`` decisions for low-conviction rows, reducing
+    turnover and drawdown pressure in MUEN economic evaluation.
+    """
+
+    if probabilities.ndim != 2 or probabilities.shape[1] != len(LABEL_CLASSES):
+        raise ValueError("probabilities must have shape (n_rows, 3)")
+    if not 0 <= min_directional_probability <= 1:
+        raise ValueError("min_directional_probability must be in the [0, 1] range")
+    if min_directional_margin < 0:
+        raise ValueError("min_directional_margin must be non-negative")
+
+    down_index = LABEL_CLASSES.index("down")
+    neutral_index = LABEL_CLASSES.index("neutral")
+    up_index = LABEL_CLASSES.index("up")
+    labels = np.full(len(probabilities), "neutral", dtype=object)
+    directional_probabilities = probabilities[:, [down_index, up_index]]
+    directional_indexes = np.array([down_index, up_index])
+    best_directional_offsets = directional_probabilities.argmax(axis=1)
+    best_directional_indexes = directional_indexes[best_directional_offsets]
+    best_directional_probabilities = directional_probabilities[
+        np.arange(len(probabilities)), best_directional_offsets
+    ]
+    neutral_probabilities = probabilities[:, neutral_index]
+    confident_directional = (
+        best_directional_probabilities >= min_directional_probability
+    ) & (
+        (best_directional_probabilities - neutral_probabilities)
+        >= min_directional_margin
+    )
+    labels[confident_directional] = [
+        LABEL_CLASSES[int(index)]
+        for index in best_directional_indexes[confident_directional]
+    ]
+    return labels
+
+
+def apply_fold_trade_budget(
+    labels: np.ndarray,
+    probabilities: np.ndarray,
+    *,
+    max_trades_per_fold: int | None,
+) -> np.ndarray:
+    """Keep only the strongest directional decisions within a fold budget.
+
+    The conservative label filter decides whether a row may trade; this helper
+    adds an explicit risk/exposure cap by retaining at most ``max_trades_per_fold``
+    directional rows per evaluation fold.  Retained rows are ranked by the model's
+    directional conviction over neutral, so lower-conviction trades become
+    ``neutral`` before MUEN economics and drawdown are computed.
+    """
+
+    if max_trades_per_fold is None:
+        return labels
+    if max_trades_per_fold <= 0:
+        raise ValueError("max_trades_per_fold must be positive when provided")
+    if probabilities.ndim != 2 or probabilities.shape[1] != len(LABEL_CLASSES):
+        raise ValueError("probabilities must have shape (n_rows, 3)")
+    if len(labels) != len(probabilities):
+        raise ValueError("labels and probabilities must have the same length")
+
+    adjusted = labels.copy()
+    trade_positions = np.flatnonzero(np.isin(adjusted, ["down", "up"]))
+    if len(trade_positions) <= max_trades_per_fold:
+        return adjusted
+
+    down_index = LABEL_CLASSES.index("down")
+    neutral_index = LABEL_CLASSES.index("neutral")
+    up_index = LABEL_CLASSES.index("up")
+    directional_strength = (
+        probabilities[:, [down_index, up_index]].max(axis=1)
+        - probabilities[:, neutral_index]
+    )
+    ranked_positions = trade_positions[
+        np.argsort(directional_strength[trade_positions])[::-1]
+    ]
+    keep_positions = set(
+        int(position) for position in ranked_positions[:max_trades_per_fold]
+    )
+    drop_positions = [
+        int(position)
+        for position in trade_positions
+        if int(position) not in keep_positions
+    ]
+    adjusted[drop_positions] = "neutral"
+    return adjusted
 
 
 def evaluate_probabilities_by_split(
@@ -540,14 +692,20 @@ def _build_tabular_bottleneck_mlp(
     return tf.keras.Model(inputs=inputs, outputs=outputs, name=config.model_id)
 
 
-def _validate_dataset(dataset: pd.DataFrame, feature_columns: tuple[str, ...]) -> None:
+def _validate_dataset(
+    dataset: pd.DataFrame,
+    feature_columns: tuple[str, ...],
+    *,
+    expected_feature_version: str = FEATURE_VERSION,
+    expected_label_version: str = LABEL_VERSION,
+) -> None:
     required = set(feature_columns) | {"dataset_split", "label_class", "reference_date"}
     missing = required.difference(dataset.columns)
     if missing:
         raise ValueError(f"Missing required training columns: {sorted(missing)}")
     versions = {
-        "feature_version": FEATURE_VERSION,
-        "label_version": LABEL_VERSION,
+        "feature_version": expected_feature_version,
+        "label_version": expected_label_version,
     }
     for column, expected in versions.items():
         if column in dataset and not dataset[column].dropna().eq(expected).all():

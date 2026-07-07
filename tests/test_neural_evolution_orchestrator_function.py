@@ -94,6 +94,19 @@ def test_orchestrator_generates_trains_scores_and_persists(monkeypatch):
     assert response["candidate_count"] == 2
     assert response["trained_count"] == 2
     assert response["evaluated_count"] == 2
+    config_rows = next(
+        rows
+        for table, rows in fake_client.loaded
+        if table == "ingestaokraken.cotacao_intraday.neural_candidate_configs"
+    )
+    assert (
+        config_rows[0]["training_request_json"]["feature_version"]
+        == "feature_eod_tabular_v1"
+    )
+    assert (
+        config_rows[0]["training_request_json"]["label_version"]
+        == "label_eod_barrier_v2"
+    )
     latest_snapshot_query = fake_client.queries[0][0]
     assert "COUNTIF(dataset_split = 'validation') > 0" in latest_snapshot_query
     assert "COUNTIF(dataset_split = 'test') > 0" in latest_snapshot_query
@@ -119,6 +132,42 @@ def test_orchestrator_generates_trains_scores_and_persists(monkeypatch):
     assert gate_rows[0]["decision_status"] == "blocked"
     assert gate_rows[0]["failed_criteria"] == ["muen_economics_missing"]
     assert response["gate_decision_count"] == 2
+
+
+def test_orchestrator_can_persist_candidate_configs_without_training(monkeypatch):
+    fake_client = _FakeClient()
+    monkeypatch.setattr(module, "_BQ_CLIENT", fake_client)
+
+    def fail_if_training_called(payload):  # pragma: no cover - should not be called.
+        raise AssertionError(payload)
+
+    monkeypatch.setattr(module, "_invoke_training", fail_if_training_called)
+
+    response, status = module.neural_evolution_orchestrator(
+        _Request(
+            {
+                "evolution_run_id": "run-config-only",
+                "model_version_prefix": "evo_config_only",
+                "train_candidates": False,
+                "budget": {"max_trials": 1, "random_seed": 42},
+            }
+        )
+    )
+
+    assert status == 200
+    assert response["status"] == "ok"
+    assert response["candidate_count"] == 1
+    assert response["trained_count"] == 0
+    assert response["skipped_count"] == 1
+    assert response["evaluated_count"] == 0
+    assert response["failed_count"] == 0
+    assert response["skipped_candidates"] == [response["candidates"][0]]
+    loaded_tables = [table for table, _rows in fake_client.loaded]
+    assert "ingestaokraken.cotacao_intraday.neural_candidate_configs" in loaded_tables
+    assert (
+        "ingestaokraken.cotacao_intraday.neural_candidate_evaluations"
+        not in loaded_tables
+    )
 
 
 def test_orchestrator_phase2_uses_kept_leaderboard_candidates(monkeypatch):
