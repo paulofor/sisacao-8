@@ -683,7 +683,7 @@ def generate_phase4_recurrent_shadow_candidates(
 ) -> list[CandidateConfig]:
     """Return recurrent/causal sequence candidates for Phase-4 shadow research."""
 
-    return generate_phase3_family_candidates(
+    phase3_candidates = generate_phase3_family_candidates(
         evolution_run_id=evolution_run_id,
         dataset_snapshot=dataset_snapshot,
         budget=budget,
@@ -692,6 +692,21 @@ def generate_phase4_recurrent_shadow_candidates(
         family_space=family_space,
         seed_repeats_only=seed_repeats_only,
     )
+    phase4_candidates: list[CandidateConfig] = []
+    for candidate in phase3_candidates:
+        training_request = dict(candidate.training_request)
+        training_request["notes"] = str(training_request.get("notes", "")).replace(
+            "Fase 3 pesquisa/shadow de nova família neural",
+            "Fase 4 recorrente/temporal em shadow",
+        )
+        phase4_candidates.append(
+            replace(
+                candidate,
+                candidate_source="phase4_recurrent_shadow",
+                training_request=training_request,
+            )
+        )
+    return phase4_candidates
 
 
 def _phase3_policy_suffix(hyperparameters: Mapping[str, Any]) -> str:

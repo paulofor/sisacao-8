@@ -162,11 +162,17 @@ def test_generate_phase4_recurrent_shadow_candidates_creates_sequence_payloads()
         for candidate in candidates
     )
     assert all("l20" in candidate.model_version for candidate in candidates)
+    assert {candidate.candidate_source for candidate in candidates} == {
+        "phase4_recurrent_shadow"
+    }
     assert all(
         candidate.training_request["candidate_family_hash"].startswith(
             "neural_eod_phase4_"
         )
         for candidate in candidates
+    )
+    assert all(
+        "Fase 4" in candidate.training_request["notes"] for candidate in candidates
     )
 
 

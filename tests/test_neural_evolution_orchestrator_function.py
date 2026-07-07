@@ -742,4 +742,5 @@ def test_orchestrator_phase4_recurrent_shadow_dry_run_generates_sequence_candida
         "lstm_sequence",
         "tcn_sequence",
     }
+    assert response["candidate_sources"] == ["phase4_recurrent_shadow"]
     assert all("l20" in candidate for candidate in response["candidates"])

@@ -1,3 +1,11 @@
+# Próximo passo operacional das redes neurais — 2026-07-07 18:30 UTC
+
+O diagnóstico multi-seed da GRU Fase 4 `p50/m08/t35/l20` foi executado com sucesso e gerou uma decisão MUEN agregada por família: `seeds=3`, `stableAcrossSeeds=true`, `totalTrades=214`, `positiveFolds=6`, mediana de delta `0.0015811857719783577`, mas `maxDrawdown=0.34890754992364853`; decisão `rejected` por `fold_catastrofico` e `drawdown_excessivo`.
+
+Próximo passo: não promover e não criar Scheduler. Publicar o ajuste local que corrige o rótulo de candidatas Fase 4 para `phase4_recurrent_shadow`; depois testar uma variação conservadora da GRU l20 para reduzir drawdown, começando por `max_trades_per_fold=20` ou `25`, mantendo `p50/m08`, três seeds e Gate MUEN inalterado.
+
+---
+
 # Próximo passo operacional das redes neurais — 2026-07-07 16:15 UTC
 
 A Fase 4 recorrente em shadow foi iniciada. O dry-run `l40` passou, mas a rodada real `l40` falhou porque o snapshot atual tem no máximo 39 linhas de treino por ticker; `sequence_lookback=40` não cria janelas de treino. A rodada `l20` foi executada com sucesso: `trained_count=3`, `failed_count=0`, `fold_metric_count=12`, `family_evaluation_count=3` e `gate_decision_count=3`.
