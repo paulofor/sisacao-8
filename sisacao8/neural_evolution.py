@@ -558,6 +558,14 @@ def generate_phase3_family_candidates(
                 "class_weight": str(family.get("class_weight", "balanced")),
                 "architecture_type": architecture_type,
             }
+            if family.get("min_directional_probability") is not None:
+                base_hyperparameters["min_directional_probability"] = float(
+                    family.get("min_directional_probability")
+                )
+            if family.get("min_directional_margin") is not None:
+                base_hyperparameters["min_directional_margin"] = float(
+                    family.get("min_directional_margin")
+                )
             if family.get("max_trades_per_fold") is not None:
                 base_hyperparameters["max_trades_per_fold"] = _optional_int(
                     family.get("max_trades_per_fold")
@@ -580,13 +588,14 @@ def generate_phase3_family_candidates(
                 if repeat_round == 0
                 else f"_seed{int(hyperparameters['random_seed'])}"
             )
+            policy_suffix = _phase3_policy_suffix(hyperparameters)
             candidates.append(
                 _candidate_from_parts(
                     evolution_run_id=evolution_run_id,
                     dataset_snapshot=dataset_snapshot,
                     model_version=(
                         f"{model_version_prefix}_{architecture_type}"
-                        f"{repeat_suffix}_{index:02d}"
+                        f"{policy_suffix}{repeat_suffix}_{index:02d}"
                     ),
                     candidate_source="phase3_family",
                     architecture=architecture,
@@ -603,6 +612,33 @@ def generate_phase3_family_candidates(
             )
         repeat_round += 1
     return candidates
+
+
+def _phase3_policy_suffix(hyperparameters: Mapping[str, Any]) -> str:
+    """Return a compact model-version suffix for non-default trading policies."""
+
+    parts: list[str] = []
+    probability = float(
+        hyperparameters.get(
+            "min_directional_probability", DEFAULT_MIN_DIRECTIONAL_PROBABILITY
+        )
+    )
+    margin = float(
+        hyperparameters.get("min_directional_margin", DEFAULT_MIN_DIRECTIONAL_MARGIN)
+    )
+    max_trades = _optional_int(hyperparameters.get("max_trades_per_fold"))
+    if round(probability, 4) != round(DEFAULT_MIN_DIRECTIONAL_PROBABILITY, 4) or round(
+        margin, 4
+    ) != round(DEFAULT_MIN_DIRECTIONAL_MARGIN, 4):
+        parts.extend(
+            [
+                f"p{int(round(probability * 100)):02d}",
+                f"m{int(round(margin * 100)):02d}",
+            ]
+        )
+    if max_trades is not None:
+        parts.append(f"t{max_trades}")
+    return "" if not parts else "_" + "_".join(parts)
 
 
 def _phase3_controlled_hyperparameters(

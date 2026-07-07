@@ -95,6 +95,7 @@ def test_generate_phase3_family_candidates_accepts_trade_budget_policy():
 
     assert candidates[0].training_request["max_trades_per_fold"] == 60
     assert candidates[0].hyperparameters["max_trades_per_fold"] == 60
+    assert candidates[0].model_version == "phase3_risk_residual_mlp_p50_m08_t60_01"
 
 
 def test_generate_phase3_family_candidates_repeats_with_fresh_seeds_after_exhaustion():

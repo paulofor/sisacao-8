@@ -405,3 +405,11 @@ Próximo passo operacional: parar de subir apenas o limiar de probabilidade/marg
 Foi implementado o controle econômico explícito `max_trades_per_fold`. Ele atua depois da política conservadora de labels e antes da economia MUEN: mantém somente as operações direcionais de maior convicção por fold e transforma o excedente em `neutral`, reduzindo exposição/turnover sem alterar o Gate MUEN.
 
 Próximo passo operacional: publicar `functions/neural_training` e `functions/neural_evolution_orchestrator`; em seguida executar uma rodada real mínima com a melhor política anterior (`min_directional_probability=0.50`, `min_directional_margin=0.08`) e `max_trades_per_fold=60`. Se `maxDrawdown` continuar acima de 20%, repetir com `max_trades_per_fold=40` e depois `30`. Só considerar repetição multi-seed quando uma combinação ficar abaixo de 20% de drawdown e mantiver folds positivos suficientes.
+
+## Próximo passo após validação do cap 60 e correção de sufixo de política — 2026-07-07 02:55 UTC
+
+A rodada pós-deploy com `max_trades_per_fold=60` treinou e avaliou sem erro, e o cap foi efetivo para reduzir trades (`totalTrades=240`), mas a candidata ainda foi rejeitada pelo Gate MUEN com `maxDrawdown=0.3401409399120135`. A validação também revelou que o gerador Fase 3 não estava propagando `min_directional_probability`/`min_directional_margin` de `phase3.family_space` para os hiperparâmetros e reutilizava `model_version` sem sufixo da política, causando colisão com versões anteriores.
+
+A correção local já foi aplicada: Fase 3 agora propaga `min_directional_probability`, `min_directional_margin` e `max_trades_per_fold` para os hiperparâmetros, e `model_version` passa a incluir sufixos como `_p50_m08_t60` quando a política de trading difere do padrão.
+
+Próximo passo operacional: redeployar `functions/neural_evolution_orchestrator`; depois repetir `residual_mlp` com `min_directional_probability=0.50`, `min_directional_margin=0.08` e `max_trades_per_fold=60`. Se `maxDrawdown` continuar acima de 20%, testar `max_trades_per_fold=40` e `30`. Não repetir seeds nem promover modelos até uma combinação ficar abaixo do limite de drawdown e manter folds positivos suficientes.
