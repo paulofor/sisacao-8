@@ -145,6 +145,16 @@ O workflow `.github/workflows/deploy.yml` já apontava `neural_training` para `s
 
 Ação necessária agora: executar novamente o workflow `Deploy`. Se o pacote estiver correto, o log de `neural_training` deve mostrar `align_config_to_dataset` nas linhas impressas e a função receberá `DEPLOY_SOURCE_FINGERPRINT`/`DEPLOY_GITHUB_SHA` como env vars para auditoria. Depois disso, repetir a chamada direta pequena de `neural_training`.
 
+
+
+## Causa no validador de dataset — 2026-07-06 23:45 UTC
+
+O deploy com fingerprint mostrou que a cópia vendorizada atualizada já entrou, mas a chamada direta ainda falhou. A causa remanescente está no validador: `train_baseline_mlp` realinhava o `config.feature_version`, porém `_validate_dataset` ainda comparava o dataset contra as constantes globais `FEATURE_VERSION`/`LABEL_VERSION` do código.
+
+Correção aplicada: `prepare_training_arrays` passa a aceitar `expected_feature_version`/`expected_label_version`; `train_baseline_mlp` envia `config.feature_version`/`config.label_version`; e `_validate_dataset` usa esses valores parametrizados.
+
+Ação necessária agora: redeployar `functions/neural_training` mais uma vez e repetir a chamada direta pequena.
+
 ## Regra operacional
 
 Não automatizar `approve_if_passed` nem promover modelos para `approved` sem decisão MUEN `passed` e autorização humana explícita. As candidatas Fase 3 devem permanecer em pesquisa/shadow até passarem pelo gate econômico governado.

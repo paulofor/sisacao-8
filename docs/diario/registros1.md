@@ -1905,3 +1905,11 @@ A leitura da tela `Redes neurais — Treinos` indicou 86 redes em estágio `Cand
 - O deploy também passa a gravar `DEPLOY_SOURCE_FINGERPRINT` e `DEPLOY_GITHUB_SHA` como variáveis de ambiente da função, permitindo conferir em revisões futuras qual fonte foi empacotada.
 - Próximo passo operacional: executar o workflow `Deploy` novamente. Se `neural_training` ainda publicar código antigo, comparar no log do Actions o fingerprint impresso e as linhas 180-260 com o arquivo local; se a checagem falhar, o workflow vai abortar antes de publicar uma revisão stale.
 - Comandos usados: `rg -n` para localizar o deploy de `neural_training`, inspeção de `.github/workflows/deploy.yml`, edição via Python, `ruby -e "require 'yaml'; YAML.load_file('.github/workflows/deploy.yml')"` e `git diff --check`.
+
+## 2026-07-06 23:45 UTC — Causa no validador de dataset e correção
+- Após o deploy com fingerprint, a função passou a executar a cópia vendorizada atualizada (stack trace mudou para linhas novas), mas a chamada direta pequena ainda falhou.
+- Nova causa confirmada por inspeção do código e stack trace: `train_baseline_mlp` já realinhava `config.feature_version` para v2, porém `prepare_training_arrays` chamava `_validate_dataset`, e `_validate_dataset` ainda comparava `feature_version`/`label_version` contra as constantes globais `FEATURE_VERSION`/`LABEL_VERSION` do código, não contra a versão efetiva do `config`.
+- Correção aplicada: `prepare_training_arrays` agora aceita `expected_feature_version` e `expected_label_version`; `train_baseline_mlp` passa `config.feature_version` e `config.label_version` para o validador; `_validate_dataset` compara o dataset contra esses valores esperados parametrizados.
+- A correção foi sincronizada em `sisacao8/neural_training.py` e na cópia vendorizada `functions/neural_training/sisacao8/neural_training.py`.
+- Próximo passo: redeployar novamente `functions/neural_training`; como o fingerprint já está no workflow, conferir no log as linhas do arquivo vendorizado e repetir a chamada direta pequena de `neural_training`.
+- Comandos usados: inspeção com `nl -ba`, edição via Python, `python -m black sisacao8/neural_training.py functions/neural_training/sisacao8/neural_training.py`, `python -m pytest tests/test_neural_training.py -q`.

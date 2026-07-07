@@ -215,10 +215,18 @@ def _single_dataset_value(dataset: pd.DataFrame, column: str) -> str | None:
 def prepare_training_arrays(
     dataset: pd.DataFrame,
     feature_columns: tuple[str, ...] = FEATURE_COLUMNS,
+    *,
+    expected_feature_version: str = FEATURE_VERSION,
+    expected_label_version: str = LABEL_VERSION,
 ) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray], FeatureScaler]:
     """Return scaled X/y arrays grouped by chronological dataset split."""
 
-    _validate_dataset(dataset, feature_columns)
+    _validate_dataset(
+        dataset,
+        feature_columns,
+        expected_feature_version=expected_feature_version,
+        expected_label_version=expected_label_version,
+    )
     train = dataset[dataset["dataset_split"].eq("train")].copy()
     if train.empty:
         raise ValueError("dataset must contain rows with dataset_split='train'")
@@ -260,7 +268,10 @@ def train_baseline_mlp(
         config.feature_version, FEATURE_COLUMNS
     )
     x_by_split, y_by_split, scaler = prepare_training_arrays(
-        dataset, feature_columns=feature_columns
+        dataset,
+        feature_columns=feature_columns,
+        expected_feature_version=config.feature_version,
+        expected_label_version=config.label_version,
     )
     model = _build_model(x_by_split["train"].shape[1], config)
     validation_data = None
@@ -622,14 +633,20 @@ def _build_tabular_bottleneck_mlp(
     return tf.keras.Model(inputs=inputs, outputs=outputs, name=config.model_id)
 
 
-def _validate_dataset(dataset: pd.DataFrame, feature_columns: tuple[str, ...]) -> None:
+def _validate_dataset(
+    dataset: pd.DataFrame,
+    feature_columns: tuple[str, ...],
+    *,
+    expected_feature_version: str = FEATURE_VERSION,
+    expected_label_version: str = LABEL_VERSION,
+) -> None:
     required = set(feature_columns) | {"dataset_split", "label_class", "reference_date"}
     missing = required.difference(dataset.columns)
     if missing:
         raise ValueError(f"Missing required training columns: {sorted(missing)}")
     versions = {
-        "feature_version": FEATURE_VERSION,
-        "label_version": LABEL_VERSION,
+        "feature_version": expected_feature_version,
+        "label_version": expected_label_version,
     }
     for column, expected in versions.items():
         if column in dataset and not dataset[column].dropna().eq(expected).all():
