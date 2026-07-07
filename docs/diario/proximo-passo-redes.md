@@ -413,3 +413,23 @@ A rodada pós-deploy com `max_trades_per_fold=60` treinou e avaliou sem erro, e 
 A correção local já foi aplicada: Fase 3 agora propaga `min_directional_probability`, `min_directional_margin` e `max_trades_per_fold` para os hiperparâmetros, e `model_version` passa a incluir sufixos como `_p50_m08_t60` quando a política de trading difere do padrão.
 
 Próximo passo operacional: redeployar `functions/neural_evolution_orchestrator`; depois repetir `residual_mlp` com `min_directional_probability=0.50`, `min_directional_margin=0.08` e `max_trades_per_fold=60`. Se `maxDrawdown` continuar acima de 20%, testar `max_trades_per_fold=40` e `30`. Não repetir seeds nem promover modelos até uma combinação ficar abaixo do limite de drawdown e manter folds positivos suficientes.
+
+## Próximo passo após caps 60/40/30/20/18 — 2026-07-07 03:35 UTC
+
+As rodadas com sufixo de política confirmaram que o versionamento está correto e que `max_trades_per_fold` atua na economia MUEN. Resultado: `t60` e `t40` mantiveram `positiveFolds=4`, mas ainda falharam por drawdown (`0.3030` e `0.2424`); `t18` removeu `drawdown_excessivo` (`maxDrawdown=0.1850`), mas caiu para `positiveFolds=2` e falhou por `folds_positivos_insuficientes`.
+
+Próximo passo operacional: não promover nem repetir seeds dessas candidatas ainda. Implementar um stop/limitador de drawdown intrafold antes da economia MUEN, buscando preservar a cobertura/folds positivos do cap 40 enquanto bloqueia novas operações quando o drawdown acumulado se aproximar de 18%–20%. Depois do deploy desse stop, repetir primeiro `p50/m08/t40` com stop de 18% e comparar contra `t18`.
+
+## Regra de parada — congelar família atual e priorizar v3/features/labels — 2026-07-07 04:05 UTC
+
+Regra oficial: não continuar criando camadas adicionais de contenção para tentar aprovar a família atual quando a evidência mostra falta de edge robusto. A família `residual_mlp` com política `p50/m08` e caps por fold fica congelada para promoção, repetição multi-seed e novas variações incrementais de risco.
+
+Leitura dos resultados: `t40` preservou folds positivos, mas ainda ficou acima do limite de drawdown; `t18` removeu `drawdown_excessivo`, mas perdeu consistência temporal. Isso indica que o problema não é apenas calibragem de risco, e sim insuficiência da hipótese/modelo/dados atuais.
+
+Novo próximo passo operacional: executar no máximo um último diagnóstico simples e, em seguida, priorizar `feature_eod_tabular_v3`, revisão de labels, novas features e segmentação por regimes de mercado. Só voltar a treinar/promover famílias neurais quando houver nova hipótese estrutural de dados ou target; não promover nenhum modelo sem decisão MUEN `passed` e autorização humana explícita.
+
+## Próximo passo após congelar `residual_mlp` e testar outras famílias — 2026-07-07 04:20 UTC
+
+A `residual_mlp p50/m08` fica congelada. O diagnóstico pequeno em outras famílias mostrou que `wide_deep_mlp p50/m08/t40` ainda tem drawdown alto (`0.2811`), enquanto `tabular_bottleneck_mlp` é mais promissora. O melhor ponto foi `tabular_bottleneck_mlp p50/m08/t35`: `positiveFolds=4`, `maxDrawdown=0.1706`, `totalTrades=90` e `medianDeltaExpectancyVsChampion=0.01915`, falhando apenas por `seeds_instaveis`.
+
+Novo próximo passo operacional: não promover ainda. Rodar diagnóstico multi-seed controlado da família `tabular_bottleneck_mlp p50/m08/t35`. Antes de promoção, confirmar que a avaliação consolida seeds por família/política; se o runtime continuar registrando `seed_count=1` por `model_version`, corrigir a agregação multi-seed antes de aprovar qualquer modelo.
