@@ -1,3 +1,37 @@
+# Próximo passo operacional das redes neurais — 2026-07-07 16:35 UTC
+
+A Fase 4 recorrente em shadow foi implementada no código. O treino agora consegue materializar janelas point-in-time por ticker com `sequence_lookback` de 20 a 60 pregões e testar `gru_sequence`, `lstm_sequence` e `tcn_sequence`/Conv1D causal, mantendo a avaliação pelo mesmo Gate MUEN e sem promoção automática.
+
+Próximo passo operacional: publicar `functions/neural_training` e `functions/neural_evolution_orchestrator`; executar primeiro um dry-run com `strategy=phase4_recurrent_shadow`, `dry_run=true` e `budget.max_trials=3`; validar que as candidatas geradas são GRU/LSTM/TCN com sufixo `p50_m08_t35_l40` e `sequence_lookback=40`; só então executar uma rodada real pequena em shadow. Não usar `approve_if_passed` automático.
+
+---
+
+# Próximo passo operacional das redes neurais — 2026-07-07 15:55 UTC
+
+O pipeline atual ainda não usa redes recorrentes; ele treina arquiteturas tabulares feed-forward (`mlp`, `residual_mlp`, `wide_deep_mlp` e `tabular_bottleneck_mlp`) sobre linhas EOD independentes. Redes recorrentes fazem sentido como próxima frente de pesquisa, mas exigem antes um dataset sequencial point-in-time com janelas por ativo.
+
+Próximo passo operacional: manter a execução imediata do foco multi-seed `tabular_bottleneck_mlp p50/m08/t35` já implementado. Em paralelo ou logo depois, planejar uma Fase 4 recorrente em shadow: materializar janelas de 20 a 60 pregões por ticker, implementar uma família GRU/LSTM pequena ou TCN/1D causal, registrar `architecture_type` novo e avaliar pelo mesmo Gate MUEN sem promoção automática.
+
+---
+
+# Próximo passo operacional das redes neurais — 2026-07-07 15:25 UTC
+
+O código agora tem um caminho dedicado para avaliação/agregação multi-seed da família/política `tabular_bottleneck_mlp p50/m08/t35`: usar `strategy=phase3_multiseed_focus` no `neural_evolution_orchestrator`.
+
+Próximo passo operacional: publicar `functions/neural_training` e `functions/neural_evolution_orchestrator`; em seguida executar primeiro um dry-run com `strategy=phase3_multiseed_focus` e `budget.max_trials=3`, confirmando que as três candidatas são `tabular_bottleneck_mlp`, têm sufixo `p50_m08_t35` e compartilham o mesmo `candidate_family_hash`. Depois, executar a rodada real controlada com as três seeds e verificar se a decisão MUEN consolidada passa a registrar `seeds=3` e `stable_across_seeds` calculado por família/política. Não promover automaticamente e não afrouxar o Gate MUEN.
+
+---
+
+# Próximo passo operacional das redes neurais — 2026-07-07 14:45 UTC
+
+A análise atual via MCP/BigQuery confirma 721 decisões do Gate MUEN, todas rejeitadas, e 784 modelos no registry ainda como `candidate`. O bloqueio dominante é estabilidade/robustez: `seeds_instaveis` aparece em todas as decisões, enquanto `drawdown_excessivo` ainda aparece na maioria.
+
+Melhor candidato econômico confirmado até agora: `neural_eod_phase3_20260707_tabular_bottleneck_mlp_p50_m08_t35_01`, com `positive_folds=4`, `max_drawdown=0.17061813187037642`, `total_trades=90` e `median_delta_expectancy_vs_champion=0.019152524481104147`, mas rejeitado por `seeds_instaveis`.
+
+Próximo passo operacional: não promover nenhuma rede e não afrouxar o Gate MUEN. Priorizar avaliação/agregação multi-seed controlada da família/política `tabular_bottleneck_mlp p50/m08/t35` e validar/corrigir a consolidação por família/política para que as decisões tenham `seeds > 1` e possam medir `stable_across_seeds` de forma real. Como comparação secundária, monitorar o ponto recorrente `neural_eod_mlp_evo2_20260707_diversity_01` apenas quando ficar simultaneamente abaixo de 20% de drawdown e com 4 folds positivos.
+
+---
+
 # Próximo passo — Redes neurais MUEN
 
 **Última atualização:** 2026-07-04 02:45 UTC
