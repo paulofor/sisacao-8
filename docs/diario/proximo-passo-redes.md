@@ -1,3 +1,19 @@
+# Próximo passo operacional das redes neurais — 2026-07-07 16:35 UTC
+
+A Fase 4 recorrente em shadow foi implementada no código. O treino agora consegue materializar janelas point-in-time por ticker com `sequence_lookback` de 20 a 60 pregões e testar `gru_sequence`, `lstm_sequence` e `tcn_sequence`/Conv1D causal, mantendo a avaliação pelo mesmo Gate MUEN e sem promoção automática.
+
+Próximo passo operacional: publicar `functions/neural_training` e `functions/neural_evolution_orchestrator`; executar primeiro um dry-run com `strategy=phase4_recurrent_shadow`, `dry_run=true` e `budget.max_trials=3`; validar que as candidatas geradas são GRU/LSTM/TCN com sufixo `p50_m08_t35_l40` e `sequence_lookback=40`; só então executar uma rodada real pequena em shadow. Não usar `approve_if_passed` automático.
+
+---
+
+# Próximo passo operacional das redes neurais — 2026-07-07 15:55 UTC
+
+O pipeline atual ainda não usa redes recorrentes; ele treina arquiteturas tabulares feed-forward (`mlp`, `residual_mlp`, `wide_deep_mlp` e `tabular_bottleneck_mlp`) sobre linhas EOD independentes. Redes recorrentes fazem sentido como próxima frente de pesquisa, mas exigem antes um dataset sequencial point-in-time com janelas por ativo.
+
+Próximo passo operacional: manter a execução imediata do foco multi-seed `tabular_bottleneck_mlp p50/m08/t35` já implementado. Em paralelo ou logo depois, planejar uma Fase 4 recorrente em shadow: materializar janelas de 20 a 60 pregões por ticker, implementar uma família GRU/LSTM pequena ou TCN/1D causal, registrar `architecture_type` novo e avaliar pelo mesmo Gate MUEN sem promoção automática.
+
+---
+
 # Próximo passo operacional das redes neurais — 2026-07-07 15:25 UTC
 
 O código agora tem um caminho dedicado para avaliação/agregação multi-seed da família/política `tabular_bottleneck_mlp p50/m08/t35`: usar `strategy=phase3_multiseed_focus` no `neural_evolution_orchestrator`.

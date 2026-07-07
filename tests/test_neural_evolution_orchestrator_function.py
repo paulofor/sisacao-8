@@ -717,3 +717,29 @@ def test_orchestrator_phase3_multiseed_focus_generates_tabular_t35_repeats(monke
         "tabular_bottleneck_mlp"
     }
     assert all("p50_m08_t35" in candidate for candidate in response["candidates"])
+
+
+def test_orchestrator_phase4_recurrent_shadow_dry_run_generates_sequence_candidates(
+    monkeypatch,
+):
+    fake_client = _FakeClient()
+    monkeypatch.setattr(module, "_BQ_CLIENT", fake_client)
+
+    response, status = module.neural_evolution_orchestrator(
+        _Request(
+            {
+                "dry_run": True,
+                "strategy": "phase4_recurrent_shadow",
+                "budget": {"max_trials": 3, "random_seed": 77},
+            }
+        )
+    )
+
+    assert status == 200
+    assert response["candidate_count"] == 3
+    assert set(response["architecture_types"]) == {
+        "gru_sequence",
+        "lstm_sequence",
+        "tcn_sequence",
+    }
+    assert all("l40" in candidate for candidate in response["candidates"])

@@ -5,6 +5,7 @@ from sisacao8.neural_evolution import (
     estimate_parameter_count,
     generate_deterministic_candidates,
     generate_phase3_family_candidates,
+    generate_phase4_recurrent_shadow_candidates,
     score_candidate,
 )
 
@@ -140,6 +141,33 @@ def test_generate_phase3_family_candidates_can_repeat_same_policy_across_seeds()
     ]
     assert comparable_hyperparameters[0] == comparable_hyperparameters[1]
     assert comparable_hyperparameters[1] == comparable_hyperparameters[2]
+
+
+def test_generate_phase4_recurrent_shadow_candidates_creates_sequence_payloads():
+    candidates = generate_phase4_recurrent_shadow_candidates(
+        evolution_run_id="run-phase4",
+        dataset_snapshot="snapshot-1",
+        budget=EvolutionBudget(max_trials=3, random_seed=11),
+        model_version_prefix="phase4_test",
+    )
+
+    assert len(candidates) == 3
+    assert {candidate.architecture["type"] for candidate in candidates} == {
+        "gru_sequence",
+        "lstm_sequence",
+        "tcn_sequence",
+    }
+    assert all(
+        candidate.training_request["sequence_lookback"] == 40
+        for candidate in candidates
+    )
+    assert all("l40" in candidate.model_version for candidate in candidates)
+    assert all(
+        candidate.training_request["candidate_family_hash"].startswith(
+            "neural_eod_phase4_"
+        )
+        for candidate in candidates
+    )
 
 
 def test_generate_phase3_family_candidates_repeats_with_fresh_seeds_after_exhaustion():

@@ -264,6 +264,9 @@ def _training_config(payload: Mapping[str, Any]) -> BaselineMlpConfig:
             if payload.get("candidate_family_hash")
             else defaults.candidate_family_hash
         ),
+        sequence_lookback=_int_value(
+            payload.get("sequence_lookback"), defaults.sequence_lookback
+        ),
     )
 
 

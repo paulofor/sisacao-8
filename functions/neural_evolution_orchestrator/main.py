@@ -21,6 +21,7 @@ from sisacao8.neural_evolution import (
     generate_controlled_diversity_candidates,
     generate_deterministic_candidates,
     generate_phase3_family_candidates,
+    generate_phase4_recurrent_shadow_candidates,
     mutate_top_candidates,
     penalized_score,
     repeat_finalists_with_fresh_seeds,
@@ -309,6 +310,8 @@ def _model_version_prefix(
     if payload.get("model_version_prefix"):
         return str(payload["model_version_prefix"])
     date_suffix = started_at.strftime("%Y%m%d")
+    if _is_phase4_strategy(strategy):
+        return f"neural_eod_phase4_{date_suffix}"
     if _is_phase3_strategy(strategy):
         return f"neural_eod_phase3_{date_suffix}"
     if _is_phase2_strategy(strategy):
@@ -327,6 +330,16 @@ def _generate_candidates_for_strategy(
     model_version_prefix: str,
     payload: Mapping[str, Any],
 ) -> list[CandidateConfig]:
+    if _is_phase4_strategy(strategy):
+        return _generate_phase4_candidates(
+            strategy=strategy,
+            evolution_run_id=evolution_run_id,
+            dataset_snapshot=dataset_snapshot,
+            budget=budget,
+            existing_hashes=existing_hashes,
+            model_version_prefix=model_version_prefix,
+            payload=payload,
+        )
     if _is_phase3_strategy(strategy):
         return _generate_phase3_candidates(
             strategy=strategy,
@@ -361,6 +374,10 @@ def _is_phase2_strategy(strategy: str) -> bool:
     return strategy.lower() in {"deterministic_phase2", "phase2", "phase2_mutation"}
 
 
+def _is_phase4_strategy(strategy: str) -> bool:
+    return strategy.lower() in {"phase4_recurrent_shadow", "phase4_recurrent"}
+
+
 def _is_phase3_strategy(strategy: str) -> bool:
     return strategy.lower() in {
         "phase3_new_families",
@@ -368,6 +385,35 @@ def _is_phase3_strategy(strategy: str) -> bool:
         "new_families",
         "phase3_multiseed_focus",
     }
+
+
+def _generate_phase4_candidates(
+    *,
+    strategy: str,
+    evolution_run_id: str,
+    dataset_snapshot: str,
+    budget: EvolutionBudget,
+    existing_hashes: Iterable[str],
+    model_version_prefix: str,
+    payload: Mapping[str, Any],
+) -> list[CandidateConfig]:
+    phase4_options = (
+        payload.get("phase4") if isinstance(payload.get("phase4"), Mapping) else {}
+    )
+    family_space = phase4_options.get("family_space")
+    kwargs: dict[str, Any] = {}
+    if isinstance(family_space, list):
+        kwargs["family_space"] = family_space
+    if bool(phase4_options.get("seed_repeats_only", False)):
+        kwargs["seed_repeats_only"] = True
+    return generate_phase4_recurrent_shadow_candidates(
+        evolution_run_id=evolution_run_id,
+        dataset_snapshot=dataset_snapshot,
+        budget=budget,
+        existing_hashes=existing_hashes,
+        model_version_prefix=model_version_prefix,
+        **kwargs,
+    )
 
 
 def _generate_phase3_candidates(
