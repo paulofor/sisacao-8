@@ -1,8 +1,24 @@
+# Próximo passo operacional das redes neurais — 2026-07-07 16:15 UTC
+
+A Fase 4 recorrente em shadow foi iniciada. O dry-run `l40` passou, mas a rodada real `l40` falhou porque o snapshot atual tem no máximo 39 linhas de treino por ticker; `sequence_lookback=40` não cria janelas de treino. A rodada `l20` foi executada com sucesso: `trained_count=3`, `failed_count=0`, `fold_metric_count=12`, `family_evaluation_count=3` e `gate_decision_count=3`.
+
+Resultado inicial: GRU/TCN/LSTM `p50_m08_t35_l20` foram treinadas e rejeitadas pelo Gate MUEN. A GRU foi a melhor candidata inicial (`maxDrawdown=0.1826037529105603`, `totalTrades=50`, `positiveFolds=2`, mediana de delta `0.011173039169204084`), mas ainda falhou por folds positivos insuficientes e seed única. Próximo passo: publicar o default Fase 4 ajustado para `sequence_lookback=20` e, se repetir Fase 4, começar por diagnóstico multi-seed controlado da GRU `p50/m08/t35/l20`; não criar Scheduler e não executar `approve_if_passed` automático.
+
+---
+
+# Próximo passo operacional das redes neurais — 2026-07-07 17:05 UTC
+
+Depois do deploy, iniciar a Fase 4 recorrente em shadow com uma sequência manual: primeiro executar o dry-run de `strategy=phase4_recurrent_shadow` com `budget.max_trials=3`; se retornar `gru_sequence`, `lstm_sequence` e `tcn_sequence` com sufixo `p50_m08_t35_l20`, executar uma rodada real pequena; depois validar `/api/ops/neural/training-runs` e `/api/ops/neural/gate-decisions`. Só criar Scheduler separado após essa validação. Não usar `approve_if_passed` automático.
+
+O passo a passo com comandos `curl` e Scheduler opcional está documentado em `docs/neural_evolution_orchestrator_scheduler.md`, seção “Fase 4 recorrente em shadow — início manual pós-deploy”.
+
+---
+
 # Próximo passo operacional das redes neurais — 2026-07-07 16:35 UTC
 
 A Fase 4 recorrente em shadow foi implementada no código. O treino agora consegue materializar janelas point-in-time por ticker com `sequence_lookback` de 20 a 60 pregões e testar `gru_sequence`, `lstm_sequence` e `tcn_sequence`/Conv1D causal, mantendo a avaliação pelo mesmo Gate MUEN e sem promoção automática.
 
-Próximo passo operacional: publicar `functions/neural_training` e `functions/neural_evolution_orchestrator`; executar primeiro um dry-run com `strategy=phase4_recurrent_shadow`, `dry_run=true` e `budget.max_trials=3`; validar que as candidatas geradas são GRU/LSTM/TCN com sufixo `p50_m08_t35_l40` e `sequence_lookback=40`; só então executar uma rodada real pequena em shadow. Não usar `approve_if_passed` automático.
+Próximo passo operacional: publicar `functions/neural_training` e `functions/neural_evolution_orchestrator`; executar primeiro um dry-run com `strategy=phase4_recurrent_shadow`, `dry_run=true` e `budget.max_trials=3`; validar que as candidatas geradas são GRU/LSTM/TCN com sufixo `p50_m08_t35_l20` e `sequence_lookback=20`; só então executar uma rodada real pequena em shadow. Não usar `approve_if_passed` automático.
 
 ---
 

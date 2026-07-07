@@ -158,10 +158,10 @@ def test_generate_phase4_recurrent_shadow_candidates_creates_sequence_payloads()
         "tcn_sequence",
     }
     assert all(
-        candidate.training_request["sequence_lookback"] == 40
+        candidate.training_request["sequence_lookback"] == 20
         for candidate in candidates
     )
-    assert all("l40" in candidate.model_version for candidate in candidates)
+    assert all("l20" in candidate.model_version for candidate in candidates)
     assert all(
         candidate.training_request["candidate_family_hash"].startswith(
             "neural_eod_phase4_"

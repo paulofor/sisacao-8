@@ -742,4 +742,4 @@ def test_orchestrator_phase4_recurrent_shadow_dry_run_generates_sequence_candida
         "lstm_sequence",
         "tcn_sequence",
     }
-    assert all("l40" in candidate for candidate in response["candidates"])
+    assert all("l20" in candidate for candidate in response["candidates"])
