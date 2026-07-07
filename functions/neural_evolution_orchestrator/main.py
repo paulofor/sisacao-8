@@ -6,6 +6,7 @@ import datetime as dt
 import json
 import logging
 import os
+from dataclasses import replace
 from typing import Any, Dict, Iterable, Mapping
 from urllib import error, request
 from uuid import uuid4
@@ -211,6 +212,11 @@ def neural_evolution_orchestrator(request_obj: Any) -> tuple[Dict[str, Any], int
                 score=score,
             )
             fold_metric_rows.extend(muen_rows["fold_metrics"])
+            if muen_rows["fold_metrics"]:
+                # Family/gate evidence is rebuilt after all candidates finish so
+                # repeated seeds for the same family/policy are evaluated
+                # together instead of as isolated lucky runs.
+                continue
             family_evaluation_rows.extend(muen_rows["family_evaluations"])
             gate_decision_rows.extend(muen_rows["gate_decisions"])
         except (
@@ -220,6 +226,13 @@ def neural_evolution_orchestrator(request_obj: Any) -> tuple[Dict[str, Any], int
             failures.append(
                 {"model_version": candidate.model_version, "error": str(exc)}
             )
+
+    grouped_muen_rows = _aggregate_muen_rows_by_family(
+        dataset_snapshot=dataset_snapshot,
+        fold_metric_rows=fold_metric_rows,
+    )
+    family_evaluation_rows.extend(grouped_muen_rows["family_evaluations"])
+    gate_decision_rows.extend(grouped_muen_rows["gate_decisions"])
 
     if evaluation_rows and not dry_run:
         _append_rows(client, _table_id(CANDIDATE_EVALUATIONS_TABLE), evaluation_rows)
@@ -316,6 +329,7 @@ def _generate_candidates_for_strategy(
 ) -> list[CandidateConfig]:
     if _is_phase3_strategy(strategy):
         return _generate_phase3_candidates(
+            strategy=strategy,
             evolution_run_id=evolution_run_id,
             dataset_snapshot=dataset_snapshot,
             budget=budget,
@@ -348,11 +362,17 @@ def _is_phase2_strategy(strategy: str) -> bool:
 
 
 def _is_phase3_strategy(strategy: str) -> bool:
-    return strategy.lower() in {"phase3_new_families", "phase3", "new_families"}
+    return strategy.lower() in {
+        "phase3_new_families",
+        "phase3",
+        "new_families",
+        "phase3_multiseed_focus",
+    }
 
 
 def _generate_phase3_candidates(
     *,
+    strategy: str,
     evolution_run_id: str,
     dataset_snapshot: str,
     budget: EvolutionBudget,
@@ -367,6 +387,26 @@ def _generate_phase3_candidates(
     kwargs: dict[str, Any] = {}
     if isinstance(family_space, list):
         kwargs["family_space"] = family_space
+    if strategy.lower() == "phase3_multiseed_focus":
+        kwargs["family_space"] = [
+            {
+                "architecture_type": "tabular_bottleneck_mlp",
+                "model_id": "neural_eod_tabular_bottleneck_mlp",
+                "hidden_units": [256, 64, 16],
+                "dropout_rate": 0.25,
+                "learning_rate": 0.0003,
+                "batch_size": 256,
+                "epochs": 80,
+                "class_weight": "balanced",
+                "min_directional_probability": 0.50,
+                "min_directional_margin": 0.08,
+                "max_trades_per_fold": 35,
+                "candidate_family_hash": (
+                    "neural_eod_phase3_tabular_bottleneck_mlp_p50_m08_t35"
+                ),
+            }
+        ]
+        kwargs["seed_repeats_only"] = True
     return generate_phase3_family_candidates(
         evolution_run_id=evolution_run_id,
         dataset_snapshot=dataset_snapshot,
@@ -793,6 +833,76 @@ def _muen_economic_rows_from_metrics(
         "family_evaluations": [family_row],
         "gate_decisions": [gate_row],
     }
+
+
+def _aggregate_muen_rows_by_family(
+    *,
+    dataset_snapshot: str,
+    fold_metric_rows: list[dict[str, Any]],
+) -> dict[str, list[dict[str, Any]]]:
+    """Aggregate persisted fold metrics across all seeds of each family/policy."""
+
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for row in fold_metric_rows:
+        family_hash = str(row.get("candidate_family_hash") or "")
+        if not family_hash:
+            continue
+        grouped.setdefault(family_hash, []).append(row)
+
+    family_rows: list[dict[str, Any]] = []
+    gate_rows: list[dict[str, Any]] = []
+    for family_hash, rows in grouped.items():
+        metrics = [_fold_metric_from_mapping(row.get("metrics_json")) for row in rows]
+        seeds = {
+            int(row.get("seed") or 0) for row in rows if row.get("seed") is not None
+        }
+        seed_count = max(1, len(seeds))
+        family = aggregate_family_evaluation(
+            family_hash,
+            metrics,
+            seed_count=seed_count,
+        )
+        family = replace(
+            family,
+            stable_across_seeds=_stable_across_seed_rows(rows),
+        )
+        protocol_version = str(
+            rows[0].get("protocol_version") or "neural_eod_protocol_v1"
+        )
+        family_rows.append(
+            family_evaluation_row(
+                protocol_version=protocol_version,
+                dataset_snapshot=dataset_snapshot,
+                family=family,
+            )
+        )
+        gate_rows.append(
+            gate_decision_row(
+                protocol_version=protocol_version,
+                dataset_snapshot=dataset_snapshot,
+                candidate_family_hash=family_hash,
+                decision=research_gate_decision(family),
+            )
+        )
+    return {"family_evaluations": family_rows, "gate_decisions": gate_rows}
+
+
+def _stable_across_seed_rows(rows: list[dict[str, Any]]) -> bool:
+    """Return whether every repeated seed has positive median edge evidence."""
+
+    metrics_by_seed: dict[int, list[FoldEconomicMetrics]] = {}
+    for row in rows:
+        seed = int(row.get("seed") or 0)
+        metrics_by_seed.setdefault(seed, []).append(
+            _fold_metric_from_mapping(row.get("metrics_json"))
+        )
+    if len(metrics_by_seed) <= 1:
+        return False
+    for metrics in metrics_by_seed.values():
+        deltas = [metric.delta_expectancy_vs_champion for metric in metrics]
+        if not deltas or sorted(deltas)[len(deltas) // 2] <= 0:
+            return False
+    return True
 
 
 def _fold_metric_from_mapping(value: Any) -> FoldEconomicMetrics:

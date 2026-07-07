@@ -117,6 +117,7 @@ class BaselineMlpConfig:
     min_directional_probability: float = 0.45
     min_directional_margin: float = 0.05
     max_trades_per_fold: int | None = None
+    candidate_family_hash: str | None = None
 
     def __post_init__(self) -> None:
         if not self.hidden_units:
@@ -387,7 +388,7 @@ def build_muen_economics_from_predictions(
     payload: dict[str, object] = {
         "protocol_version": MUEN_PROTOCOL_VERSION,
         "dataset_snapshot": dataset_snapshot,
-        "candidate_family_hash": config.model_version,
+        "candidate_family_hash": config.candidate_family_hash or config.model_version,
         "seed_count": 1,
         "seed": int(config.random_seed),
         "cost_multipliers": list(cost_multipliers),
@@ -395,7 +396,7 @@ def build_muen_economics_from_predictions(
     }
     if fold_metrics:
         payload["family_evaluation"] = aggregate_family_evaluation(
-            config.model_version,
+            config.candidate_family_hash or config.model_version,
             fold_metrics,
             seed_count=1,
         ).to_json_dict()

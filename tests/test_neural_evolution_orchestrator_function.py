@@ -651,3 +651,69 @@ def test_orchestrator_persists_muen_economics_when_registry_metrics_include_fold
     gate_rows = loaded["ingestaokraken.cotacao_intraday.neural_gate_decisions"]
     assert gate_rows[0]["decision_status"] == "rejected"
     assert "muen_economics_missing" not in gate_rows[0]["failed_criteria"]
+
+
+def test_aggregate_muen_rows_by_family_consolidates_distinct_seeds():
+    fold_rows = []
+    for seed in (101, 202, 303):
+        for cost_multiplier in (1.0, 1.5):
+            fold_rows.append(
+                {
+                    "protocol_version": "neural_eod_protocol_v1",
+                    "dataset_snapshot": "snapshot_2026",
+                    "candidate_family_hash": "family_tabular_p50_m08_t35",
+                    "seed": seed,
+                    "metrics_json": {
+                        "fold_id": f"validation_seed_{seed}_cost_{cost_multiplier}",
+                        "trades": 20,
+                        "coverage": 0.1,
+                        "expectancy_net": 0.02,
+                        "median_net_return": 0.01,
+                        "total_net_return": 0.4,
+                        "profit_factor": 1.5,
+                        "max_drawdown": 0.12,
+                        "positive_trade_ratio": 0.6,
+                        "delta_expectancy_vs_champion": 0.01,
+                        "cost_multiplier": cost_multiplier,
+                    },
+                }
+            )
+
+    rows = module._aggregate_muen_rows_by_family(
+        dataset_snapshot="snapshot_2026",
+        fold_metric_rows=fold_rows,
+    )
+
+    assert len(rows["family_evaluations"]) == 1
+    assert len(rows["gate_decisions"]) == 1
+    family_metrics = rows["family_evaluations"][0]["metrics_json"]
+    assert family_metrics["seeds"] == 3
+    assert family_metrics["stable_across_seeds"] is True
+    assert family_metrics["total_trades"] == 120
+    assert rows["gate_decisions"][0]["candidate_family_hash"] == (
+        "family_tabular_p50_m08_t35"
+    )
+
+
+def test_orchestrator_phase3_multiseed_focus_generates_tabular_t35_repeats(monkeypatch):
+    fake_client = _FakeClient()
+    monkeypatch.setattr(module, "_BQ_CLIENT", fake_client)
+
+    response, status = module.neural_evolution_orchestrator(
+        _Request(
+            {
+                "dry_run": True,
+                "strategy": "phase3_multiseed_focus",
+                "budget": {"max_trials": 3, "random_seed": 77},
+            }
+        )
+    )
+
+    assert status == 200
+    assert response["candidate_count"] == 3
+    assert response["architecture_types"] == ["tabular_bottleneck_mlp"]
+    details = response["candidate_details"]
+    assert {detail["architecture_type"] for detail in details} == {
+        "tabular_bottleneck_mlp"
+    }
+    assert all("p50_m08_t35" in candidate for candidate in response["candidates"])

@@ -98,6 +98,50 @@ def test_generate_phase3_family_candidates_accepts_trade_budget_policy():
     assert candidates[0].model_version == "phase3_risk_residual_mlp_p50_m08_t60_01"
 
 
+def test_generate_phase3_family_candidates_can_repeat_same_policy_across_seeds():
+    candidates = generate_phase3_family_candidates(
+        evolution_run_id="run-phase3-multiseed",
+        dataset_snapshot="snapshot-1",
+        budget=EvolutionBudget(max_trials=3, random_seed=7),
+        model_version_prefix="phase3_focus",
+        seed_repeats_only=True,
+        family_space=[
+            {
+                "architecture_type": "tabular_bottleneck_mlp",
+                "model_id": "neural_eod_tabular_bottleneck_mlp",
+                "hidden_units": (256, 64, 16),
+                "dropout_rate": 0.25,
+                "learning_rate": 0.0003,
+                "batch_size": 256,
+                "epochs": 80,
+                "class_weight": "balanced",
+                "min_directional_probability": 0.50,
+                "min_directional_margin": 0.08,
+                "max_trades_per_fold": 35,
+                "candidate_family_hash": "family_tabular_p50_m08_t35",
+            }
+        ],
+    )
+
+    assert len(candidates) == 3
+    assert {candidate.architecture["type"] for candidate in candidates} == {
+        "tabular_bottleneck_mlp"
+    }
+    assert {
+        candidate.training_request["candidate_family_hash"] for candidate in candidates
+    } == {"family_tabular_p50_m08_t35"}
+    assert (
+        len({candidate.training_request["random_seed"] for candidate in candidates})
+        == 3
+    )
+    comparable_hyperparameters = [
+        {k: v for k, v in candidate.hyperparameters.items() if k != "random_seed"}
+        for candidate in candidates
+    ]
+    assert comparable_hyperparameters[0] == comparable_hyperparameters[1]
+    assert comparable_hyperparameters[1] == comparable_hyperparameters[2]
+
+
 def test_generate_phase3_family_candidates_repeats_with_fresh_seeds_after_exhaustion():
     first = generate_phase3_family_candidates(
         evolution_run_id="run-phase3-a",
