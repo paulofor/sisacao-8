@@ -18,6 +18,7 @@ from sisacao8.neural_training import (
     conservative_directional_labels,
     encode_labels,
     evaluate_predictions,
+    prepare_sequence_training_arrays,
     prepare_training_arrays,
 )
 
@@ -66,6 +67,21 @@ def test_prepare_training_arrays_scales_train_split_and_encodes_labels() -> None
     assert x_by_split["train"].shape[1] == len(FEATURE_COLUMNS)
     assert y_by_split["train"].dtype == np.int64
     assert scaler.feature_columns == FEATURE_COLUMNS
+
+
+def test_prepare_sequence_training_arrays_materializes_point_in_time_windows() -> None:
+    dataset = _training_dataset()
+
+    x_by_split, y_by_split, scaler, materialized = prepare_sequence_training_arrays(
+        dataset, sequence_lookback=20
+    )
+
+    assert "train" in x_by_split
+    assert x_by_split["train"].ndim == 3
+    assert x_by_split["train"].shape[1:] == (20, len(FEATURE_COLUMNS))
+    assert y_by_split["train"].dtype == np.int64
+    assert scaler.feature_columns == FEATURE_COLUMNS
+    assert len(materialized) == sum(len(values) for values in y_by_split.values())
 
 
 def test_evaluate_predictions_reports_confusion_and_coverage() -> None:
@@ -136,6 +152,9 @@ def test_build_model_supports_phase3_architecture_types():
         "residual_mlp",
         "wide_deep_mlp",
         "tabular_bottleneck_mlp",
+        "gru_sequence",
+        "lstm_sequence",
+        "tcn_sequence",
     ]:
         config = BaselineMlpConfig(
             model_id=f"test_{architecture_type}",
@@ -143,7 +162,12 @@ def test_build_model_supports_phase3_architecture_types():
             hidden_units=(16, 8),
             epochs=1,
         )
-        model = _build_model(len(FEATURE_COLUMNS), config)
+        input_shape = (
+            (20, len(FEATURE_COLUMNS))
+            if "sequence" in architecture_type
+            else len(FEATURE_COLUMNS)
+        )
+        model = _build_model(input_shape, config)
 
         assert model.output_shape[-1] == 3
         assert isinstance(model.optimizer, tf.keras.optimizers.Adam)
@@ -270,6 +294,44 @@ def test_build_muen_economics_from_predictions_uses_non_train_splits() -> None:
     assert validation["trades"] == 2
     assert validation["expectancy_net"] == 0.06
     assert economics["family_evaluation"]["total_trades"] == 4
+
+
+def test_build_muen_economics_uses_candidate_family_hash_override() -> None:
+    dataset = pd.DataFrame(
+        [
+            {
+                "dataset_split": "validation",
+                "label_class": "up",
+                "buy_net_return": 0.03,
+                "sell_net_return": -0.02,
+            },
+            {
+                "dataset_split": "test",
+                "label_class": "down",
+                "buy_net_return": -0.01,
+                "sell_net_return": 0.02,
+            },
+        ]
+    )
+    probabilities = {
+        "validation": np.array([[0.1, 0.1, 0.8]]),
+        "test": np.array([[0.8, 0.1, 0.1]]),
+    }
+    config = BaselineMlpConfig(
+        model_version="model_seed_1",
+        candidate_family_hash="family_tabular_p50_m08_t35",
+    )
+
+    economics = build_muen_economics_from_predictions(
+        dataset,
+        probabilities,
+        config=config,
+    )
+
+    assert economics["candidate_family_hash"] == "family_tabular_p50_m08_t35"
+    assert economics["family_evaluation"]["candidate_family_hash"] == (
+        "family_tabular_p50_m08_t35"
+    )
 
 
 def test_build_muen_economics_applies_max_trades_per_fold_budget() -> None:

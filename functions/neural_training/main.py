@@ -259,6 +259,14 @@ def _training_config(payload: Mapping[str, Any]) -> BaselineMlpConfig:
             payload.get("max_trades_per_fold"),
             defaults.max_trades_per_fold,
         ),
+        candidate_family_hash=(
+            str(payload.get("candidate_family_hash"))
+            if payload.get("candidate_family_hash")
+            else defaults.candidate_family_hash
+        ),
+        sequence_lookback=_int_value(
+            payload.get("sequence_lookback"), defaults.sequence_lookback
+        ),
     )
 
 
