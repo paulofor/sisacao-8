@@ -90,6 +90,18 @@ def _dataset() -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def test_training_config_aligns_with_dataset_versions_when_payload_omits_them():
+    payload = {"model_version": "model_align"}
+    dataset = _dataset().copy()
+
+    config = module._align_config_with_dataset(
+        module._training_config(payload), dataset, payload
+    )
+
+    assert config.feature_version == "feature_eod_tabular_v1"
+    assert config.label_version == "label_eod_barrier_v2"
+
+
 class _Request:
     args = {}
 
@@ -123,6 +135,9 @@ def test_neural_training_trains_uploads_and_registers(monkeypatch, tmp_path):
                 "epochs": config.epochs,
                 "early_stopping": config.early_stopping,
                 "class_weight": config.class_weight,
+                "min_directional_probability": config.min_directional_probability,
+                "min_directional_margin": config.min_directional_margin,
+                "max_trades_per_fold": config.max_trades_per_fold,
             },
             "dataset_snapshot": "content_hash",
             "dataset_rows": len(dataset),
@@ -145,11 +160,15 @@ def test_neural_training_trains_uploads_and_registers(monkeypatch, tmp_path):
             {
                 "dataset_snapshot": "snapshot_2026",
                 "model_version": "neural_eod_mlp_test",
+                "feature_version": "feature_eod_tabular_v1",
                 "epochs": 1,
                 "batch_size": 2,
                 "early_stopping": True,
                 "early_stopping_patience": 3,
                 "class_weight": "balanced",
+                "min_directional_probability": 0.55,
+                "min_directional_margin": 0.08,
+                "max_trades_per_fold": 60,
             }
         )
     )
@@ -167,8 +186,12 @@ def test_neural_training_trains_uploads_and_registers(monkeypatch, tmp_path):
     row = fake_client.loaded_rows[0]
     assert row["model_version"] == "neural_eod_mlp_test"
     assert row["status"] == "candidate"
+    assert row["feature_version"] == "feature_eod_tabular_v1"
     assert row["hyperparameters_json"]["early_stopping"] is True
     assert row["hyperparameters_json"]["class_weight"] == "balanced"
+    assert row["hyperparameters_json"]["min_directional_probability"] == 0.55
+    assert row["hyperparameters_json"]["min_directional_margin"] == 0.08
+    assert row["hyperparameters_json"]["max_trades_per_fold"] == 60
     assert row["training_dataset_snapshot"] == "snapshot_2026"
     assert row["artifact_uri"] == response["artifact_uri"]
     assert row["test_accuracy"] == 0.6

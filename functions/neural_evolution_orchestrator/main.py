@@ -128,6 +128,9 @@ def neural_evolution_orchestrator(request_obj: Any) -> tuple[Dict[str, Any], int
     )
     if not candidates:
         raise ValueError("No neural evolution candidates were generated")
+    for candidate in candidates:
+        candidate.training_request.setdefault("feature_version", feature_version)
+        candidate.training_request.setdefault("label_version", label_version)
 
     run_row = {
         "evolution_run_id": evolution_run_id,
@@ -175,6 +178,7 @@ def neural_evolution_orchestrator(request_obj: Any) -> tuple[Dict[str, Any], int
         }, 200
 
     training_results: list[dict[str, Any]] = []
+    skipped_candidates: list[str] = []
     evaluation_rows: list[dict[str, Any]] = []
     gate_decision_rows: list[dict[str, Any]] = []
     fold_metric_rows: list[dict[str, Any]] = []
@@ -187,7 +191,8 @@ def neural_evolution_orchestrator(request_obj: Any) -> tuple[Dict[str, Any], int
                 training_results.append(_invoke_training(candidate.training_request))
                 registry_row = _fetch_registry_row(client, candidate.model_version)
             else:
-                registry_row = _fetch_registry_row(client, candidate.model_version)
+                skipped_candidates.append(candidate.model_version)
+                continue
             metrics = _metrics_from_registry(registry_row)
             score = _score_registry_row(candidate.architecture, registry_row)
             evaluation_rows.append(
@@ -233,6 +238,7 @@ def neural_evolution_orchestrator(request_obj: Any) -> tuple[Dict[str, Any], int
     summary = {
         "candidate_count": len(candidates),
         "trained_count": len(training_results),
+        "skipped_count": len(skipped_candidates),
         "evaluated_count": len(evaluation_rows),
         "failed_count": len(failures),
         "gate_decision_count": len(gate_decision_rows),
@@ -250,6 +256,7 @@ def neural_evolution_orchestrator(request_obj: Any) -> tuple[Dict[str, Any], int
         "strategy": strategy,
         "candidate_count": len(candidates),
         "trained_count": len(training_results),
+        "skipped_count": len(skipped_candidates),
         "evaluated_count": len(evaluation_rows),
         "failed_count": len(failures),
         "gate_decision_count": len(gate_decision_rows),
@@ -265,6 +272,7 @@ def neural_evolution_orchestrator(request_obj: Any) -> tuple[Dict[str, Any], int
         ),
         "candidate_details": _candidate_response_details(candidates),
         "failures": failures,
+        "skipped_candidates": skipped_candidates,
     }, (200 if status != "failed" else 500)
 
 
