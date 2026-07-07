@@ -2038,3 +2038,36 @@ A leitura da tela `Redes neurais — Treinos` indicou 86 redes em estágio `Cand
 - Ajuste local adicional: `generate_phase4_recurrent_shadow_candidates` deixa de herdar `candidate_source=phase3_family`/nota de Fase 3 e passa a rotular futuras candidatas como `phase4_recurrent_shadow`, com nota de Fase 4 recorrente/temporal em shadow.
 - Próximo passo operacional: publicar o ajuste de rótulo/default; depois testar uma variação conservadora da GRU l20 para reduzir risco, por exemplo `max_trades_per_fold=20` ou `25`, mantendo `p50/m08`, três seeds e sem `approve_if_passed` automático.
 - Comandos usados: Python `urllib.request` para dry-runs e rodada real do `neural_evolution_orchestrator`; Python `urllib.request` para `/api/ops/neural/training-runs` e `/api/ops/neural/gate-decisions`; edição via Python; `python -m black`.
+
+## 2026-07-07 18:45 UTC — Próximo passo após deploy do ajuste Fase 4
+- Após o usuário informar que fez o deploy, revisei o próximo passo registrado para a Fase 4 recorrente.
+- Como o multi-seed da GRU `p50/m08/t35/l20` já resolveu `seeds_instaveis` (`seeds=3`, `stableAcrossSeeds=true`), mas falhou por `drawdown_excessivo` e `fold_catastrofico`, o próximo passo não é criar Scheduler nem aumentar cadência.
+- Próxima ação recomendada: executar uma variação conservadora da mesma GRU l20 com `max_trades_per_fold=20` primeiro, mantendo `min_directional_probability=0.50`, `min_directional_margin=0.08`, `sequence_lookback=20`, três seeds e `candidate_family_hash` próprio (`neural_eod_phase4_gru_sequence_p50_m08_t20_l20`). Se o t20 ficar com trades insuficientes, testar `max_trades_per_fold=25`.
+- Critério para avançar: reduzir `maxDrawdown` para abaixo de 20%, remover `fold_catastrofico`, manter estabilidade multi-seed e preservar trades suficientes. Não executar `approve_if_passed` automático.
+- Comandos usados: `git status --short`; leitura de `docs/diario/proximo-passo-redes.md` e `docs/diario/registros1.md`.
+
+## 2026-07-07 22:25 UTC — Execução GRU Fase 4 conservadora t20
+- Executei o próximo passo solicitado: variação conservadora multi-seed da GRU Fase 4 com `sequence_lookback=20`, `min_directional_probability=0.50`, `min_directional_margin=0.08`, `max_trades_per_fold=20`, três seeds (`20290720`, `20290721`, `20290722`) e `candidate_family_hash=neural_eod_phase4_gru_sequence_p50_m08_t20_l20`.
+- Dry-run retornou HTTP 200, `candidate_count=3`, `candidate_source=phase4_recurrent_shadow` e versões `neural_eod_phase4_gru_t20_multiseed_20260707_*`, sem colisão nominal.
+- Rodada real retornou HTTP 200 com `trained_count=3`, `evaluated_count=3`, `failed_count=0`, `fold_metric_count=12`, `family_evaluation_count=1` e `gate_decision_count=1`.
+- Validação pelos endpoints operacionais confirmou decisão MUEN agregada `rejected`: `seeds=3`, `totalTrades=204`, `positiveFolds=8`, `positiveFoldRatio=0.6666666666666666`, `medianDeltaExpectancyVsChampion=0.0013468753473707333`, `maxDrawdown=0.32213004093848546`, `stableAcrossSeeds=false`, falhando por `drawdown_excessivo` e `seeds_instaveis`.
+- Comparação operacional contra t35: t20 aumentou `positiveFolds` de 6 para 8 e removeu `fold_catastrofico`, mas não resolveu drawdown e voltou a falhar estabilidade entre seeds; como `totalTrades=204`, não há motivo para testar t25 pelo critério previamente definido de `trades_insuficientes`.
+- Conclusão: a família GRU l20 ainda não tem edge econômico robusto. O próximo avanço não deve ser aumentar cap de trades nem criar Scheduler; precisa adicionar controle explícito de risco temporal/por fold ou revisar features/labels sequenciais antes de repetir cadência.
+- Próximo passo operacional: congelar promoção/Scheduler da GRU l20; se continuar Fase 4, testar um limitador de drawdown intrafold ou uma política de neutralização após perda acumulada, mantendo três seeds e Gate MUEN inalterado.
+- Comandos usados: Python `urllib.request` para dry-run e rodada real do `neural_evolution_orchestrator`; Python `urllib.request` para `/api/ops/neural/training-runs` e `/api/ops/neural/gate-decisions`.
+
+## 2026-07-07 22:45 UTC — Recomendação após GRU t20
+- Reavaliei o resultado da GRU Fase 4 `p50/m08/t20/l20`: apesar de `totalTrades=204` e `positiveFolds=8`, a família continuou reprovada por `drawdown_excessivo` (`maxDrawdown=0.32213004093848546`) e `seeds_instaveis`.
+- Como o problema não é falta de trades, não recomendo testar `t25` agora. Aumentar o cap provavelmente ampliaria exposição e não atacaria a causa dominante.
+- Recomendação técnica: implementar um controle explícito de risco intrafold antes da economia MUEN, por exemplo `max_fold_drawdown_stop` ou neutralização após perda acumulada por fold. Esse controle deve atuar somente na política de decisão/pós-processamento de sinais, mantendo o Gate MUEN inalterado.
+- Primeiro experimento sugerido após implementação: repetir a GRU `p50/m08/t20/l20` com três seeds e stop intrafold de 15% a 18%, comparando contra a família t20 atual. Critério de sucesso: `maxDrawdown < 0.20`, sem `fold_catastrofico`, `stableAcrossSeeds=true` e trades suficientes.
+- Se o stop reduzir trades demais ou destruir mediana de expectancy, o passo seguinte deve ser revisar features/labels sequenciais em vez de continuar apertando caps de trade.
+- Comandos usados: `git status --short`; revisão dos resultados registrados em `docs/diario/proximo-passo-redes.md` e `docs/diario/registros1.md`.
+
+## 2026-07-07 23:00 UTC — Implementação do stop intrafold para Fase 4
+- Implementei o parâmetro `max_fold_drawdown_stop` na configuração de treinamento neural para permitir neutralizar as decisões restantes de um fold após o drawdown acumulado atingir o limite configurado.
+- O controle é aplicado antes de `evaluate_fold_economics`, depois do filtro conservador de probabilidade/margem e depois do orçamento `max_trades_per_fold`; assim, a política reduz exposição temporal sem alterar os critérios do Gate MUEN.
+- Propaguei o novo parâmetro pelo endpoint `neural_training`, pelo gerador de famílias/candidatos e pelo sufixo de versão (`d15` para 15%), incluindo o parâmetro no hash de família quando presente.
+- Adicionei testes cobrindo neutralização após breach, uso do stop dentro de `build_muen_economics_from_predictions`, propagação pelo endpoint de treinamento e geração de candidato com sufixo/treino contendo `max_fold_drawdown_stop`.
+- Próximo passo operacional após deploy: executar shadow GRU Fase 4 `p50/m08/t20/d15/l20` com três seeds e `candidate_family_hash=neural_eod_phase4_gru_sequence_p50_m08_t20_d15_l20`, mantendo Gate MUEN e sem promoção automática.
+- Comandos usados: `python -m pytest tests/test_neural_training.py tests/test_neural_evolution.py tests/test_neural_training_function.py -q`; `git diff --check`; `python -m flake8`; `python -m pytest -q`.

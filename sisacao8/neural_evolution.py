@@ -619,6 +619,10 @@ def generate_phase3_family_candidates(
                 base_hyperparameters["max_trades_per_fold"] = _optional_int(
                     family.get("max_trades_per_fold")
                 )
+            if family.get("max_fold_drawdown_stop") is not None:
+                base_hyperparameters["max_fold_drawdown_stop"] = float(
+                    family.get("max_fold_drawdown_stop")
+                )
             if family.get("sequence_lookback") is not None:
                 base_hyperparameters["sequence_lookback"] = _optional_int(
                     family.get("sequence_lookback")
@@ -733,6 +737,9 @@ def _phase3_policy_suffix(hyperparameters: Mapping[str, Any]) -> str:
         )
     if max_trades is not None:
         parts.append(f"t{max_trades}")
+    drawdown_stop = hyperparameters.get("max_fold_drawdown_stop")
+    if drawdown_stop is not None:
+        parts.append(f"d{int(round(float(drawdown_stop) * 100)):02d}")
     sequence_lookback = _optional_int(hyperparameters.get("sequence_lookback"))
     if sequence_lookback is not None:
         parts.append(f"l{sequence_lookback}")
@@ -975,6 +982,11 @@ def _candidate_from_parts(
         "max_trades_per_fold": _optional_int(
             hyperparameters.get("max_trades_per_fold")
         ),
+        "max_fold_drawdown_stop": (
+            float(hyperparameters["max_fold_drawdown_stop"])
+            if hyperparameters.get("max_fold_drawdown_stop") is not None
+            else None
+        ),
         "status": "candidate",
         "notes": notes,
     }
@@ -1038,6 +1050,11 @@ def candidate_family_key(
             ),
             "max_trades_per_fold": _optional_int(
                 hyperparameters.get("max_trades_per_fold")
+            ),
+            "max_fold_drawdown_stop": (
+                _rounded_float(hyperparameters.get("max_fold_drawdown_stop"), 4)
+                if hyperparameters.get("max_fold_drawdown_stop") is not None
+                else None
             ),
         },
     }

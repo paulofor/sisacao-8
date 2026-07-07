@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import math
 
 import numpy as np
 import pandas as pd
@@ -12,6 +13,7 @@ from sisacao8.neural_training import (
     FeatureScaler,
     align_config_to_dataset,
     _build_model,
+    apply_fold_drawdown_stop,
     apply_fold_trade_budget,
     build_artifact_manifest,
     build_muen_economics_from_predictions,
@@ -374,3 +376,54 @@ def test_build_muen_economics_applies_max_trades_per_fold_budget() -> None:
 
     assert economics["fold_metrics"][0]["trades"] == 2
     assert economics["family_evaluation"]["total_trades"] == 2
+
+
+def test_apply_fold_drawdown_stop_neutralizes_after_breach() -> None:
+    labels = np.array(["up", "up", "up", "up"], dtype=object)
+    frame = pd.DataFrame(
+        {
+            "buy_net_return": [0.02, -0.20, 0.50, 0.50],
+            "sell_net_return": [-0.02, 0.20, -0.50, -0.50],
+        }
+    )
+
+    adjusted = apply_fold_drawdown_stop(
+        labels,
+        frame,
+        max_fold_drawdown_stop=0.15,
+    )
+
+    assert adjusted.tolist() == ["up", "up", "neutral", "neutral"]
+
+
+def test_build_muen_economics_applies_drawdown_stop_before_metrics() -> None:
+    dataset = pd.DataFrame(
+        [
+            {
+                "dataset_split": "validation",
+                "reference_date": dt.date(2026, 1, day),
+                "ticker": f"AAA{day}",
+                "label_class": "up",
+                "buy_net_return": value,
+                "sell_net_return": -value,
+            }
+            for day, value in enumerate([0.02, -0.20, 0.50, 0.50], start=1)
+        ]
+    )
+    probabilities = {"validation": np.array([[0.10, 0.20, 0.70]] * 4)}
+    config = BaselineMlpConfig(
+        model_version="drawdown_stopped",
+        min_directional_probability=0.45,
+        min_directional_margin=0.05,
+        max_fold_drawdown_stop=0.15,
+    )
+
+    economics = build_muen_economics_from_predictions(
+        dataset,
+        probabilities,
+        config=config,
+        cost_multipliers=(1.0,),
+    )
+
+    assert economics["fold_metrics"][0]["trades"] == 2
+    assert math.isclose(economics["fold_metrics"][0]["total_net_return"], -0.18)

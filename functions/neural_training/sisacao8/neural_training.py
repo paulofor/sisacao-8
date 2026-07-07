@@ -117,6 +117,7 @@ class BaselineMlpConfig:
     min_directional_probability: float = 0.45
     min_directional_margin: float = 0.05
     max_trades_per_fold: int | None = None
+    max_fold_drawdown_stop: float | None = None
     candidate_family_hash: str | None = None
     sequence_lookback: int = 40
 
@@ -143,6 +144,12 @@ class BaselineMlpConfig:
             raise ValueError("min_directional_margin must be non-negative")
         if self.max_trades_per_fold is not None and self.max_trades_per_fold <= 0:
             raise ValueError("max_trades_per_fold must be positive when provided")
+        if self.max_fold_drawdown_stop is not None and not (
+            0 < self.max_fold_drawdown_stop < 1
+        ):
+            raise ValueError(
+                "max_fold_drawdown_stop must be between 0 and 1 when provided"
+            )
         if not 20 <= self.sequence_lookback <= 60:
             raise ValueError("sequence_lookback must be between 20 and 60 pregões")
         allowed_architectures = {
@@ -468,6 +475,11 @@ def build_muen_economics_from_predictions(
             max_trades_per_fold=config.max_trades_per_fold,
         )
         evaluation_frame = split_frame.copy()
+        labels = apply_fold_drawdown_stop(
+            labels,
+            evaluation_frame,
+            max_fold_drawdown_stop=config.max_fold_drawdown_stop,
+        )
         evaluation_frame["predicted_label"] = labels.tolist()
         for cost_multiplier in cost_multipliers:
             metrics = evaluate_fold_economics(
@@ -589,6 +601,57 @@ def apply_fold_trade_budget(
         if int(position) not in keep_positions
     ]
     adjusted[drop_positions] = "neutral"
+    return adjusted
+
+
+def apply_fold_drawdown_stop(
+    labels: np.ndarray,
+    frame: pd.DataFrame,
+    *,
+    max_fold_drawdown_stop: float | None,
+) -> np.ndarray:
+    """Neutralize remaining fold decisions after an intrafold drawdown breach.
+
+    The stop is applied chronologically using only realized returns up to the
+    current row. The trade that first breaches the configured drawdown remains in
+    the fold; later directional decisions are converted to ``neutral`` before
+    MUEN economics are computed. This makes the risk policy auditable without
+    changing Gate MUEN thresholds.
+    """
+
+    if max_fold_drawdown_stop is None:
+        return labels
+    if not 0 < max_fold_drawdown_stop < 1:
+        raise ValueError(
+            "max_fold_drawdown_stop must be between 0 and 1 when provided"
+        )
+    required = {"buy_net_return", "sell_net_return"}
+    if missing := required.difference(frame.columns):
+        raise ValueError(f"Missing drawdown stop columns: {sorted(missing)}")
+    if len(labels) != len(frame):
+        raise ValueError("labels and frame must have the same length")
+
+    adjusted = labels.copy()
+    buy_returns = pd.to_numeric(frame["buy_net_return"], errors="coerce").fillna(0.0)
+    sell_returns = pd.to_numeric(frame["sell_net_return"], errors="coerce").fillna(0.0)
+    equity = 1.0
+    peak = 1.0
+    stopped = False
+    for offset, label in enumerate(labels):
+        if stopped:
+            adjusted[offset] = "neutral"
+            continue
+        if label == "up":
+            realized_return = float(buy_returns.iloc[offset])
+        elif label == "down":
+            realized_return = float(sell_returns.iloc[offset])
+        else:
+            realized_return = 0.0
+        equity *= 1.0 + realized_return
+        peak = max(peak, equity)
+        drawdown = (peak - equity) / peak if peak else 0.0
+        if drawdown >= max_fold_drawdown_stop:
+            stopped = True
     return adjusted
 
 
