@@ -259,6 +259,18 @@ def _training_config(payload: Mapping[str, Any]) -> BaselineMlpConfig:
             payload.get("max_trades_per_fold"),
             defaults.max_trades_per_fold,
         ),
+        max_fold_drawdown_stop=_optional_float_value(
+            payload.get("max_fold_drawdown_stop"),
+            defaults.max_fold_drawdown_stop,
+        ),
+        candidate_family_hash=(
+            str(payload.get("candidate_family_hash"))
+            if payload.get("candidate_family_hash")
+            else defaults.candidate_family_hash
+        ),
+        sequence_lookback=_int_value(
+            payload.get("sequence_lookback"), defaults.sequence_lookback
+        ),
     )
 
 
@@ -301,6 +313,12 @@ def _optional_int_value(value: Any, default: int | None) -> int | None:
     if value is None or value == "":
         return default
     return int(value)
+
+
+def _optional_float_value(value: Any, default: float | None) -> float | None:
+    if value is None or value == "":
+        return default
+    return float(value)
 
 
 def _publish_artifact(
