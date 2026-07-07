@@ -510,6 +510,7 @@ def generate_phase3_family_candidates(
     existing_hashes: Iterable[str] | None = None,
     model_version_prefix: str = "neural_eod_phase3_family",
     family_space: Sequence[Mapping[str, Any]] = PHASE3_FAMILY_SPACE,
+    seed_repeats_only: bool = False,
 ) -> list[CandidateConfig]:
     """Return controlled Phase-3 candidates for new tabular neural families.
 
@@ -572,8 +573,12 @@ def generate_phase3_family_candidates(
                 )
             hyperparameters = _phase3_controlled_hyperparameters(
                 base_hyperparameters,
-                repeat_round=repeat_round,
+                repeat_round=0 if seed_repeats_only else repeat_round,
             )
+            if family.get("candidate_family_hash"):
+                hyperparameters["candidate_family_hash"] = str(
+                    family.get("candidate_family_hash")
+                )
             hyperparameters["random_seed"] = (
                 int(budget.random_seed) + 30_000 + seed_offset
             )
@@ -880,6 +885,10 @@ def _candidate_from_parts(
         "status": "candidate",
         "notes": notes,
     }
+    if hyperparameters.get("candidate_family_hash"):
+        training_request["candidate_family_hash"] = str(
+            hyperparameters["candidate_family_hash"]
+        )
     candidate_id = str(uuid5(NAMESPACE_URL, f"{evolution_run_id}:{dedupe_hash}"))
     return CandidateConfig(
         candidate_id=candidate_id,
