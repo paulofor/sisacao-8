@@ -13,6 +13,7 @@ from sisacao8.neural_training import (
     FeatureScaler,
     align_config_to_dataset,
     _build_model,
+    apply_champion_activity_filter,
     apply_fold_drawdown_stop,
     apply_ticker_blocklist,
     apply_fold_trade_budget,
@@ -418,6 +419,57 @@ def test_build_muen_economics_applies_ticker_blocklist_before_metrics() -> None:
         min_directional_probability=0.45,
         min_directional_margin=0.05,
         blocked_tickers=("ONCO3", "BRKM5"),
+    )
+
+    economics = build_muen_economics_from_predictions(
+        dataset,
+        probabilities,
+        config=config,
+        cost_multipliers=(1.0,),
+    )
+
+    assert economics["fold_metrics"][0]["trades"] == 1
+    assert math.isclose(economics["fold_metrics"][0]["total_net_return"], 0.03)
+
+
+def test_apply_champion_activity_filter_neutralizes_champion_neutral_rows() -> None:
+    labels = np.array(["up", "down", "up"], dtype=object)
+    frame = pd.DataFrame({"champion_net_return": [0.0, 0.02, None]})
+
+    adjusted = apply_champion_activity_filter(
+        labels,
+        frame,
+        require_champion_activity=True,
+    )
+
+    assert adjusted.tolist() == ["neutral", "down", "neutral"]
+
+
+def test_build_muen_economics_applies_champion_activity_filter() -> None:
+    dataset = pd.DataFrame(
+        [
+            {
+                "dataset_split": "validation",
+                "reference_date": dt.date(2026, 1, day),
+                "ticker": ticker,
+                "label_class": "up",
+                "buy_net_return": value,
+                "sell_net_return": -value,
+                "champion_net_return": champion_return,
+            }
+            for day, ticker, value, champion_return in [
+                (1, "ARML3", -0.07, 0.0),
+                (2, "PETR4", 0.03, 0.01),
+                (3, "RCSL3", -0.07, 0.0),
+            ]
+        ]
+    )
+    probabilities = {"validation": np.array([[0.10, 0.20, 0.70]] * 3)}
+    config = BaselineMlpConfig(
+        model_version="champion_activity_guarded",
+        min_directional_probability=0.45,
+        min_directional_margin=0.05,
+        require_champion_activity=True,
     )
 
     economics = build_muen_economics_from_predictions(
