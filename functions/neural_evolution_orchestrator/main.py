@@ -63,6 +63,9 @@ FOLD_METRICS_TABLE = os.environ.get(
 FAMILY_EVALUATIONS_TABLE = os.environ.get(
     "BQ_NEURAL_FAMILY_EVALUATIONS_TABLE", "neural_family_evaluations"
 )
+DAILY_RETURNS_TABLE = os.environ.get(
+    "BQ_NEURAL_DAILY_RETURNS_TABLE", "neural_daily_returns"
+)
 TRAINING_DATASET_TABLE = os.environ.get(
     "BQ_NEURAL_TRAINING_DATASET_TABLE", "neural_eod_training_dataset"
 )
@@ -185,6 +188,7 @@ def neural_evolution_orchestrator(request_obj: Any) -> tuple[Dict[str, Any], int
     gate_decision_rows: list[dict[str, Any]] = []
     fold_metric_rows: list[dict[str, Any]] = []
     family_evaluation_rows: list[dict[str, Any]] = []
+    daily_return_rows: list[dict[str, Any]] = []
     failures: list[dict[str, Any]] = []
 
     for candidate in candidates:
@@ -213,6 +217,7 @@ def neural_evolution_orchestrator(request_obj: Any) -> tuple[Dict[str, Any], int
                 score=score,
             )
             fold_metric_rows.extend(muen_rows["fold_metrics"])
+            daily_return_rows.extend(muen_rows["daily_returns"])
             if muen_rows["fold_metrics"]:
                 # Family/gate evidence is rebuilt after all candidates finish so
                 # repeated seeds for the same family/policy are evaluated
@@ -239,6 +244,8 @@ def neural_evolution_orchestrator(request_obj: Any) -> tuple[Dict[str, Any], int
         _append_rows(client, _table_id(CANDIDATE_EVALUATIONS_TABLE), evaluation_rows)
     if fold_metric_rows and not dry_run:
         _append_rows(client, _table_id(FOLD_METRICS_TABLE), fold_metric_rows)
+    if daily_return_rows and not dry_run:
+        _append_rows(client, _table_id(DAILY_RETURNS_TABLE), daily_return_rows)
     if family_evaluation_rows and not dry_run:
         _append_rows(
             client, _table_id(FAMILY_EVALUATIONS_TABLE), family_evaluation_rows
@@ -258,6 +265,7 @@ def neural_evolution_orchestrator(request_obj: Any) -> tuple[Dict[str, Any], int
         "gate_decision_count": len(gate_decision_rows),
         "fold_metric_count": len(fold_metric_rows),
         "family_evaluation_count": len(family_evaluation_rows),
+        "daily_return_count": len(daily_return_rows),
         "failures": failures,
     }
     if not dry_run:
@@ -276,6 +284,7 @@ def neural_evolution_orchestrator(request_obj: Any) -> tuple[Dict[str, Any], int
         "gate_decision_count": len(gate_decision_rows),
         "fold_metric_count": len(fold_metric_rows),
         "family_evaluation_count": len(family_evaluation_rows),
+        "daily_return_count": len(daily_return_rows),
         "dry_run": dry_run,
         "candidates": [candidate.model_version for candidate in candidates],
         "candidate_sources": sorted(
@@ -808,6 +817,7 @@ def _muen_economic_rows_from_metrics(
         return {
             "fold_metrics": [],
             "family_evaluations": [],
+            "daily_returns": [],
             "gate_decisions": [
                 _research_gate_missing_economics_row(
                     dataset_snapshot=dataset_snapshot,
@@ -839,6 +849,7 @@ def _muen_economic_rows_from_metrics(
         return {
             "fold_metrics": [],
             "family_evaluations": [],
+            "daily_returns": [],
             "gate_decisions": [
                 _research_gate_missing_economics_row(
                     dataset_snapshot=dataset_snapshot,
@@ -877,8 +888,33 @@ def _muen_economic_rows_from_metrics(
     return {
         "fold_metrics": fold_rows,
         "family_evaluations": [family_row],
+        "daily_returns": _daily_return_rows_from_economics(
+            economics=economics,
+            protocol_version=protocol_version,
+            dataset_snapshot=dataset_snapshot,
+            family_hash=family_hash,
+        ),
         "gate_decisions": [gate_row],
     }
+
+
+def _daily_return_rows_from_economics(
+    *,
+    economics: Mapping[str, Any],
+    protocol_version: str,
+    dataset_snapshot: str,
+    family_hash: str,
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for item in _json_list(economics.get("daily_returns")):
+        data = dict(_json_mapping(item))
+        if not data:
+            continue
+        data.setdefault("protocol_version", protocol_version)
+        data.setdefault("dataset_snapshot", dataset_snapshot)
+        data.setdefault("candidate_family_hash", family_hash)
+        rows.append(data)
+    return rows
 
 
 def _aggregate_muen_rows_by_family(

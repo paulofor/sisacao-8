@@ -22,6 +22,7 @@ from sisacao8.neural_dataset import FEATURE_VERSION, LABEL_VERSION
 from sisacao8.neural_muen import PROTOCOL_VERSION as MUEN_PROTOCOL_VERSION
 from sisacao8.neural_muen import (
     aggregate_family_evaluation,
+    daily_return_rows,
     evaluate_fold_economics,
 )
 
@@ -449,8 +450,10 @@ def build_muen_economics_from_predictions(
     materialized = dataset.dropna(subset=["dataset_split"]).copy()
     dataset_snapshot = _dataset_snapshot(materialized)
     fold_metrics = []
+    daily_returns = []
     eligible_splits = {"validation", "test", "research"}
     blocked_splits = {"train", "locked_holdout", "holdout"}
+    family_hash = config.candidate_family_hash or config.model_version
 
     for split_name, split_frame in materialized.groupby("dataset_split", sort=False):
         split = str(split_name)
@@ -482,25 +485,43 @@ def build_muen_economics_from_predictions(
         )
         evaluation_frame["predicted_label"] = labels.tolist()
         for cost_multiplier in cost_multipliers:
+            fold_id = f"{split}_cost_{str(cost_multiplier).replace('.', '_')}"
             metrics = evaluate_fold_economics(
                 evaluation_frame,
-                fold_id=f"{split}_cost_{str(cost_multiplier).replace('.', '_')}",
+                fold_id=fold_id,
                 cost_multiplier=cost_multiplier,
             )
             fold_metrics.append(metrics)
+            if "reference_date" in evaluation_frame.columns:
+                daily_returns.extend(
+                    daily_return_rows(
+                        evaluation_frame,
+                        protocol_version=MUEN_PROTOCOL_VERSION,
+                        dataset_snapshot=dataset_snapshot,
+                        candidate_family_hash=family_hash,
+                        trial_id=(
+                            f"{config.model_version}_{fold_id}_"
+                            f"{int(config.random_seed)}"
+                        ),
+                        fold_id=fold_id,
+                        seed=int(config.random_seed),
+                        cost_multiplier=cost_multiplier,
+                    )
+                )
 
     payload: dict[str, object] = {
         "protocol_version": MUEN_PROTOCOL_VERSION,
         "dataset_snapshot": dataset_snapshot,
-        "candidate_family_hash": config.candidate_family_hash or config.model_version,
+        "candidate_family_hash": family_hash,
         "seed_count": 1,
         "seed": int(config.random_seed),
         "cost_multipliers": list(cost_multipliers),
         "fold_metrics": [metric.to_json_dict() for metric in fold_metrics],
+        "daily_returns": daily_returns,
     }
     if fold_metrics:
         payload["family_evaluation"] = aggregate_family_evaluation(
-            config.candidate_family_hash or config.model_version,
+            family_hash,
             fold_metrics,
             seed_count=1,
         ).to_json_dict()

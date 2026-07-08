@@ -1,3 +1,19 @@
+# Próximo passo operacional das redes neurais — 2026-07-08 14:59 UTC
+
+DDL aplicado e rodada shadow TCN `p50/m08/t20/d15/l20_ticker_v2` executada com três seeds. A família foi `rejected`, mas o resultado melhorou bastante: `totalTrades=116`, `positiveFolds=8`, `median_delta=0.0054544894289544`, `worst_delta=0.0`, `maxDrawdown=0.14369556809024991`; falhou apenas por `seeds_instaveis` (`stableAcrossSeeds=false`). Porém a resposta da função não trouxe `daily_return_count` e a consulta em `neural_daily_returns` retornou 0 linhas para a família, indicando que o DDL foi feito, mas o código com persistência de `daily_returns` ainda não está deployado na função.
+
+Próximo passo: fazer deploy do commit que adiciona `daily_return_count`/`daily_returns` e reexecutar a mesma TCN `p50/m08/t20/d15/l20_ticker_v2` (ou sufixo `_ticker_v3`) para coletar ticker/data/fold. Se o padrão se repetir, priorizar diagnóstico de estabilidade entre seeds; não promover enquanto `stableAcrossSeeds=false`.
+
+---
+
+# Próximo passo operacional das redes neurais — 2026-07-08 06:59 UTC
+
+Implementada a rastreabilidade por `ticker` nas linhas `neural_daily_returns` da economia MUEN: o treinamento passa a incluir `daily_returns` com `ticker` no payload `muen_economics`, e o orquestrador passa a persistir essas linhas na tabela `neural_daily_returns`. Isso desbloqueia o diagnóstico pedido de identificar ticker/data/fold que compõem o `worst_delta` nas próximas rodadas.
+
+Próximo passo após deploy: aplicar no BigQuery `ALTER TABLE ingestaokraken.cotacao_intraday.neural_daily_returns ADD COLUMN IF NOT EXISTS ticker STRING` (já versionado em `infra/bq/21_neural_evolution.sql`) e só então reexecutar uma rodada shadow pequena da TCN `p50/m08/t20/d15/l20` para coletar daily returns com ticker. Não promover e não criar Scheduler dedicado; usar a nova rastreabilidade para diagnosticar labels/features/regime por ticker/data/fold.
+
+---
+
 # Próximo passo operacional das redes neurais — 2026-07-08 06:16 UTC
 
 Executado o diagnóstico pós-GRU e a comparação shadow TCN/Conv1D causal `p50/m08/t20/d15/l20` com três seeds. A TCN terminou sem falha técnica e melhorou cobertura/consistência operacional frente à GRU (`totalTrades=132`, `positiveFolds=6`, `positiveFoldRatio=0.5`), mas ainda foi `rejected` pelo Gate MUEN por `nao_supera_champion_mediana`, `fold_catastrofico` e `seeds_instaveis` (`median_delta=-0.01073690133513924`, `worst_delta=-0.07000000000000008`, `stableAcrossSeeds=false`).

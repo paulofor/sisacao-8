@@ -623,6 +623,25 @@ def test_orchestrator_persists_muen_economics_when_registry_metrics_include_fold
                             "cost_multiplier": 1.5,
                         },
                     ],
+                    "daily_returns": [
+                        {
+                            "protocol_version": "neural_eod_protocol_v1",
+                            "dataset_snapshot": "snapshot-a",
+                            "candidate_family_hash": "family-ready",
+                            "trial_id": "trial-a",
+                            "fold_id": "fold_01",
+                            "seed": 42,
+                            "reference_date": "2026-07-01",
+                            "ticker": "PETR4",
+                            "model_net_return": -0.01,
+                            "champion_net_return": 0.02,
+                            "delta_net_return": -0.03,
+                            "exposure": 1.0,
+                            "trades": 1,
+                            "cost_multiplier": 1.0,
+                            "created_at": "2026-07-08T00:00:00+00:00",
+                        }
+                    ],
                 },
             },
         }
@@ -646,8 +665,12 @@ def test_orchestrator_persists_muen_economics_when_registry_metrics_include_fold
     assert response["fold_metric_count"] == 2
     assert response["family_evaluation_count"] == 1
     assert response["gate_decision_count"] == 1
+    assert response["daily_return_count"] == 1
     assert "ingestaokraken.cotacao_intraday.neural_fold_metrics" in loaded
     assert "ingestaokraken.cotacao_intraday.neural_family_evaluations" in loaded
+    assert "ingestaokraken.cotacao_intraday.neural_daily_returns" in loaded
+    daily_rows = loaded["ingestaokraken.cotacao_intraday.neural_daily_returns"]
+    assert daily_rows[0]["ticker"] == "PETR4"
     gate_rows = loaded["ingestaokraken.cotacao_intraday.neural_gate_decisions"]
     assert gate_rows[0]["decision_status"] == "rejected"
     assert "muen_economics_missing" not in gate_rows[0]["failed_criteria"]
