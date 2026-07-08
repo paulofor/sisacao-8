@@ -1,3 +1,9 @@
+# Próximo passo operacional das redes neurais — 2026-07-08 00:10 UTC
+
+Corrigido o erro de CI `F811` reportado em `tests/test_neural_evolution.py` ao tornar explícitos e únicos os nomes dos testes de repetição multi-seed da Fase 3 e de payload sequencial da Fase 4. Após essa correção, o próximo passo operacional volta a ser o deploy e a execução shadow da GRU Fase 4 `p50/m08/t20/d15/l20` com três seeds, sem promoção automática.
+
+---
+
 # Próximo passo operacional das redes neurais — 2026-07-07 23:00 UTC
 
 Implementado no código o controle de risco intrafold `max_fold_drawdown_stop`, que neutraliza as decisões restantes de um fold depois que o drawdown acumulado atinge o limite configurado. O Gate MUEN permanece inalterado; o controle atua antes da economia MUEN, no pós-processamento da política de decisão.
