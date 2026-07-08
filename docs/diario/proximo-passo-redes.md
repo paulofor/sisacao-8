@@ -1,3 +1,11 @@
+# Próximo passo operacional das redes neurais — 2026-07-08 00:50 UTC
+
+Executadas em shadow as variantes GRU Fase 4 `p50/m08/t20/d15/l20` e `p50/m08/t20/d18/l20`, ambas com três seeds e Gate MUEN agregado. As duas rodadas concluíram sem falhas técnicas, mas foram `rejected`. O stop intrafold cumpriu o objetivo de reduzir drawdown para perto/abaixo de 20% (`d15 maxDrawdown=0.19564300000000054`; `d18 maxDrawdown=0.1995843493000002`), porém não resolveu edge nem estabilidade (`median_delta` negativo e `stableAcrossSeeds=false` nas duas).
+
+Próximo passo: não promover, não criar Scheduler específico e não continuar apertando stop/cap na GRU l20. Priorizar diagnóstico de edge/labels/features sequenciais: decompor os folds/seed com maior perda, revisar se as janelas sequenciais estão capturando regime útil, comparar contra TCN/Conv1D causal com o mesmo `t20/d15/l20` somente após esse diagnóstico, e manter Gate MUEN inalterado.
+
+---
+
 # Próximo passo operacional das redes neurais — 2026-07-08 00:10 UTC
 
 Corrigido o erro de CI `F811` reportado em `tests/test_neural_evolution.py` ao tornar explícitos e únicos os nomes dos testes de repetição multi-seed da Fase 3 e de payload sequencial da Fase 4. Após essa correção, o próximo passo operacional volta a ser o deploy e a execução shadow da GRU Fase 4 `p50/m08/t20/d15/l20` com três seeds, sem promoção automática.
