@@ -100,6 +100,54 @@ PHASE3_FAMILY_SPACE: tuple[dict[str, Any], ...] = (
     },
 )
 
+PHASE4_RECURRENT_SPACE: tuple[dict[str, Any], ...] = (
+    {
+        "architecture_type": "gru_sequence",
+        "model_id": "neural_eod_gru_sequence",
+        "hidden_units": (32,),
+        "dropout_rate": 0.20,
+        "learning_rate": 0.0003,
+        "batch_size": 128,
+        "epochs": 60,
+        "class_weight": "balanced",
+        "sequence_lookback": 20,
+        "min_directional_probability": 0.50,
+        "min_directional_margin": 0.08,
+        "max_trades_per_fold": 35,
+        "candidate_family_hash": "neural_eod_phase4_gru_sequence_p50_m08_t35_l20",
+    },
+    {
+        "architecture_type": "lstm_sequence",
+        "model_id": "neural_eod_lstm_sequence",
+        "hidden_units": (32,),
+        "dropout_rate": 0.20,
+        "learning_rate": 0.0003,
+        "batch_size": 128,
+        "epochs": 60,
+        "class_weight": "balanced",
+        "sequence_lookback": 20,
+        "min_directional_probability": 0.50,
+        "min_directional_margin": 0.08,
+        "max_trades_per_fold": 35,
+        "candidate_family_hash": "neural_eod_phase4_lstm_sequence_p50_m08_t35_l20",
+    },
+    {
+        "architecture_type": "tcn_sequence",
+        "model_id": "neural_eod_tcn_sequence",
+        "hidden_units": (32,),
+        "dropout_rate": 0.20,
+        "learning_rate": 0.0003,
+        "batch_size": 128,
+        "epochs": 60,
+        "class_weight": "balanced",
+        "sequence_lookback": 20,
+        "min_directional_probability": 0.50,
+        "min_directional_margin": 0.08,
+        "max_trades_per_fold": 35,
+        "candidate_family_hash": "neural_eod_phase4_tcn_sequence_p50_m08_t35_l20",
+    },
+)
+
 
 def generate_deterministic_candidates(
     *,
@@ -510,6 +558,7 @@ def generate_phase3_family_candidates(
     existing_hashes: Iterable[str] | None = None,
     model_version_prefix: str = "neural_eod_phase3_family",
     family_space: Sequence[Mapping[str, Any]] = PHASE3_FAMILY_SPACE,
+    seed_repeats_only: bool = False,
 ) -> list[CandidateConfig]:
     """Return controlled Phase-3 candidates for new tabular neural families.
 
@@ -570,10 +619,26 @@ def generate_phase3_family_candidates(
                 base_hyperparameters["max_trades_per_fold"] = _optional_int(
                     family.get("max_trades_per_fold")
                 )
+            if family.get("max_fold_drawdown_stop") is not None:
+                base_hyperparameters["max_fold_drawdown_stop"] = float(
+                    family.get("max_fold_drawdown_stop")
+                )
+            if family.get("blocked_tickers"):
+                base_hyperparameters["blocked_tickers"] = _normalized_tickers(
+                    family.get("blocked_tickers")
+                )
+            if family.get("sequence_lookback") is not None:
+                base_hyperparameters["sequence_lookback"] = _optional_int(
+                    family.get("sequence_lookback")
+                )
             hyperparameters = _phase3_controlled_hyperparameters(
                 base_hyperparameters,
-                repeat_round=repeat_round,
+                repeat_round=0 if seed_repeats_only else repeat_round,
             )
+            if family.get("candidate_family_hash"):
+                hyperparameters["candidate_family_hash"] = str(
+                    family.get("candidate_family_hash")
+                )
             hyperparameters["random_seed"] = (
                 int(budget.random_seed) + 30_000 + seed_offset
             )
@@ -614,6 +679,44 @@ def generate_phase3_family_candidates(
     return candidates
 
 
+def generate_phase4_recurrent_shadow_candidates(
+    *,
+    evolution_run_id: str,
+    dataset_snapshot: str,
+    budget: EvolutionBudget,
+    existing_hashes: Iterable[str] | None = None,
+    model_version_prefix: str = "neural_eod_phase4_recurrent",
+    family_space: Sequence[Mapping[str, Any]] = PHASE4_RECURRENT_SPACE,
+    seed_repeats_only: bool = False,
+) -> list[CandidateConfig]:
+    """Return recurrent/causal sequence candidates for Phase-4 shadow research."""
+
+    phase3_candidates = generate_phase3_family_candidates(
+        evolution_run_id=evolution_run_id,
+        dataset_snapshot=dataset_snapshot,
+        budget=budget,
+        existing_hashes=existing_hashes,
+        model_version_prefix=model_version_prefix,
+        family_space=family_space,
+        seed_repeats_only=seed_repeats_only,
+    )
+    phase4_candidates: list[CandidateConfig] = []
+    for candidate in phase3_candidates:
+        training_request = dict(candidate.training_request)
+        training_request["notes"] = str(training_request.get("notes", "")).replace(
+            "Fase 3 pesquisa/shadow de nova família neural",
+            "Fase 4 recorrente/temporal em shadow",
+        )
+        phase4_candidates.append(
+            replace(
+                candidate,
+                candidate_source="phase4_recurrent_shadow",
+                training_request=training_request,
+            )
+        )
+    return phase4_candidates
+
+
 def _phase3_policy_suffix(hyperparameters: Mapping[str, Any]) -> str:
     """Return a compact model-version suffix for non-default trading policies."""
 
@@ -638,6 +741,16 @@ def _phase3_policy_suffix(hyperparameters: Mapping[str, Any]) -> str:
         )
     if max_trades is not None:
         parts.append(f"t{max_trades}")
+    drawdown_stop = hyperparameters.get("max_fold_drawdown_stop")
+    if drawdown_stop is not None:
+        parts.append(f"d{int(round(float(drawdown_stop) * 100)):02d}")
+    sequence_lookback = _optional_int(hyperparameters.get("sequence_lookback"))
+    if sequence_lookback is not None:
+        parts.append(f"l{sequence_lookback}")
+    blocked_tickers = _normalized_tickers(hyperparameters.get("blocked_tickers"))
+    if blocked_tickers:
+        digest = hashlib.sha1(",".join(blocked_tickers).encode("utf-8")).hexdigest()[:6]
+        parts.append(f"bt{len(blocked_tickers)}_{digest}")
     return "" if not parts else "_" + "_".join(parts)
 
 
@@ -877,9 +990,23 @@ def _candidate_from_parts(
         "max_trades_per_fold": _optional_int(
             hyperparameters.get("max_trades_per_fold")
         ),
+        "max_fold_drawdown_stop": (
+            float(hyperparameters["max_fold_drawdown_stop"])
+            if hyperparameters.get("max_fold_drawdown_stop") is not None
+            else None
+        ),
+        "blocked_tickers": _normalized_tickers(hyperparameters.get("blocked_tickers")),
         "status": "candidate",
         "notes": notes,
     }
+    if hyperparameters.get("sequence_lookback") is not None:
+        training_request["sequence_lookback"] = _optional_int(
+            hyperparameters.get("sequence_lookback")
+        )
+    if hyperparameters.get("candidate_family_hash"):
+        training_request["candidate_family_hash"] = str(
+            hyperparameters["candidate_family_hash"]
+        )
     candidate_id = str(uuid5(NAMESPACE_URL, f"{evolution_run_id}:{dedupe_hash}"))
     return CandidateConfig(
         candidate_id=candidate_id,
@@ -932,6 +1059,14 @@ def candidate_family_key(
             ),
             "max_trades_per_fold": _optional_int(
                 hyperparameters.get("max_trades_per_fold")
+            ),
+            "max_fold_drawdown_stop": (
+                _rounded_float(hyperparameters.get("max_fold_drawdown_stop"), 4)
+                if hyperparameters.get("max_fold_drawdown_stop") is not None
+                else None
+            ),
+            "blocked_tickers": _normalized_tickers(
+                hyperparameters.get("blocked_tickers")
             ),
         },
     }
@@ -1030,6 +1165,20 @@ def _number(value: Any) -> float | None:
     if isinstance(value, (int, float)):
         return float(value)
     return None
+
+
+def _normalized_tickers(value: Any) -> tuple[str, ...]:
+    if value is None or value == "":
+        return ()
+    if isinstance(value, str):
+        items = value.split(",")
+    elif isinstance(value, (list, tuple, set)):
+        items = value
+    else:
+        raise ValueError("blocked_tickers must be a comma-separated string or list")
+    return tuple(
+        sorted({str(item).strip().upper() for item in items if str(item).strip()})
+    )
 
 
 def _optional_int(value: Any) -> int | None:

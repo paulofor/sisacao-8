@@ -325,6 +325,7 @@ def daily_return_rows(
     seed: int,
     prediction_column: str = "predicted_label",
     reference_date_column: str = "reference_date",
+    ticker_column: str = "ticker",
     champion_return_column: str | None = "champion_net_return",
     cost_multiplier: float = 1.0,
     created_at: str | None = None,
@@ -349,6 +350,11 @@ def daily_return_rows(
     model_returns = pd.Series(model_returns, index=frame.index, dtype="float64")
     champion_returns = _champion_returns(frame, champion_return_column)
     reference_dates = pd.to_datetime(frame[reference_date_column], errors="coerce")
+    tickers = (
+        frame[ticker_column].fillna("").astype(str)
+        if ticker_column in frame.columns
+        else pd.Series([""] * len(frame), index=frame.index, dtype="object")
+    )
     row_created_at = created_at or _utc_now_iso()
 
     rows: list[dict[str, Any]] = []
@@ -367,6 +373,7 @@ def daily_return_rows(
                 "fold_id": fold_id,
                 "seed": int(seed),
                 "reference_date": reference_date.date().isoformat(),
+                "ticker": tickers.loc[index].strip().upper() or None,
                 "model_net_return": model_return,
                 "champion_net_return": champion_return,
                 "delta_net_return": model_return - champion_return,
