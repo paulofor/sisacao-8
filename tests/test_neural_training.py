@@ -338,6 +338,44 @@ def test_build_muen_economics_uses_candidate_family_hash_override() -> None:
     )
 
 
+def test_build_muen_economics_uses_candidate_family_hash_override() -> None:
+    dataset = pd.DataFrame(
+        [
+            {
+                "dataset_split": "validation",
+                "label_class": "up",
+                "buy_net_return": 0.03,
+                "sell_net_return": -0.02,
+            },
+            {
+                "dataset_split": "test",
+                "label_class": "down",
+                "buy_net_return": -0.01,
+                "sell_net_return": 0.02,
+            },
+        ]
+    )
+    probabilities = {
+        "validation": np.array([[0.1, 0.1, 0.8]]),
+        "test": np.array([[0.8, 0.1, 0.1]]),
+    }
+    config = BaselineMlpConfig(
+        model_version="model_seed_1",
+        candidate_family_hash="family_tabular_p50_m08_t35",
+    )
+
+    economics = build_muen_economics_from_predictions(
+        dataset,
+        probabilities,
+        config=config,
+    )
+
+    assert economics["candidate_family_hash"] == "family_tabular_p50_m08_t35"
+    assert economics["family_evaluation"]["candidate_family_hash"] == (
+        "family_tabular_p50_m08_t35"
+    )
+
+
 def test_build_muen_economics_applies_max_trades_per_fold_budget() -> None:
     dataset = pd.DataFrame(
         [
