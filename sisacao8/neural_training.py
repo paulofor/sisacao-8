@@ -119,6 +119,7 @@ class BaselineMlpConfig:
     min_directional_margin: float = 0.05
     max_trades_per_fold: int | None = None
     max_fold_drawdown_stop: float | None = None
+    blocked_tickers: tuple[str, ...] = ()
     candidate_family_hash: str | None = None
     sequence_lookback: int = 40
 
@@ -151,6 +152,8 @@ class BaselineMlpConfig:
             raise ValueError(
                 "max_fold_drawdown_stop must be between 0 and 1 when provided"
             )
+        if any(not str(ticker).strip() for ticker in self.blocked_tickers):
+            raise ValueError("blocked_tickers entries must be non-empty strings")
         if not 20 <= self.sequence_lookback <= 60:
             raise ValueError("sequence_lookback must be between 20 and 60 pregões")
         allowed_architectures = {
@@ -478,6 +481,11 @@ def build_muen_economics_from_predictions(
             max_trades_per_fold=config.max_trades_per_fold,
         )
         evaluation_frame = split_frame.copy()
+        labels = apply_ticker_blocklist(
+            labels,
+            evaluation_frame,
+            blocked_tickers=config.blocked_tickers,
+        )
         labels = apply_fold_drawdown_stop(
             labels,
             evaluation_frame,
@@ -625,6 +633,38 @@ def apply_fold_trade_budget(
     return adjusted
 
 
+def apply_ticker_blocklist(
+    labels: np.ndarray,
+    frame: pd.DataFrame,
+    *,
+    blocked_tickers: tuple[str, ...] | list[str] | set[str] = (),
+) -> np.ndarray:
+    """Neutralize directional decisions for configured tail-risk tickers.
+
+    This guard is intentionally explicit and payload-driven: it does not learn
+    from validation/test outcomes during the run.  Operators can use the
+    previously persisted ``neural_daily_returns`` diagnostics to propose a
+    small blocklist, then rerun the same family in shadow with the Gate MUEN
+    unchanged.
+    """
+
+    normalized = {
+        str(ticker).strip().upper() for ticker in blocked_tickers if str(ticker).strip()
+    }
+    if not normalized:
+        return labels
+    if "ticker" not in frame.columns:
+        raise ValueError("ticker column is required when blocked_tickers is configured")
+    if len(labels) != len(frame):
+        raise ValueError("labels and frame must have the same length")
+
+    adjusted = labels.copy()
+    tickers = frame["ticker"].astype(str).str.strip().str.upper()
+    blocked_mask = tickers.isin(normalized).to_numpy()
+    adjusted[blocked_mask] = "neutral"
+    return adjusted
+
+
 def apply_fold_drawdown_stop(
     labels: np.ndarray,
     frame: pd.DataFrame,
@@ -643,9 +683,7 @@ def apply_fold_drawdown_stop(
     if max_fold_drawdown_stop is None:
         return labels
     if not 0 < max_fold_drawdown_stop < 1:
-        raise ValueError(
-            "max_fold_drawdown_stop must be between 0 and 1 when provided"
-        )
+        raise ValueError("max_fold_drawdown_stop must be between 0 and 1 when provided")
     required = {"buy_net_return", "sell_net_return"}
     if missing := required.difference(frame.columns):
         raise ValueError(f"Missing drawdown stop columns: {sorted(missing)}")

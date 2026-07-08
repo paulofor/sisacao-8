@@ -14,6 +14,7 @@ from sisacao8.neural_training import (
     align_config_to_dataset,
     _build_model,
     apply_fold_drawdown_stop,
+    apply_ticker_blocklist,
     apply_fold_trade_budget,
     build_artifact_manifest,
     build_muen_economics_from_predictions,
@@ -378,6 +379,56 @@ def test_build_muen_economics_applies_max_trades_per_fold_budget() -> None:
 
     assert economics["fold_metrics"][0]["trades"] == 2
     assert economics["family_evaluation"]["total_trades"] == 2
+
+
+def test_apply_ticker_blocklist_neutralizes_tail_tickers() -> None:
+    labels = np.array(["up", "down", "up", "neutral"], dtype=object)
+    frame = pd.DataFrame({"ticker": ["ONCO3", "PETR4", "brkm5", "CSAN3"]})
+
+    adjusted = apply_ticker_blocklist(
+        labels,
+        frame,
+        blocked_tickers=("onco3", "BRKM5"),
+    )
+
+    assert adjusted.tolist() == ["neutral", "down", "neutral", "neutral"]
+
+
+def test_build_muen_economics_applies_ticker_blocklist_before_metrics() -> None:
+    dataset = pd.DataFrame(
+        [
+            {
+                "dataset_split": "validation",
+                "reference_date": dt.date(2026, 1, day),
+                "ticker": ticker,
+                "label_class": "up",
+                "buy_net_return": value,
+                "sell_net_return": -value,
+            }
+            for day, ticker, value in [
+                (1, "ONCO3", -0.07),
+                (2, "PETR4", 0.03),
+                (3, "BRKM5", -0.07),
+            ]
+        ]
+    )
+    probabilities = {"validation": np.array([[0.10, 0.20, 0.70]] * 3)}
+    config = BaselineMlpConfig(
+        model_version="ticker_guarded",
+        min_directional_probability=0.45,
+        min_directional_margin=0.05,
+        blocked_tickers=("ONCO3", "BRKM5"),
+    )
+
+    economics = build_muen_economics_from_predictions(
+        dataset,
+        probabilities,
+        config=config,
+        cost_multipliers=(1.0,),
+    )
+
+    assert economics["fold_metrics"][0]["trades"] == 1
+    assert math.isclose(economics["fold_metrics"][0]["total_net_return"], 0.03)
 
 
 def test_apply_fold_drawdown_stop_neutralizes_after_breach() -> None:

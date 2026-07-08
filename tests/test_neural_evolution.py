@@ -146,6 +146,46 @@ def test_generate_phase3_family_candidates_repeats_tabular_policy_across_seeds()
     assert comparable_hyperparameters[1] == comparable_hyperparameters[2]
 
 
+def test_generate_phase4_candidates_propagate_blocked_tickers_guard() -> None:
+    candidates = generate_phase4_recurrent_shadow_candidates(
+        evolution_run_id="run-phase4-guard",
+        dataset_snapshot="snapshot-1",
+        budget=EvolutionBudget(max_trials=1, random_seed=11),
+        model_version_prefix="phase4_guard",
+        family_space=[
+            {
+                "architecture_type": "tcn_sequence",
+                "model_id": "neural_eod_tcn_sequence",
+                "hidden_units": (32,),
+                "dropout_rate": 0.20,
+                "learning_rate": 0.0003,
+                "batch_size": 128,
+                "epochs": 60,
+                "class_weight": "balanced",
+                "sequence_lookback": 20,
+                "min_directional_probability": 0.50,
+                "min_directional_margin": 0.08,
+                "max_trades_per_fold": 20,
+                "max_fold_drawdown_stop": 0.15,
+                "blocked_tickers": ["onco3", "BRKM5", "CSAN3"],
+            }
+        ],
+    )
+
+    candidate = candidates[0]
+    assert candidate.training_request["blocked_tickers"] == (
+        "BRKM5",
+        "CSAN3",
+        "ONCO3",
+    )
+    assert candidate.hyperparameters["blocked_tickers"] == (
+        "BRKM5",
+        "CSAN3",
+        "ONCO3",
+    )
+    assert "bt3_" in candidate.model_version
+
+
 def test_generate_phase4_recurrent_shadow_candidates_include_sequence_payloads():
     candidates = generate_phase4_recurrent_shadow_candidates(
         evolution_run_id="run-phase4",

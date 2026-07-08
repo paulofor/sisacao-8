@@ -623,6 +623,10 @@ def generate_phase3_family_candidates(
                 base_hyperparameters["max_fold_drawdown_stop"] = float(
                     family.get("max_fold_drawdown_stop")
                 )
+            if family.get("blocked_tickers"):
+                base_hyperparameters["blocked_tickers"] = _normalized_tickers(
+                    family.get("blocked_tickers")
+                )
             if family.get("sequence_lookback") is not None:
                 base_hyperparameters["sequence_lookback"] = _optional_int(
                     family.get("sequence_lookback")
@@ -743,6 +747,10 @@ def _phase3_policy_suffix(hyperparameters: Mapping[str, Any]) -> str:
     sequence_lookback = _optional_int(hyperparameters.get("sequence_lookback"))
     if sequence_lookback is not None:
         parts.append(f"l{sequence_lookback}")
+    blocked_tickers = _normalized_tickers(hyperparameters.get("blocked_tickers"))
+    if blocked_tickers:
+        digest = hashlib.sha1(",".join(blocked_tickers).encode("utf-8")).hexdigest()[:6]
+        parts.append(f"bt{len(blocked_tickers)}_{digest}")
     return "" if not parts else "_" + "_".join(parts)
 
 
@@ -987,6 +995,7 @@ def _candidate_from_parts(
             if hyperparameters.get("max_fold_drawdown_stop") is not None
             else None
         ),
+        "blocked_tickers": _normalized_tickers(hyperparameters.get("blocked_tickers")),
         "status": "candidate",
         "notes": notes,
     }
@@ -1055,6 +1064,9 @@ def candidate_family_key(
                 _rounded_float(hyperparameters.get("max_fold_drawdown_stop"), 4)
                 if hyperparameters.get("max_fold_drawdown_stop") is not None
                 else None
+            ),
+            "blocked_tickers": _normalized_tickers(
+                hyperparameters.get("blocked_tickers")
             ),
         },
     }
@@ -1153,6 +1165,20 @@ def _number(value: Any) -> float | None:
     if isinstance(value, (int, float)):
         return float(value)
     return None
+
+
+def _normalized_tickers(value: Any) -> tuple[str, ...]:
+    if value is None or value == "":
+        return ()
+    if isinstance(value, str):
+        items = value.split(",")
+    elif isinstance(value, (list, tuple, set)):
+        items = value
+    else:
+        raise ValueError("blocked_tickers must be a comma-separated string or list")
+    return tuple(
+        sorted({str(item).strip().upper() for item in items if str(item).strip()})
+    )
 
 
 def _optional_int(value: Any) -> int | None:
