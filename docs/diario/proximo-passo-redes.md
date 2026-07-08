@@ -1,3 +1,11 @@
+# Próximo passo operacional das redes neurais — 2026-07-08 06:16 UTC
+
+Executado o diagnóstico pós-GRU e a comparação shadow TCN/Conv1D causal `p50/m08/t20/d15/l20` com três seeds. A TCN terminou sem falha técnica e melhorou cobertura/consistência operacional frente à GRU (`totalTrades=132`, `positiveFolds=6`, `positiveFoldRatio=0.5`), mas ainda foi `rejected` pelo Gate MUEN por `nao_supera_champion_mediana`, `fold_catastrofico` e `seeds_instaveis` (`median_delta=-0.01073690133513924`, `worst_delta=-0.07000000000000008`, `stableAcrossSeeds=false`).
+
+Próximo passo: interromper novas rodadas de arquitetura/stop na Fase 4 até fazer diagnóstico de dados. Priorizar investigação de labels/features/regime por fold: identificar quais tickers/datas concentram o `worst_delta`, comparar distribuição de retornos sequenciais entre validation/test e treinar somente depois uma nova política com filtro de regime ou features temporais adicionais. Sem promoção automática e sem Scheduler dedicado.
+
+---
+
 # Próximo passo operacional das redes neurais — 2026-07-08 00:50 UTC
 
 Executadas em shadow as variantes GRU Fase 4 `p50/m08/t20/d15/l20` e `p50/m08/t20/d18/l20`, ambas com três seeds e Gate MUEN agregado. As duas rodadas concluíram sem falhas técnicas, mas foram `rejected`. O stop intrafold cumpriu o objetivo de reduzir drawdown para perto/abaixo de 20% (`d15 maxDrawdown=0.19564300000000054`; `d18 maxDrawdown=0.1995843493000002`), porém não resolveu edge nem estabilidade (`median_delta` negativo e `stableAcrossSeeds=false` nas duas).
