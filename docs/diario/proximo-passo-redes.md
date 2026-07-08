@@ -1,3 +1,17 @@
+# Próximo passo operacional das redes neurais — 2026-07-08 15:15 UTC
+
+Corrigido o erro de CI `F811` reportado em `tests/test_neural_training.py` renomeando o teste de override de `candidate_family_hash` para um nome mais específico e não colidente. O próximo passo operacional das redes permanece: após deploy do commit com `daily_return_count`/`daily_returns`, reexecutar TCN `p50/m08/t20/d15/l20` com sufixo `_ticker_v3`, validar `daily_return_count > 0` e diagnosticar ticker/data/fold antes de qualquer promoção.
+
+---
+
+# Próximo passo operacional das redes neurais — 2026-07-08 15:10 UTC
+
+Formalizado o processo de evolução neural em passos no runbook `docs/implementacao/processo-evolucao-neural-em-passos.md`. A partir de agora, famílias em descoberta (como TCN/GRU Fase 4) devem seguir ciclo manual controlado: hipótese → rastreabilidade/DDL → dry-run → shadow pequeno multi-seed → Gate MUEN + diagnóstico → decisão de repetir/ajustar/descartar/promover manualmente. Scheduler fica reservado para políticas maduras, não para descoberta.
+
+Próximo passo prático: após deploy do commit com `daily_return_count`/`daily_returns`, reexecutar a TCN `p50/m08/t20/d15/l20` com sufixo novo (`_ticker_v3`), validar `daily_return_count > 0`, consultar `neural_daily_returns` por ticker/data/fold e decidir se a falha `seeds_instaveis` justifica mais seeds ou revisão de features/regime. Sem promoção automática.
+
+---
+
 # Próximo passo operacional das redes neurais — 2026-07-08 14:59 UTC
 
 DDL aplicado e rodada shadow TCN `p50/m08/t20/d15/l20_ticker_v2` executada com três seeds. A família foi `rejected`, mas o resultado melhorou bastante: `totalTrades=116`, `positiveFolds=8`, `median_delta=0.0054544894289544`, `worst_delta=0.0`, `maxDrawdown=0.14369556809024991`; falhou apenas por `seeds_instaveis` (`stableAcrossSeeds=false`). Porém a resposta da função não trouxe `daily_return_count` e a consulta em `neural_daily_returns` retornou 0 linhas para a família, indicando que o DDL foi feito, mas o código com persistência de `daily_returns` ainda não está deployado na função.

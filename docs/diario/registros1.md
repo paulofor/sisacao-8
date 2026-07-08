@@ -2115,3 +2115,18 @@ A leitura da tela `Redes neurais — Treinos` indicou 86 redes em estágio `Cand
 - Leitura operacional: a TCN `ticker_v2` é a melhor família Fase 4 até aqui em mediana/drawdown, mas não pode ser promovida por instabilidade entre seeds e ainda falta a trilha por ticker para investigar onde ocorre a instabilidade.
 - Próximo passo: redeployar o commit com `daily_return_count`/`daily_returns`, reexecutar a mesma TCN com sufixo novo (`_ticker_v3`) e então consultar `neural_daily_returns` por ticker/data/fold; se o resultado econômico se repetir, focar em estabilidade entre seeds antes de qualquer promoção.
 - Comandos usados: Python `urllib.request` com `/tmp/phase4_tcn_d15_ticker_payload.json` para dry-run e execução real; MCP HTTP JSON-RPC em `http://mcpserversisacao.shop/mcp` com `bigquery_query` para validar `neural_daily_returns` e `neural_gate_decisions`.
+
+## 2026-07-08 15:10 UTC — Processo em passos para evolução neural
+- Formalizei o padrão que funcionou melhor nas últimas iterações em `docs/implementacao/processo-evolucao-neural-em-passos.md`: hipótese explícita, preparação de rastreabilidade, dry-run, rodada shadow pequena multi-seed, validação MUEN, diagnóstico por ticker/data/fold e decisão operacional antes de qualquer Scheduler.
+- O processo separa pesquisa manual controlada de automação recorrente: Scheduler deve ser usado apenas para políticas maduras/reavaliadas, não para descoberta de família, arquitetura, labels ou controles de risco.
+- Incluí critérios objetivos de decisão: `passed` + estabilidade para abrir promoção governada; mediana positiva com `seeds_instaveis` para mais seeds/diagnóstico; drawdown/fold catastrófico para diagnóstico antes de nova arquitetura; mediana negativa para revisar labels/features/regime.
+- Atualizei `docs/neural_evolution_orchestrator_scheduler.md` para apontar para o novo runbook como referência do processo em passos.
+- Próximo passo permanece: depois do deploy da persistência `daily_returns`/`daily_return_count`, reexecutar TCN `p50/m08/t20/d15/l20` com sufixo `_ticker_v3` e validar `daily_return_count > 0` antes de diagnosticar ticker/data/fold.
+- Comandos usados: `rg -n "Phase 4|Fase 4|neural.*process|scheduler|Gate MUEN|MUEN" docs`; criação de `docs/implementacao/processo-evolucao-neural-em-passos.md`; atualização de `docs/neural_evolution_orchestrator_scheduler.md`, `docs/diario/proximo-passo-redes.md` e `docs/diario/registros1.md`.
+
+## 2026-07-08 15:15 UTC — Correção CI F811 em teste de MUEN training
+- Corrigi o erro de CI `F811 redefinition of unused 'test_build_muen_economics_uses_candidate_family_hash_override'` reportado em `tests/test_neural_training.py`.
+- No estado local havia apenas uma definição com esse nome, mas renomeei o teste para `test_build_muen_economics_family_hash_override_without_dates`, deixando explícito que o caso cobre payload sem `reference_date`/`daily_returns` e evitando colisão após merge.
+- A correção é somente de nomenclatura de teste; não altera comportamento de produção.
+- Próximo passo operacional das redes segue inalterado: deployar persistência `daily_returns`/`daily_return_count`, reexecutar TCN com sufixo `_ticker_v3`, validar `daily_return_count > 0` e diagnosticar ticker/data/fold antes de qualquer promoção.
+- Comandos usados: `git status --short`; `nl -ba tests/test_neural_training.py | sed -n '285,365p'`; `rg -n "def test_build_muen_economics_uses_candidate_family_hash_override" tests/test_neural_training.py`.

@@ -501,6 +501,10 @@ gcloud scheduler jobs describe neural-evolution-phase3-30m \
   --format='yaml(name,state,schedule,timeZone,attemptDeadline,httpTarget.uri,httpTarget.httpMethod,httpTarget.body,nextRunTime,lastAttemptTime)'
 ```
 
+## Processo em passos para pesquisa neural
+
+Para transformar as rodadas manuais em processo repetível, use o runbook `docs/implementacao/processo-evolucao-neural-em-passos.md`. Ele define quando rodar manualmente, quando diagnosticar, quando repetir multi-seed e quando uma política está madura o suficiente para Scheduler.
+
 ## Fase 4 recorrente em shadow — início manual pós-deploy
 
 Use esta sequência depois de publicar `functions/neural_training` e `functions/neural_evolution_orchestrator` com suporte a `phase4_recurrent_shadow`. A Fase 4 deve começar manualmente e em shadow; não reutilize o Scheduler de Fase 2/Fase 3 antes de confirmar dry-run e primeira rodada real pequena.
