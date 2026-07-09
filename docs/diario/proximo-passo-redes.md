@@ -671,3 +671,8 @@ Novo próximo passo operacional: não promover ainda. Rodar diagnóstico multi-s
 - O Gate MUEN rejeitou a família: `total_trades=6`, `positive_folds=0`, `median_delta=0.0`, `worst_delta=-0.07000000000000006`, `max_drawdown=0.195643`, `stable_across_seeds=false`; falhou por trades/folds insuficientes, não superar champion, fold catastrófico e seeds instáveis.
 - As caudas remanescentes ficaram em `RCSL3` nos dias 2026-06-22 a 2026-06-24, ainda contra champion neutro.
 - Próximo passo operacional: não promover, não criar Scheduler e encerrar a linha incremental TCN Fase 4 neste snapshot. Voltar para revisão de labels/features/targets ou nova hipótese estrutural de regime antes de treinar outra família recorrente.
+
+## 2026-07-09 15:20 UTC — Próximo passo após diagnóstico de labels/features
+- O diagnóstico estrutural mostrou que as caudas remanescentes (`RCSL3` em 2026-06-22 a 2026-06-24) estavam em linhas `label_class=neutral` e `champion_trade_active=false`; o target já indicava abstenção, mas a rede abriu exposição.
+- O evento mais claro é `RCSL3` em 2026-06-24: volume/momentum extremos (`financial_volume_z20=4.10`, `volume_ratio_20d=8.46`, `return_5d=0.189`, `volatility_20d=0.051`) e ambos os lados direcionais ruins.
+- Próximo passo operacional: não treinar nova TCN. Implementar ou testar primeiro uma melhoria estrutural de dataset/target para eventos extremos de neutralidade, como features de volume spike/evento e/ou uma regra de abstenção para `neutral` extremo. Depois reavaliar em shadow pequena, preferencialmente começando por família tabular mais interpretável antes de voltar para recorrentes.
