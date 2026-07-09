@@ -138,6 +138,9 @@ def test_neural_training_trains_uploads_and_registers(monkeypatch, tmp_path):
                 "min_directional_probability": config.min_directional_probability,
                 "min_directional_margin": config.min_directional_margin,
                 "max_trades_per_fold": config.max_trades_per_fold,
+                "max_fold_drawdown_stop": config.max_fold_drawdown_stop,
+                "blocked_tickers": config.blocked_tickers,
+                "require_champion_activity": config.require_champion_activity,
             },
             "dataset_snapshot": "content_hash",
             "dataset_rows": len(dataset),
@@ -169,6 +172,9 @@ def test_neural_training_trains_uploads_and_registers(monkeypatch, tmp_path):
                 "min_directional_probability": 0.55,
                 "min_directional_margin": 0.08,
                 "max_trades_per_fold": 60,
+                "max_fold_drawdown_stop": 0.15,
+                "blocked_tickers": ["onco3", "BRKM5"],
+                "require_champion_activity": True,
             }
         )
     )
@@ -192,6 +198,9 @@ def test_neural_training_trains_uploads_and_registers(monkeypatch, tmp_path):
     assert row["hyperparameters_json"]["min_directional_probability"] == 0.55
     assert row["hyperparameters_json"]["min_directional_margin"] == 0.08
     assert row["hyperparameters_json"]["max_trades_per_fold"] == 60
+    assert row["hyperparameters_json"]["max_fold_drawdown_stop"] == 0.15
+    assert row["hyperparameters_json"]["blocked_tickers"] == ["ONCO3", "BRKM5"]
+    assert row["hyperparameters_json"]["require_champion_activity"] is True
     assert row["training_dataset_snapshot"] == "snapshot_2026"
     assert row["artifact_uri"] == response["artifact_uri"]
     assert row["test_accuracy"] == 0.6

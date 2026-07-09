@@ -5,6 +5,7 @@ from sisacao8.neural_evolution import (
     estimate_parameter_count,
     generate_deterministic_candidates,
     generate_phase3_family_candidates,
+    generate_phase4_recurrent_shadow_candidates,
     score_candidate,
 )
 
@@ -89,13 +90,137 @@ def test_generate_phase3_family_candidates_accepts_trade_budget_policy():
                 "min_directional_probability": 0.50,
                 "min_directional_margin": 0.08,
                 "max_trades_per_fold": 60,
+                "max_fold_drawdown_stop": 0.15,
             }
         ],
     )
 
     assert candidates[0].training_request["max_trades_per_fold"] == 60
     assert candidates[0].hyperparameters["max_trades_per_fold"] == 60
-    assert candidates[0].model_version == "phase3_risk_residual_mlp_p50_m08_t60_01"
+    assert candidates[0].training_request["max_fold_drawdown_stop"] == 0.15
+    assert candidates[0].hyperparameters["max_fold_drawdown_stop"] == 0.15
+    assert candidates[0].model_version == "phase3_risk_residual_mlp_p50_m08_t60_d15_01"
+
+
+def test_generate_phase3_family_candidates_repeats_tabular_policy_across_seeds():
+    candidates = generate_phase3_family_candidates(
+        evolution_run_id="run-phase3-multiseed",
+        dataset_snapshot="snapshot-1",
+        budget=EvolutionBudget(max_trials=3, random_seed=7),
+        model_version_prefix="phase3_focus",
+        seed_repeats_only=True,
+        family_space=[
+            {
+                "architecture_type": "tabular_bottleneck_mlp",
+                "model_id": "neural_eod_tabular_bottleneck_mlp",
+                "hidden_units": (256, 64, 16),
+                "dropout_rate": 0.25,
+                "learning_rate": 0.0003,
+                "batch_size": 256,
+                "epochs": 80,
+                "class_weight": "balanced",
+                "min_directional_probability": 0.50,
+                "min_directional_margin": 0.08,
+                "max_trades_per_fold": 35,
+                "candidate_family_hash": "family_tabular_p50_m08_t35",
+            }
+        ],
+    )
+
+    assert len(candidates) == 3
+    assert {candidate.architecture["type"] for candidate in candidates} == {
+        "tabular_bottleneck_mlp"
+    }
+    assert {
+        candidate.training_request["candidate_family_hash"] for candidate in candidates
+    } == {"family_tabular_p50_m08_t35"}
+    assert (
+        len({candidate.training_request["random_seed"] for candidate in candidates})
+        == 3
+    )
+    comparable_hyperparameters = [
+        {k: v for k, v in candidate.hyperparameters.items() if k != "random_seed"}
+        for candidate in candidates
+    ]
+    assert comparable_hyperparameters[0] == comparable_hyperparameters[1]
+    assert comparable_hyperparameters[1] == comparable_hyperparameters[2]
+
+
+def test_generate_phase4_candidates_propagate_blocked_tickers_guard() -> None:
+    candidates = generate_phase4_recurrent_shadow_candidates(
+        evolution_run_id="run-phase4-guard",
+        dataset_snapshot="snapshot-1",
+        budget=EvolutionBudget(max_trials=1, random_seed=11),
+        model_version_prefix="phase4_guard",
+        family_space=[
+            {
+                "architecture_type": "tcn_sequence",
+                "model_id": "neural_eod_tcn_sequence",
+                "hidden_units": (32,),
+                "dropout_rate": 0.20,
+                "learning_rate": 0.0003,
+                "batch_size": 128,
+                "epochs": 60,
+                "class_weight": "balanced",
+                "sequence_lookback": 20,
+                "min_directional_probability": 0.50,
+                "min_directional_margin": 0.08,
+                "max_trades_per_fold": 20,
+                "max_fold_drawdown_stop": 0.15,
+                "blocked_tickers": ["onco3", "BRKM5", "CSAN3"],
+                "require_champion_activity": True,
+            }
+        ],
+    )
+
+    candidate = candidates[0]
+    assert candidate.training_request["blocked_tickers"] == (
+        "BRKM5",
+        "CSAN3",
+        "ONCO3",
+    )
+    assert candidate.hyperparameters["blocked_tickers"] == (
+        "BRKM5",
+        "CSAN3",
+        "ONCO3",
+    )
+    assert candidate.training_request["require_champion_activity"] is True
+    assert candidate.hyperparameters["require_champion_activity"] is True
+    assert "bt3_" in candidate.model_version
+    assert candidate.model_version.endswith("_ca_01")
+
+
+def test_generate_phase4_recurrent_shadow_candidates_include_sequence_payloads():
+    candidates = generate_phase4_recurrent_shadow_candidates(
+        evolution_run_id="run-phase4",
+        dataset_snapshot="snapshot-1",
+        budget=EvolutionBudget(max_trials=3, random_seed=11),
+        model_version_prefix="phase4_test",
+    )
+
+    assert len(candidates) == 3
+    assert {candidate.architecture["type"] for candidate in candidates} == {
+        "gru_sequence",
+        "lstm_sequence",
+        "tcn_sequence",
+    }
+    assert all(
+        candidate.training_request["sequence_lookback"] == 20
+        for candidate in candidates
+    )
+    assert all("l20" in candidate.model_version for candidate in candidates)
+    assert {candidate.candidate_source for candidate in candidates} == {
+        "phase4_recurrent_shadow"
+    }
+    assert all(
+        candidate.training_request["candidate_family_hash"].startswith(
+            "neural_eod_phase4_"
+        )
+        for candidate in candidates
+    )
+    assert all(
+        "Fase 4" in candidate.training_request["notes"] for candidate in candidates
+    )
 
 
 def test_generate_phase3_family_candidates_repeats_with_fresh_seeds_after_exhaustion():

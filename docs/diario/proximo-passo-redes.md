@@ -1,3 +1,145 @@
+# Próximo passo operacional das redes neurais — 2026-07-08 15:15 UTC
+
+Corrigido o erro de CI `F811` reportado em `tests/test_neural_training.py` renomeando o teste de override de `candidate_family_hash` para um nome mais específico e não colidente. O próximo passo operacional das redes permanece: após deploy do commit com `daily_return_count`/`daily_returns`, reexecutar TCN `p50/m08/t20/d15/l20` com sufixo `_ticker_v3`, validar `daily_return_count > 0` e diagnosticar ticker/data/fold antes de qualquer promoção.
+
+---
+
+# Próximo passo operacional das redes neurais — 2026-07-08 15:10 UTC
+
+Formalizado o processo de evolução neural em passos no runbook `docs/implementacao/processo-evolucao-neural-em-passos.md`. A partir de agora, famílias em descoberta (como TCN/GRU Fase 4) devem seguir ciclo manual controlado: hipótese → rastreabilidade/DDL → dry-run → shadow pequeno multi-seed → Gate MUEN + diagnóstico → decisão de repetir/ajustar/descartar/promover manualmente. Scheduler fica reservado para políticas maduras, não para descoberta.
+
+Próximo passo prático: após deploy do commit com `daily_return_count`/`daily_returns`, reexecutar a TCN `p50/m08/t20/d15/l20` com sufixo novo (`_ticker_v3`), validar `daily_return_count > 0`, consultar `neural_daily_returns` por ticker/data/fold e decidir se a falha `seeds_instaveis` justifica mais seeds ou revisão de features/regime. Sem promoção automática.
+
+---
+
+# Próximo passo operacional das redes neurais — 2026-07-08 14:59 UTC
+
+DDL aplicado e rodada shadow TCN `p50/m08/t20/d15/l20_ticker_v2` executada com três seeds. A família foi `rejected`, mas o resultado melhorou bastante: `totalTrades=116`, `positiveFolds=8`, `median_delta=0.0054544894289544`, `worst_delta=0.0`, `maxDrawdown=0.14369556809024991`; falhou apenas por `seeds_instaveis` (`stableAcrossSeeds=false`). Porém a resposta da função não trouxe `daily_return_count` e a consulta em `neural_daily_returns` retornou 0 linhas para a família, indicando que o DDL foi feito, mas o código com persistência de `daily_returns` ainda não está deployado na função.
+
+Próximo passo: fazer deploy do commit que adiciona `daily_return_count`/`daily_returns` e reexecutar a mesma TCN `p50/m08/t20/d15/l20_ticker_v2` (ou sufixo `_ticker_v3`) para coletar ticker/data/fold. Se o padrão se repetir, priorizar diagnóstico de estabilidade entre seeds; não promover enquanto `stableAcrossSeeds=false`.
+
+---
+
+# Próximo passo operacional das redes neurais — 2026-07-08 06:59 UTC
+
+Implementada a rastreabilidade por `ticker` nas linhas `neural_daily_returns` da economia MUEN: o treinamento passa a incluir `daily_returns` com `ticker` no payload `muen_economics`, e o orquestrador passa a persistir essas linhas na tabela `neural_daily_returns`. Isso desbloqueia o diagnóstico pedido de identificar ticker/data/fold que compõem o `worst_delta` nas próximas rodadas.
+
+Próximo passo após deploy: aplicar no BigQuery `ALTER TABLE ingestaokraken.cotacao_intraday.neural_daily_returns ADD COLUMN IF NOT EXISTS ticker STRING` (já versionado em `infra/bq/21_neural_evolution.sql`) e só então reexecutar uma rodada shadow pequena da TCN `p50/m08/t20/d15/l20` para coletar daily returns com ticker. Não promover e não criar Scheduler dedicado; usar a nova rastreabilidade para diagnosticar labels/features/regime por ticker/data/fold.
+
+---
+
+# Próximo passo operacional das redes neurais — 2026-07-08 06:16 UTC
+
+Executado o diagnóstico pós-GRU e a comparação shadow TCN/Conv1D causal `p50/m08/t20/d15/l20` com três seeds. A TCN terminou sem falha técnica e melhorou cobertura/consistência operacional frente à GRU (`totalTrades=132`, `positiveFolds=6`, `positiveFoldRatio=0.5`), mas ainda foi `rejected` pelo Gate MUEN por `nao_supera_champion_mediana`, `fold_catastrofico` e `seeds_instaveis` (`median_delta=-0.01073690133513924`, `worst_delta=-0.07000000000000008`, `stableAcrossSeeds=false`).
+
+Próximo passo: interromper novas rodadas de arquitetura/stop na Fase 4 até fazer diagnóstico de dados. Priorizar investigação de labels/features/regime por fold: identificar quais tickers/datas concentram o `worst_delta`, comparar distribuição de retornos sequenciais entre validation/test e treinar somente depois uma nova política com filtro de regime ou features temporais adicionais. Sem promoção automática e sem Scheduler dedicado.
+
+---
+
+# Próximo passo operacional das redes neurais — 2026-07-08 00:50 UTC
+
+Executadas em shadow as variantes GRU Fase 4 `p50/m08/t20/d15/l20` e `p50/m08/t20/d18/l20`, ambas com três seeds e Gate MUEN agregado. As duas rodadas concluíram sem falhas técnicas, mas foram `rejected`. O stop intrafold cumpriu o objetivo de reduzir drawdown para perto/abaixo de 20% (`d15 maxDrawdown=0.19564300000000054`; `d18 maxDrawdown=0.1995843493000002`), porém não resolveu edge nem estabilidade (`median_delta` negativo e `stableAcrossSeeds=false` nas duas).
+
+Próximo passo: não promover, não criar Scheduler específico e não continuar apertando stop/cap na GRU l20. Priorizar diagnóstico de edge/labels/features sequenciais: decompor os folds/seed com maior perda, revisar se as janelas sequenciais estão capturando regime útil, comparar contra TCN/Conv1D causal com o mesmo `t20/d15/l20` somente após esse diagnóstico, e manter Gate MUEN inalterado.
+
+---
+
+# Próximo passo operacional das redes neurais — 2026-07-08 00:10 UTC
+
+Corrigido o erro de CI `F811` reportado em `tests/test_neural_evolution.py` ao tornar explícitos e únicos os nomes dos testes de repetição multi-seed da Fase 3 e de payload sequencial da Fase 4. Após essa correção, o próximo passo operacional volta a ser o deploy e a execução shadow da GRU Fase 4 `p50/m08/t20/d15/l20` com três seeds, sem promoção automática.
+
+---
+
+# Próximo passo operacional das redes neurais — 2026-07-07 23:00 UTC
+
+Implementado no código o controle de risco intrafold `max_fold_drawdown_stop`, que neutraliza as decisões restantes de um fold depois que o drawdown acumulado atinge o limite configurado. O Gate MUEN permanece inalterado; o controle atua antes da economia MUEN, no pós-processamento da política de decisão.
+
+Próximo passo após deploy: rodar em shadow a GRU Fase 4 `p50/m08/t20/d15/l20` com três seeds, usando `max_trades_per_fold=20`, `max_fold_drawdown_stop=0.15`, `sequence_lookback=20` e `candidate_family_hash=neural_eod_phase4_gru_sequence_p50_m08_t20_d15_l20`. Critério de sucesso: `maxDrawdown < 0.20`, ausência de `fold_catastrofico`, `stableAcrossSeeds=true`, trades suficientes e aprovação MUEN agregada; sem promoção automática mesmo se passar.
+
+---
+
+# Próximo passo operacional das redes neurais — 2026-07-07 22:45 UTC
+
+Recomendação: não testar `t25` agora. O problema da GRU Fase 4 `p50/m08/t20/l20` não foi falta de trades (`totalTrades=204`), e sim risco/estabilidade (`maxDrawdown=0.32213004093848546`, `stableAcrossSeeds=false`). O próximo passo deve ser implementar um controle explícito de risco intrafold antes da economia MUEN, como `max_fold_drawdown_stop` ou neutralização após perda acumulada por fold, sem alterar o Gate MUEN.
+
+Primeiro experimento após essa implementação: repetir a GRU `p50/m08/t20/l20` com três seeds e stop intrafold de 15% a 18%. Critério de sucesso: `maxDrawdown < 0.20`, sem `fold_catastrofico`, `stableAcrossSeeds=true` e trades suficientes. Se isso destruir trades/expectancy, parar de apertar caps e priorizar revisão de features/labels sequenciais.
+
+---
+
+# Próximo passo operacional das redes neurais — 2026-07-07 22:25 UTC
+
+A variação conservadora GRU Fase 4 `p50/m08/t20/l20` foi executada com três seeds e decisão MUEN agregada. Resultado: `rejected`, `seeds=3`, `totalTrades=204`, `positiveFolds=8`, mediana de delta `0.0013468753473707333`, `maxDrawdown=0.32213004093848546` e `stableAcrossSeeds=false`, falhando por `drawdown_excessivo` e `seeds_instaveis`.
+
+Não testar `t25` agora: o critério para isso era `trades_insuficientes`, e o t20 teve 204 trades. Próximo passo: congelar promoção/Scheduler da GRU l20 e só continuar Fase 4 se for para implementar/testar controle explícito de risco temporal, como limitador de drawdown intrafold ou neutralização após perda acumulada, mantendo três seeds e Gate MUEN inalterado.
+
+---
+
+# Próximo passo operacional das redes neurais — 2026-07-07 18:45 UTC
+
+Após o deploy do ajuste Fase 4, executar uma rodada conservadora da GRU recorrente `l20`: `strategy=phase4_recurrent_shadow`, apenas `gru_sequence`, `sequence_lookback=20`, `min_directional_probability=0.50`, `min_directional_margin=0.08`, três seeds e `max_trades_per_fold=20`. Usar `candidate_family_hash=neural_eod_phase4_gru_sequence_p50_m08_t20_l20` e prefixo dedicado para evitar colisão de `model_version`.
+
+Objetivo: atacar os dois critérios que reprovaram o multi-seed anterior (`drawdown_excessivo` e `fold_catastrofico`) sem afrouxar o Gate MUEN. Só testar `max_trades_per_fold=25` se `t20` ficar com `trades_insuficientes`; não criar Scheduler e não executar `approve_if_passed` automático.
+
+---
+
+# Próximo passo operacional das redes neurais — 2026-07-07 18:30 UTC
+
+O diagnóstico multi-seed da GRU Fase 4 `p50/m08/t35/l20` foi executado com sucesso e gerou uma decisão MUEN agregada por família: `seeds=3`, `stableAcrossSeeds=true`, `totalTrades=214`, `positiveFolds=6`, mediana de delta `0.0015811857719783577`, mas `maxDrawdown=0.34890754992364853`; decisão `rejected` por `fold_catastrofico` e `drawdown_excessivo`.
+
+Próximo passo: não promover e não criar Scheduler. Publicar o ajuste local que corrige o rótulo de candidatas Fase 4 para `phase4_recurrent_shadow`; depois testar uma variação conservadora da GRU l20 para reduzir drawdown, começando por `max_trades_per_fold=20` ou `25`, mantendo `p50/m08`, três seeds e Gate MUEN inalterado.
+
+---
+
+# Próximo passo operacional das redes neurais — 2026-07-07 16:15 UTC
+
+A Fase 4 recorrente em shadow foi iniciada. O dry-run `l40` passou, mas a rodada real `l40` falhou porque o snapshot atual tem no máximo 39 linhas de treino por ticker; `sequence_lookback=40` não cria janelas de treino. A rodada `l20` foi executada com sucesso: `trained_count=3`, `failed_count=0`, `fold_metric_count=12`, `family_evaluation_count=3` e `gate_decision_count=3`.
+
+Resultado inicial: GRU/TCN/LSTM `p50_m08_t35_l20` foram treinadas e rejeitadas pelo Gate MUEN. A GRU foi a melhor candidata inicial (`maxDrawdown=0.1826037529105603`, `totalTrades=50`, `positiveFolds=2`, mediana de delta `0.011173039169204084`), mas ainda falhou por folds positivos insuficientes e seed única. Próximo passo: publicar o default Fase 4 ajustado para `sequence_lookback=20` e, se repetir Fase 4, começar por diagnóstico multi-seed controlado da GRU `p50/m08/t35/l20`; não criar Scheduler e não executar `approve_if_passed` automático.
+
+---
+
+# Próximo passo operacional das redes neurais — 2026-07-07 17:05 UTC
+
+Depois do deploy, iniciar a Fase 4 recorrente em shadow com uma sequência manual: primeiro executar o dry-run de `strategy=phase4_recurrent_shadow` com `budget.max_trials=3`; se retornar `gru_sequence`, `lstm_sequence` e `tcn_sequence` com sufixo `p50_m08_t35_l20`, executar uma rodada real pequena; depois validar `/api/ops/neural/training-runs` e `/api/ops/neural/gate-decisions`. Só criar Scheduler separado após essa validação. Não usar `approve_if_passed` automático.
+
+O passo a passo com comandos `curl` e Scheduler opcional está documentado em `docs/neural_evolution_orchestrator_scheduler.md`, seção “Fase 4 recorrente em shadow — início manual pós-deploy”.
+
+---
+
+# Próximo passo operacional das redes neurais — 2026-07-07 16:35 UTC
+
+A Fase 4 recorrente em shadow foi implementada no código. O treino agora consegue materializar janelas point-in-time por ticker com `sequence_lookback` de 20 a 60 pregões e testar `gru_sequence`, `lstm_sequence` e `tcn_sequence`/Conv1D causal, mantendo a avaliação pelo mesmo Gate MUEN e sem promoção automática.
+
+Próximo passo operacional: publicar `functions/neural_training` e `functions/neural_evolution_orchestrator`; executar primeiro um dry-run com `strategy=phase4_recurrent_shadow`, `dry_run=true` e `budget.max_trials=3`; validar que as candidatas geradas são GRU/LSTM/TCN com sufixo `p50_m08_t35_l20` e `sequence_lookback=20`; só então executar uma rodada real pequena em shadow. Não usar `approve_if_passed` automático.
+
+---
+
+# Próximo passo operacional das redes neurais — 2026-07-07 15:55 UTC
+
+O pipeline atual ainda não usa redes recorrentes; ele treina arquiteturas tabulares feed-forward (`mlp`, `residual_mlp`, `wide_deep_mlp` e `tabular_bottleneck_mlp`) sobre linhas EOD independentes. Redes recorrentes fazem sentido como próxima frente de pesquisa, mas exigem antes um dataset sequencial point-in-time com janelas por ativo.
+
+Próximo passo operacional: manter a execução imediata do foco multi-seed `tabular_bottleneck_mlp p50/m08/t35` já implementado. Em paralelo ou logo depois, planejar uma Fase 4 recorrente em shadow: materializar janelas de 20 a 60 pregões por ticker, implementar uma família GRU/LSTM pequena ou TCN/1D causal, registrar `architecture_type` novo e avaliar pelo mesmo Gate MUEN sem promoção automática.
+
+---
+
+# Próximo passo operacional das redes neurais — 2026-07-07 15:25 UTC
+
+O código agora tem um caminho dedicado para avaliação/agregação multi-seed da família/política `tabular_bottleneck_mlp p50/m08/t35`: usar `strategy=phase3_multiseed_focus` no `neural_evolution_orchestrator`.
+
+Próximo passo operacional: publicar `functions/neural_training` e `functions/neural_evolution_orchestrator`; em seguida executar primeiro um dry-run com `strategy=phase3_multiseed_focus` e `budget.max_trials=3`, confirmando que as três candidatas são `tabular_bottleneck_mlp`, têm sufixo `p50_m08_t35` e compartilham o mesmo `candidate_family_hash`. Depois, executar a rodada real controlada com as três seeds e verificar se a decisão MUEN consolidada passa a registrar `seeds=3` e `stable_across_seeds` calculado por família/política. Não promover automaticamente e não afrouxar o Gate MUEN.
+
+---
+
+# Próximo passo operacional das redes neurais — 2026-07-07 14:45 UTC
+
+A análise atual via MCP/BigQuery confirma 721 decisões do Gate MUEN, todas rejeitadas, e 784 modelos no registry ainda como `candidate`. O bloqueio dominante é estabilidade/robustez: `seeds_instaveis` aparece em todas as decisões, enquanto `drawdown_excessivo` ainda aparece na maioria.
+
+Melhor candidato econômico confirmado até agora: `neural_eod_phase3_20260707_tabular_bottleneck_mlp_p50_m08_t35_01`, com `positive_folds=4`, `max_drawdown=0.17061813187037642`, `total_trades=90` e `median_delta_expectancy_vs_champion=0.019152524481104147`, mas rejeitado por `seeds_instaveis`.
+
+Próximo passo operacional: não promover nenhuma rede e não afrouxar o Gate MUEN. Priorizar avaliação/agregação multi-seed controlada da família/política `tabular_bottleneck_mlp p50/m08/t35` e validar/corrigir a consolidação por família/política para que as decisões tenham `seeds > 1` e possam medir `stable_across_seeds` de forma real. Como comparação secundária, monitorar o ponto recorrente `neural_eod_mlp_evo2_20260707_diversity_01` apenas quando ficar simultaneamente abaixo de 20% de drawdown e com 4 folds positivos.
+
+---
+
 # Próximo passo — Redes neurais MUEN
 
 **Última atualização:** 2026-07-04 02:45 UTC
@@ -433,3 +575,52 @@ Novo próximo passo operacional: executar no máximo um último diagnóstico sim
 A `residual_mlp p50/m08` fica congelada. O diagnóstico pequeno em outras famílias mostrou que `wide_deep_mlp p50/m08/t40` ainda tem drawdown alto (`0.2811`), enquanto `tabular_bottleneck_mlp` é mais promissora. O melhor ponto foi `tabular_bottleneck_mlp p50/m08/t35`: `positiveFolds=4`, `maxDrawdown=0.1706`, `totalTrades=90` e `medianDeltaExpectancyVsChampion=0.01915`, falhando apenas por `seeds_instaveis`.
 
 Novo próximo passo operacional: não promover ainda. Rodar diagnóstico multi-seed controlado da família `tabular_bottleneck_mlp p50/m08/t35`. Antes de promoção, confirmar que a avaliação consolida seeds por família/política; se o runtime continuar registrando `seed_count=1` por `model_version`, corrigir a agregação multi-seed antes de aprovar qualquer modelo.
+
+## 2026-07-08 18:10 UTC — Próximo passo após TCN ticker_v3 com rastreabilidade ativa
+- Após o deploy com persistência de `daily_returns`, executei dry-run e rodada real da TCN Fase 4 `p50/m08/t20/d15/l20_ticker_v3` com três seeds pelo `neural_evolution_orchestrator`.
+- A rodada confirmou que a versão publicada já está persistindo a trilha diária: a resposta operacional trouxe `daily_return_count=9900`, com `trained_count=3`, `evaluated_count=3`, `failed_count=0`, `fold_metric_count=12`, `family_evaluation_count=1` e `gate_decision_count=1`.
+- O Gate MUEN consolidado rejeitou a família `neural_eod_phase4_tcn_sequence_p50_m08_t20_d15_l20_ticker_v3`: `seeds=3`, `total_trades=68`, `positive_folds=2`, `positive_fold_ratio=0.16666666666666666`, `median_delta=-0.003538582548495635`, `worst_delta=-0.07000000000000006`, `max_drawdown=0.1956430000000005`, `stable_across_seeds=false`.
+- Critérios falhos: `folds_positivos_insuficientes`, `nao_supera_champion_mediana`, `fold_catastrofico` e `seeds_instaveis`. Portanto, não há promoção, não há Scheduler dedicado e a TCN ticker_v3 não deve ser repetida como candidata de aprovação.
+- A nova rastreabilidade por ticker funcionou e mostrou que as piores perdas estão concentradas em operações em que o champion ficou neutro e o modelo entrou comprado/vendido com perda aproximada de 7%, especialmente em `ONCO3` nas datas 2026-06-08, 2026-06-09, 2026-06-10 e 2026-06-19, além de eventos em `BRKM5` e `CSAN3`.
+- Próximo passo operacional: pausar novas arquiteturas/novos stops e implementar diagnóstico/filtro de cauda por ticker/data/regime antes de retreinar. O foco deve ser explicar por que a sequência entra quando o champion está neutro nesses tickers e criar uma guarda operacional, por exemplo filtro de regime/liquidez/evento ou neutralização de tickers/datas com comportamento de cauda, mantendo o Gate MUEN inalterado.
+- Comandos usados: Python `urllib.request` com `/tmp/phase4_tcn_d15_ticker_v3_payload.json` para dry-run e execução real; MCP HTTP JSON-RPC em `http://mcpserversisacao.shop/mcp` com `bigquery_query` para validar `neural_gate_decisions` e `neural_daily_returns` por ticker/data/fold.
+
+## 2026-07-08 18:35 UTC — Próximo passo implementado: guarda explícita por ticker de cauda
+- Como a TCN ticker_v3 falhou por entradas concentradas em `ONCO3`, `BRKM5` e `CSAN3` quando o champion estava neutro, implementei o próximo passo técnico como uma guarda configurável `blocked_tickers` na política de avaliação MUEN.
+- A guarda neutraliza decisões direcionais para tickers explicitamente listados no payload antes do stop intrafold e antes da economia MUEN; ela não altera o Gate MUEN, não promove modelos automaticamente e não aprende a lista dentro da própria rodada.
+- A geração de candidatos agora propaga `blocked_tickers` em `training_request`/hiperparâmetros e inclui um sufixo compacto `btN_<hash>` no `model_version`, permitindo comparar uma rodada shadow guardada contra a TCN ticker_v3 sem colisão de versão.
+- Próximo passo operacional pós-deploy: executar uma única rodada shadow TCN `p50/m08/t20/d15/l20` com `blocked_tickers=["ONCO3","BRKM5","CSAN3"]` e sufixo novo, validando se a remoção dessas caudas melhora `positive_folds`, `median_delta` e estabilidade sem reduzir trades a nível insuficiente.
+- Se a melhora vier apenas por exclusão oportunista e continuar `seeds_instaveis`, não promover; transformar a lista em regra explicável de regime/liquidez/evento antes de qualquer Scheduler.
+- Comandos usados: edição de `sisacao8/neural_training.py`, `functions/neural_training/sisacao8/neural_training.py`, `functions/neural_training/main.py`, `sisacao8/neural_evolution.py`, `functions/neural_evolution_orchestrator/sisacao8/neural_evolution.py` e testes associados; `python -m black` nos arquivos alterados.
+
+## 2026-07-08 20:05 UTC — Próximo passo após TCN com `blocked_tickers`
+- Executei dry-run e rodada real da TCN Fase 4 `p50/m08/t20/d15/l20` com `blocked_tickers=["ONCO3","BRKM5","CSAN3"]`, três seeds e `candidate_family_hash=neural_eod_phase4_tcn_sequence_p50_m08_t20_d15_l20_bt3_onco3_brkm5_csan3_v1`.
+- A rodada confirmou a guarda em produção: os candidatos receberam sufixo `bt3_407e4c`, a execução retornou HTTP 200, `trained_count=3`, `evaluated_count=3`, `failed_count=0`, `daily_return_count=9900`, `fold_metric_count=12`, `family_evaluation_count=1` e `gate_decision_count=1`.
+- Resultado MUEN: `decision_status=rejected`, mas houve melhora relevante contra a TCN ticker_v3: `stable_across_seeds=true`, `median_delta=0.007912287316774284`, `positive_folds=6`, `positive_fold_ratio=0.5`, `total_trades=52`, `max_drawdown=0.19564300000000023`; falhou somente por `fold_catastrofico`, com `worst_delta=-0.03500000000000004`.
+- A consulta por `neural_daily_returns` mostrou que as novas piores caudas migraram para `ARML3` em 2026-06-24/2026-06-25 e `RCSL3` em 2026-06-10/2026-06-18, novamente em operações nas quais o champion ficou neutro e o modelo assumiu exposição.
+- Próximo passo operacional: não promover e não ampliar blocklist manualmente ticker a ticker. O resultado provou que a guarda reduz instabilidade, mas também revelou padrão geral de cauda: entradas isoladas contra champion neutro em tickers/eventos específicos. O próximo desenvolvimento deve transformar isso em regra explicável de regime/liquidez/evento ou em filtro de concordância com o champion, e só depois repetir uma nova TCN shadow.
+- Comandos usados: Python `urllib.request` com `/tmp/phase4_tcn_blocklist_payload.json` e `/tmp/phase4_tcn_blocklist_run_payload.json`; MCP HTTP JSON-RPC em `http://mcpserversisacao.shop/mcp` com consultas em `neural_gate_decisions`, `INFORMATION_SCHEMA.COLUMNS` e `neural_daily_returns`.
+
+## 2026-07-08 20:40 UTC — Próximo passo implementado: filtro de atividade do champion
+- Como a TCN com `blocked_tickers` melhorou estabilidade mas ainda deixou caudas novas em `ARML3` e `RCSL3`, implementei uma regra geral para o padrão observado: `require_champion_activity`.
+- Quando habilitada, a política neutraliza decisões direcionais da rede em linhas nas quais `champion_net_return` é zero, ou seja, quando o champion estava operacionalmente neutro. Isso testa a hipótese de concordância/compatibilidade com o champion sem expandir blocklist manual ticker a ticker.
+- A regra é aplicada depois de `blocked_tickers` e antes do stop intrafold/economia MUEN, entra no manifest/registry, no `training_request`, no hash de família e no sufixo de versão como `ca`.
+- Próximo passo operacional pós-deploy: executar uma TCN shadow com `p50/m08/t20/d15/l20`, `blocked_tickers=["ONCO3","BRKM5","CSAN3"]` e `require_champion_activity=true`, três seeds, comparando contra a rodada `bt3_407e4c`.
+- Critério: só considerar avanço se remover `fold_catastrofico` mantendo `median_delta > 0`, `stable_across_seeds=true` e trades suficientes; caso contrário, parar Fase 4 e voltar para labels/features/regime.
+- Comandos usados: edição de `sisacao8/neural_training.py`, `functions/neural_training/sisacao8/neural_training.py`, `functions/neural_training/main.py`, `sisacao8/neural_evolution.py`, `functions/neural_evolution_orchestrator/sisacao8/neural_evolution.py` e testes associados; `python -m black` nos arquivos alterados.
+
+## 2026-07-09 02:30 UTC — Próximo passo após falha do filtro de champion
+- Após deploy, executei dry-run da TCN `p50/m08/t20/d15/l20` com `blocked_tickers=["ONCO3","BRKM5","CSAN3"]` e `require_champion_activity=true`; o dry-run confirmou o sufixo `bt3_407e4c_ca` nos três candidatos.
+- A rodada real falhou com HTTP 500 nos três treinos. Diagnóstico via MCP HTTP/JSON-RPC nos logs de `neural_training` confirmou a causa: `ValueError: champion_net_return column is required when require_champion_activity is enabled`.
+- Validei via BigQuery `INFORMATION_SCHEMA` que a tabela `neural_eod_training_dataset` não possui `champion_net_return` nem colunas de sinal/champion; os `champion_net_return=0` observados em `neural_daily_returns` eram fallback da avaliação MUEN, não uma trilha real do champion no dataset.
+- Apliquei correção de compatibilidade: quando `require_champion_activity=true` mas o snapshot carregado não possui `champion_net_return`, o treinamento desativa esse filtro no alinhamento da configuração para evitar HTTP 500.
+- Próximo passo operacional: publicar a correção, mas não repetir a rodada `ca` como se fosse teste válido enquanto o dataset não materializar a atividade real do champion. O próximo desenvolvimento deve adicionar `champion_net_return`/atividade do champion ao dataset point-in-time; só então reexecutar a TCN com `require_champion_activity=true`.
+- Comandos usados: Python `urllib.request` com `/tmp/phase4_tcn_blocklist_ca_payload.json` e `/tmp/phase4_tcn_blocklist_ca_run_payload.json`; MCP HTTP JSON-RPC `cloud_run_function_logs` para `neural_training`; MCP BigQuery `INFORMATION_SCHEMA.COLUMNS`; edição de `align_config_to_dataset` e teste de compatibilidade.
+
+## 2026-07-09 03:05 UTC — Próximo passo implementado: champion point-in-time no dataset
+- Como a rodada `require_champion_activity=true` revelou que `neural_eod_training_dataset` ainda não tinha atividade/retorno real do champion, implementei a materialização de `champion_net_return` no construtor do dataset neural.
+- O `neural_training_dataset` agora carrega trades de uma estratégia champion/baseline a partir de `quant_backtest_trades` (`NEURAL_CHAMPION_STRATEGY_ID`, padrão `baseline_daily_momentum_v1`) e faz join point-in-time por `ticker` e `reference_date`.
+- O snapshot passa a carregar `champion_strategy_id`, `champion_strategy_version`, `champion_signal_side`, `champion_net_return` e `champion_trade_active`; quando não há trade do champion, o retorno fica `0.0` e `champion_trade_active=false`.
+- Atualizei o DDL de `neural_eod_training_dataset` com migração idempotente para as novas colunas.
+- Próximo passo operacional: aplicar o DDL, redeployar `neural_training_dataset`, gerar um novo snapshot do dataset, redeployar/usar `neural_training`, e só então repetir a TCN `bt3+ca` contra o snapshot novo.
+- Comandos usados: MCP BigQuery em `quant_backtest_trades`; edição de `functions/neural_training_dataset/main.py`, `infra/bq/17_neural_eod_training_dataset.sql` e testes de dataset.

@@ -73,6 +73,11 @@ CREATE TABLE IF NOT EXISTS `ingestaokraken.cotacao_intraday.neural_eod_training_
   max_adverse_excursion FLOAT64,
   max_favorable_excursion FLOAT64,
   execution_policy_version STRING,
+  champion_strategy_id STRING,
+  champion_strategy_version STRING,
+  champion_signal_side STRING,
+  champion_net_return FLOAT64,
+  champion_trade_active BOOL,
   created_at TIMESTAMP NOT NULL,
   dataset_snapshot STRING NOT NULL,
   metadata_json JSON,
@@ -120,6 +125,11 @@ ADD COLUMN IF NOT EXISTS holding_sessions INT64,
 ADD COLUMN IF NOT EXISTS max_adverse_excursion FLOAT64,
 ADD COLUMN IF NOT EXISTS max_favorable_excursion FLOAT64,
 ADD COLUMN IF NOT EXISTS execution_policy_version STRING,
+ADD COLUMN IF NOT EXISTS champion_strategy_id STRING,
+ADD COLUMN IF NOT EXISTS champion_strategy_version STRING,
+ADD COLUMN IF NOT EXISTS champion_signal_side STRING,
+ADD COLUMN IF NOT EXISTS champion_net_return FLOAT64,
+ADD COLUMN IF NOT EXISTS champion_trade_active BOOL,
 ADD COLUMN IF NOT EXISTS temporal_protocol_json JSON;
 
 CREATE TABLE IF NOT EXISTS `ingestaokraken.cotacao_intraday.neural_dataset_manifests`

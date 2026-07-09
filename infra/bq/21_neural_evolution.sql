@@ -239,6 +239,7 @@ CREATE TABLE IF NOT EXISTS `ingestaokraken.cotacao_intraday.neural_daily_returns
   fold_id STRING NOT NULL,
   seed INT64 NOT NULL,
   reference_date DATE NOT NULL,
+  ticker STRING,
   model_net_return FLOAT64 NOT NULL,
   champion_net_return FLOAT64 NOT NULL,
   delta_net_return FLOAT64 NOT NULL,
@@ -248,10 +249,13 @@ CREATE TABLE IF NOT EXISTS `ingestaokraken.cotacao_intraday.neural_daily_returns
   created_at TIMESTAMP NOT NULL
 )
 PARTITION BY reference_date
-CLUSTER BY protocol_version, dataset_snapshot, candidate_family_hash, fold_id
+CLUSTER BY protocol_version, dataset_snapshot, candidate_family_hash, ticker
 OPTIONS (
   description = "Retornos diários pareados para comparação contra champion e controle de múltiplos testes"
 );
+
+ALTER TABLE `ingestaokraken.cotacao_intraday.neural_daily_returns`
+ADD COLUMN IF NOT EXISTS ticker STRING;
 
 CREATE TABLE IF NOT EXISTS `ingestaokraken.cotacao_intraday.neural_family_evaluations`
 (

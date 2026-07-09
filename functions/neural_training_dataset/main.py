@@ -34,6 +34,12 @@ TRAINING_DATASET_TABLE_ID = os.environ.get(
 MANIFESTS_TABLE_ID = os.environ.get(
     "BQ_NEURAL_DATASET_MANIFESTS_TABLE", "neural_dataset_manifests"
 )
+CHAMPION_BACKTEST_TABLE_ID = os.environ.get(
+    "BQ_CHAMPION_BACKTEST_TABLE", "quant_backtest_trades"
+)
+DEFAULT_CHAMPION_STRATEGY_ID = os.environ.get(
+    "NEURAL_CHAMPION_STRATEGY_ID", "baseline_daily_momentum_v1"
+)
 PROTOCOL_VERSION = os.environ.get("NEURAL_PROTOCOL_VERSION", "neural_eod_protocol_v1")
 UNIVERSE_VERSION = os.environ.get("NEURAL_UNIVERSE_VERSION", "b3_point_in_time_v1")
 BQ_LOCATION = os.environ.get("BQ_LOCATION", "us-east1").replace("region-", "")
@@ -108,6 +114,11 @@ TRAINING_DATASET_COLUMNS = [
     "max_adverse_excursion",
     "max_favorable_excursion",
     "execution_policy_version",
+    "champion_strategy_id",
+    "champion_strategy_version",
+    "champion_signal_side",
+    "champion_net_return",
+    "champion_trade_active",
     "created_at",
     "dataset_snapshot",
     "metadata_json",
@@ -172,6 +183,8 @@ def _neural_training_dataset(request: Any) -> tuple[Dict[str, Any], int]:
             payload, "min_history_days", DEFAULT_MIN_HISTORY_DAYS
         ),
     )
+    champion_trades = _load_champion_trades(client, start_date, end_date, payload)
+    dataset = _merge_champion_trades(dataset, champion_trades, payload)
     manifest = build_dataset_manifest(
         dataset,
         dataset_snapshot=snapshot,
@@ -242,6 +255,12 @@ def _parse_date(value: Any) -> dt.date | None:
     if isinstance(value, dt.date):
         return value
     return dt.datetime.strptime(str(value), "%Y-%m-%d").date()
+
+
+def _optional_str(value: Any) -> str | None:
+    if value is None or value == "":
+        return None
+    return str(value)
 
 
 def _int_payload(payload: Mapping[str, Any], key: str, default: int) -> int:
@@ -390,6 +409,90 @@ def _load_holidays(
             "Could not load holidays; using weekend-only calendar", exc_info=True
         )
         return set()
+
+
+def _load_champion_trades(
+    client: bigquery.Client,
+    start_date: dt.date,
+    end_date: dt.date,
+    payload: Mapping[str, Any],
+) -> pd.DataFrame:
+    strategy_id = str(
+        payload.get("champion_strategy_id") or DEFAULT_CHAMPION_STRATEGY_ID or ""
+    ).strip()
+    if not strategy_id:
+        return pd.DataFrame()
+    strategy_version = _optional_str(payload.get("champion_strategy_version"))
+    config_version = _optional_str(payload.get("champion_config_version"))
+    query = f"""
+        SELECT
+          ticker,
+          reference_date,
+          strategy_id AS champion_strategy_id,
+          strategy_version AS champion_strategy_version,
+          side AS champion_signal_side,
+          net_pnl_pct AS champion_net_return
+        FROM `{_table_ref(CHAMPION_BACKTEST_TABLE_ID)}`
+        WHERE reference_date BETWEEN @start_date AND @end_date
+          AND strategy_id = @strategy_id
+          AND (@strategy_version IS NULL OR strategy_version = @strategy_version)
+          AND (@config_version IS NULL OR config_version = @config_version)
+    """
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ScalarQueryParameter("start_date", "DATE", start_date),
+            bigquery.ScalarQueryParameter("end_date", "DATE", end_date),
+            bigquery.ScalarQueryParameter("strategy_id", "STRING", strategy_id),
+            bigquery.ScalarQueryParameter(
+                "strategy_version", "STRING", strategy_version
+            ),
+            bigquery.ScalarQueryParameter("config_version", "STRING", config_version),
+        ]
+    )
+    return client.query(query, job_config=job_config).to_dataframe()
+
+
+def _merge_champion_trades(
+    dataset: pd.DataFrame, champion_trades: pd.DataFrame, payload: Mapping[str, Any]
+) -> pd.DataFrame:
+    prepared = dataset.copy()
+    strategy_id = (
+        str(
+            payload.get("champion_strategy_id") or DEFAULT_CHAMPION_STRATEGY_ID or ""
+        ).strip()
+        or None
+    )
+    if champion_trades.empty:
+        prepared["champion_strategy_id"] = strategy_id
+        prepared["champion_strategy_version"] = _optional_str(
+            payload.get("champion_strategy_version")
+        )
+        prepared["champion_signal_side"] = None
+        prepared["champion_net_return"] = 0.0
+        prepared["champion_trade_active"] = False
+        return prepared
+
+    trades = champion_trades.copy()
+    trades["reference_date"] = pd.to_datetime(trades["reference_date"]).dt.date
+    trades["ticker"] = trades["ticker"].astype(str).str.upper()
+    trades = trades.sort_values(["ticker", "reference_date"]).drop_duplicates(
+        ["ticker", "reference_date"], keep="last"
+    )
+    prepared["ticker"] = prepared["ticker"].astype(str).str.upper()
+    merged = prepared.merge(
+        trades,
+        on=["ticker", "reference_date"],
+        how="left",
+    )
+    merged["champion_strategy_id"] = merged["champion_strategy_id"].fillna(strategy_id)
+    merged["champion_signal_side"] = merged["champion_signal_side"].where(
+        merged["champion_signal_side"].notna(), None
+    )
+    merged["champion_net_return"] = pd.to_numeric(
+        merged["champion_net_return"], errors="coerce"
+    ).fillna(0.0)
+    merged["champion_trade_active"] = merged["champion_signal_side"].notna()
+    return merged
 
 
 def _prepare_for_bigquery(
