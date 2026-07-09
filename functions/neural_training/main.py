@@ -270,6 +270,18 @@ def _training_config(payload: Mapping[str, Any]) -> BaselineMlpConfig:
             payload.get("require_champion_activity"),
             defaults.require_champion_activity,
         ),
+        min_regime_return_5d=_optional_float_value(
+            payload.get("min_regime_return_5d"),
+            defaults.min_regime_return_5d,
+        ),
+        min_regime_financial_volume_z20=_optional_float_value(
+            payload.get("min_regime_financial_volume_z20"),
+            defaults.min_regime_financial_volume_z20,
+        ),
+        min_regime_volume_ratio_20d=_optional_float_value(
+            payload.get("min_regime_volume_ratio_20d"),
+            defaults.min_regime_volume_ratio_20d,
+        ),
         candidate_family_hash=(
             str(payload.get("candidate_family_hash"))
             if payload.get("candidate_family_hash")

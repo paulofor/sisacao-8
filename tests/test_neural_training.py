@@ -15,6 +15,7 @@ from sisacao8.neural_training import (
     _build_model,
     apply_champion_activity_filter,
     apply_fold_drawdown_stop,
+    apply_regime_liquidity_filter,
     apply_ticker_blocklist,
     apply_fold_trade_budget,
     build_artifact_manifest,
@@ -484,6 +485,76 @@ def test_build_muen_economics_applies_champion_activity_filter() -> None:
         min_directional_probability=0.45,
         min_directional_margin=0.05,
         require_champion_activity=True,
+    )
+
+    economics = build_muen_economics_from_predictions(
+        dataset,
+        probabilities,
+        config=config,
+        cost_multipliers=(1.0,),
+    )
+
+    assert economics["fold_metrics"][0]["trades"] == 1
+    assert math.isclose(economics["fold_metrics"][0]["total_net_return"], 0.03)
+
+
+def test_apply_regime_liquidity_filter_neutralizes_weak_regime_rows() -> None:
+    labels = np.array(["up", "down", "up", "neutral"], dtype=object)
+    frame = pd.DataFrame(
+        {
+            "return_5d": [0.02, -0.01, 0.04, 0.05],
+            "financial_volume_z20": [1.2, 1.3, 0.2, 2.0],
+            "volume_ratio_20d": [1.5, 1.6, 1.7, 0.5],
+        }
+    )
+
+    adjusted = apply_regime_liquidity_filter(
+        labels,
+        frame,
+        min_regime_return_5d=0.0,
+        min_regime_financial_volume_z20=1.0,
+        min_regime_volume_ratio_20d=1.4,
+    )
+
+    assert adjusted.tolist() == ["up", "neutral", "neutral", "neutral"]
+
+
+def test_build_muen_economics_applies_regime_liquidity_filter() -> None:
+    dataset = pd.DataFrame(
+        [
+            {
+                "dataset_split": "validation",
+                "reference_date": dt.date(2026, 1, day),
+                "ticker": ticker,
+                "label_class": "up",
+                "buy_net_return": value,
+                "sell_net_return": -value,
+                "return_5d": return_5d,
+                "financial_volume_z20": financial_volume_z20,
+                "volume_ratio_20d": volume_ratio_20d,
+            }
+            for (
+                day,
+                ticker,
+                value,
+                return_5d,
+                financial_volume_z20,
+                volume_ratio_20d,
+            ) in [
+                (1, "ARML3", -0.07, -0.04, 0.2, 1.6),
+                (2, "PETR4", 0.03, 0.04, 1.2, 1.5),
+                (3, "RCSL3", -0.07, 0.03, 0.3, 0.8),
+            ]
+        ]
+    )
+    probabilities = {"validation": np.array([[0.10, 0.20, 0.70]] * 3)}
+    config = BaselineMlpConfig(
+        model_version="regime_guarded",
+        min_directional_probability=0.45,
+        min_directional_margin=0.05,
+        min_regime_return_5d=0.0,
+        min_regime_financial_volume_z20=1.0,
+        min_regime_volume_ratio_20d=1.4,
     )
 
     economics = build_muen_economics_from_predictions(

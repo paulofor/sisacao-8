@@ -121,6 +121,9 @@ class BaselineMlpConfig:
     max_fold_drawdown_stop: float | None = None
     blocked_tickers: tuple[str, ...] = ()
     require_champion_activity: bool = False
+    min_regime_return_5d: float | None = None
+    min_regime_financial_volume_z20: float | None = None
+    min_regime_volume_ratio_20d: float | None = None
     candidate_family_hash: str | None = None
     sequence_lookback: int = 40
 
@@ -155,6 +158,11 @@ class BaselineMlpConfig:
             )
         if any(not str(ticker).strip() for ticker in self.blocked_tickers):
             raise ValueError("blocked_tickers entries must be non-empty strings")
+        if (
+            self.min_regime_volume_ratio_20d is not None
+            and self.min_regime_volume_ratio_20d < 0
+        ):
+            raise ValueError("min_regime_volume_ratio_20d must be non-negative")
         if not 20 <= self.sequence_lookback <= 60:
             raise ValueError("sequence_lookback must be between 20 and 60 pregões")
         allowed_architectures = {
@@ -497,6 +505,13 @@ def build_muen_economics_from_predictions(
             evaluation_frame,
             require_champion_activity=config.require_champion_activity,
         )
+        labels = apply_regime_liquidity_filter(
+            labels,
+            evaluation_frame,
+            min_regime_return_5d=config.min_regime_return_5d,
+            min_regime_financial_volume_z20=config.min_regime_financial_volume_z20,
+            min_regime_volume_ratio_20d=config.min_regime_volume_ratio_20d,
+        )
         labels = apply_fold_drawdown_stop(
             labels,
             evaluation_frame,
@@ -706,6 +721,53 @@ def apply_champion_activity_filter(
     ).fillna(0.0)
     neutral_mask = champion_returns.abs().to_numpy() <= 1e-12
     adjusted[neutral_mask] = "neutral"
+    return adjusted
+
+
+def apply_regime_liquidity_filter(
+    labels: np.ndarray,
+    frame: pd.DataFrame,
+    *,
+    min_regime_return_5d: float | None = None,
+    min_regime_financial_volume_z20: float | None = None,
+    min_regime_volume_ratio_20d: float | None = None,
+) -> np.ndarray:
+    """Neutralize trades outside a configured liquidity/momentum regime.
+
+    The guard is deliberately simple and payload-driven.  It encodes the
+    post-mortem finding that the recurrent TCN traded in weak liquidity/momentum
+    conditions while the champion was active mostly in stronger regimes.  It is
+    a softer alternative to requiring exact champion activity.
+    """
+
+    thresholds = {
+        "return_5d": min_regime_return_5d,
+        "financial_volume_z20": min_regime_financial_volume_z20,
+        "volume_ratio_20d": min_regime_volume_ratio_20d,
+    }
+    active_thresholds = {
+        column: threshold
+        for column, threshold in thresholds.items()
+        if threshold is not None
+    }
+    if not active_thresholds:
+        return labels
+    if len(labels) != len(frame):
+        raise ValueError("labels and frame must have the same length")
+    missing = [column for column in active_thresholds if column not in frame.columns]
+    if missing:
+        raise ValueError(
+            "regime liquidity filter requires dataset columns: "
+            + ", ".join(sorted(missing))
+        )
+
+    allowed = pd.Series(True, index=frame.index)
+    for column, threshold in active_thresholds.items():
+        values = pd.to_numeric(frame[column], errors="coerce")
+        allowed &= values.ge(float(threshold)).fillna(False)
+
+    adjusted = labels.copy()
+    adjusted[~allowed.to_numpy()] = "neutral"
     return adjusted
 
 

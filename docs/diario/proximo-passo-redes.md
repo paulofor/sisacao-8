@@ -631,3 +631,37 @@ Novo próximo passo operacional: não promover ainda. Rodar diagnóstico multi-s
 - A validação do snapshot mostrou `champion_active_rows=0`, `champion_return_rows=0` e `champion_strategy_ids=0`; portanto o DDL está correto, mas a Cloud Function publicada ainda não está com o código que faz join em `quant_backtest_trades` e popula as colunas `champion_*`.
 - Próximo passo operacional: redeployar `neural_training_dataset` com o commit que materializa `champion_net_return`; depois recriar o snapshot `neural_eod_training_dataset_2026-06-27_champion_v1` com `replace_snapshot=true` e validar novamente `champion_active_rows > 0` antes de rodar TCN `bt3+ca`.
 - Comandos usados: MCP HTTP JSON-RPC em `http://mcpserversisacao.shop/mcp` com `INFORMATION_SCHEMA.COLUMNS` e agregação do snapshot; Python `urllib.request` para chamar `neural_training_dataset` com `/tmp/neural_training_dataset_champion_payload.json`.
+
+## 2026-07-09 08:10 UTC — Resultado pós-deploy champion e parada da linha TCN `bt3+ca`
+- Após o deploy do `neural_training_dataset`, recriei o snapshot `neural_eod_training_dataset_2026-06-27_champion_v1` com `replace_snapshot=true` e validei que agora há dados reais do champion: `9044` linhas, `champion_active_rows=718`, `champion_return_rows=9044` e `champion_strategy_ids=1`.
+- Em seguida executei dry-run e rodada real da TCN Fase 4 `p50/m08/t20/d15/l20` com `blocked_tickers=["ONCO3","BRKM5","CSAN3"]` e `require_champion_activity=true` usando a família `neural_eod_phase4_tcn_sequence_p50_m08_t20_d15_l20_bt3_ca_v2`.
+- A rodada real foi tecnicamente saudável (`trained_count=3`, `evaluated_count=3`, `failed_count=0`, `daily_return_count=9900`, `gate_decision_count=1`), mas o Gate MUEN rejeitou a família: `total_trades=0`, `positive_folds=0`, `median_delta=0.0`, `worst_delta=0.0`, `max_drawdown=0.0`, `stable_across_seeds=false`.
+- Conclusão: o filtro de atividade do champion é conservador demais nesta configuração, pois elimina todas as operações. Não promover, não agendar e não continuar ajustando TCN com mais blocklist/stop.
+- Novo próximo passo operacional: usar o snapshot com `champion_*` para análise de dados/target/regime antes de novo treino. Investigar onde o champion opera (`champion_trade_active=true`) versus onde a rede tinha edge, revisar features/labels/regimes e só abrir nova rodada Fase 4 com uma hipótese estrutural clara que preserve trades suficientes e evite caudas, mantendo o Gate MUEN inalterado.
+- Comandos usados: Python `urllib.request` para recriar snapshot e acionar orquestrador; MCP HTTP JSON-RPC em `http://mcpserversisacao.shop/mcp` com consultas BigQuery em `neural_eod_training_dataset`, `neural_gate_decisions` e `neural_daily_returns`.
+
+## 2026-07-09 08:45 UTC — Próximo passo operacional materializado em SQL
+- O próximo passo agora está convertido em consultas executáveis no arquivo `docs/implementacao/diagnostico-neural-champion-regime.sql`.
+- O SQL mede a sobreposição entre trades da TCN `bt3`, atividade real do champion, features de regime/liquidez e piores ticker/data/fold, além de confirmar a rejeição `bt3+ca` por trades zerados.
+- Tentei executar via MCP HTTP/JSON-RPC, mas o serviço retornou `503 Service Unavailable` em múltiplas tentativas; por regra operacional, não troquei para HTTPS.
+- Assim que o MCP/BigQuery estiver disponível, executar esse SQL e decidir a próxima hipótese estrutural de features/labels/regime. Até lá, manter: sem promoção, sem Scheduler e sem novas variações TCN de blocklist/stop.
+
+## 2026-07-09 09:05 UTC — Retry MCP ainda indisponível
+- Tentei novamente executar o diagnóstico champion/regime pelo MCP HTTP/JSON-RPC, mas o `initialize` continuou retornando `503 Service Unavailable`.
+- Não alterar a decisão operacional com MCP indisponível: manter sem promoção, sem Scheduler e sem novas variações TCN até executar `docs/implementacao/diagnostico-neural-champion-regime.sql` no BigQuery/MCP.
+
+## 2026-07-09 09:25 UTC — Próximo passo após diagnóstico champion/regime
+- O diagnóstico finalmente executou via MCP/BigQuery e confirmou que a TCN `bt3` operou `52` vezes, todas com `champion_trade_active=false`; por isso `require_champion_activity=true` zerou a família `bt3+ca`.
+- A TCN `bt3` teve `avg_delta=0.00750746917739292`, mas ainda manteve cauda `worst_delta=-0.07000000000000013`; suas operações ficaram em regime médio de momentum/liquidez fracos (`avg_return_5d=-0.01606386505543051`, `avg_financial_volume_z20=-0.16317770062582426`, `avg_volume_ratio_20d=0.9067599264055777`).
+- O champion ativo em validation/test aparece em poucos casos, porém com volume/momentum bem mais fortes (`avg_financial_volume_z20` aproximadamente `0.93`–`1.12`, `avg_volume_ratio_20d` aproximadamente `1.42`–`1.85`, `avg_return_5d` positivo).
+- Próximo passo operacional: não repetir `require_champion_activity` binário. Implementar uma guarda de regime/liquidez/momentum configurável e mais suave, baseada em colunas já existentes (`financial_volume_z20`, `volume_ratio_20d`, `return_5d`/`log_return_5d`), e só então executar nova rodada shadow pequena. Manter sem promoção e sem Scheduler.
+
+## 2026-07-09 10:05 UTC — Guarda de regime/liquidez/momentum implementada
+- Implementei a alternativa ao filtro binário `require_champion_activity`: uma guarda configurável por thresholds `min_regime_return_5d`, `min_regime_financial_volume_z20` e `min_regime_volume_ratio_20d`.
+- A política neutraliza trades fora do regime configurado, entra no `training_request`/hiperparâmetros, no hash da família e no `model_version` como sufixo `rg_<hash>`.
+- Próximo passo pós-deploy: executar dry-run e depois uma rodada shadow pequena TCN `bt3+regime`, com `blocked_tickers=["ONCO3","BRKM5","CSAN3"]`, `require_champion_activity=false`, `min_regime_return_5d=0.0`, `min_regime_financial_volume_z20=1.0`, `min_regime_volume_ratio_20d=1.4`, três seeds, e comparar contra `bt3` e `bt3+ca`.
+- Critério: avançar somente se houver trades suficientes, `median_delta > 0`, `stable_across_seeds=true` e remoção de `fold_catastrofico`; caso contrário, encerrar Fase 4 TCN e voltar para labels/features.
+
+## 2026-07-09 11:35 UTC — Dry-run mostrou deploy pendente para guarda de regime
+- Executei dry-run da TCN `bt3+regime`; a função respondeu HTTP 200, mas os candidatos ainda vieram sem sufixo `rg_<hash>`, indicando que a versão publicada do orquestrador ainda não propaga `min_regime_return_5d`, `min_regime_financial_volume_z20` e `min_regime_volume_ratio_20d`.
+- Não executar rodada real nesse estado, pois ela repetiria a política `bt3` antiga. Próximo passo: redeployar `neural_evolution_orchestrator` e `neural_training`; depois repetir o dry-run e exigir `rg_<hash>` no `model_version` antes da execução real.

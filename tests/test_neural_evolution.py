@@ -169,6 +169,9 @@ def test_generate_phase4_candidates_propagate_blocked_tickers_guard() -> None:
                 "max_fold_drawdown_stop": 0.15,
                 "blocked_tickers": ["onco3", "BRKM5", "CSAN3"],
                 "require_champion_activity": True,
+                "min_regime_return_5d": 0.0,
+                "min_regime_financial_volume_z20": 1.0,
+                "min_regime_volume_ratio_20d": 1.4,
             }
         ],
     )
@@ -186,8 +189,15 @@ def test_generate_phase4_candidates_propagate_blocked_tickers_guard() -> None:
     )
     assert candidate.training_request["require_champion_activity"] is True
     assert candidate.hyperparameters["require_champion_activity"] is True
+    assert candidate.training_request["min_regime_return_5d"] == 0.0
+    assert candidate.training_request["min_regime_financial_volume_z20"] == 1.0
+    assert candidate.training_request["min_regime_volume_ratio_20d"] == 1.4
+    assert candidate.hyperparameters["min_regime_return_5d"] == 0.0
+    assert candidate.hyperparameters["min_regime_financial_volume_z20"] == 1.0
+    assert candidate.hyperparameters["min_regime_volume_ratio_20d"] == 1.4
     assert "bt3_" in candidate.model_version
-    assert candidate.model_version.endswith("_ca_01")
+    assert "_ca_rg_" in candidate.model_version
+    assert candidate.model_version.endswith("_01")
 
 
 def test_generate_phase4_recurrent_shadow_candidates_include_sequence_payloads():
@@ -288,6 +298,7 @@ def test_candidate_family_key_ignores_seed_but_keeps_model_knobs():
     changed_hp = {**base_hp, "dropout_rate": 0.25}
     changed_policy_hp = {**base_hp, "min_directional_probability": 0.55}
     changed_budget_hp = {**base_hp, "max_trades_per_fold": 60}
+    changed_regime_hp = {**base_hp, "min_regime_financial_volume_z20": 1.0}
 
     assert candidate_family_key(architecture, base_hp) == candidate_family_key(
         architecture, repeated_hp
@@ -300,6 +311,9 @@ def test_candidate_family_key_ignores_seed_but_keeps_model_knobs():
     )
     assert candidate_family_key(architecture, base_hp) != candidate_family_key(
         architecture, changed_budget_hp
+    )
+    assert candidate_family_key(architecture, base_hp) != candidate_family_key(
+        architecture, changed_regime_hp
     )
 
 

@@ -631,6 +631,13 @@ def generate_phase3_family_candidates(
                 base_hyperparameters["require_champion_activity"] = _bool_value(
                     family.get("require_champion_activity")
                 )
+            for regime_key in (
+                "min_regime_return_5d",
+                "min_regime_financial_volume_z20",
+                "min_regime_volume_ratio_20d",
+            ):
+                if family.get(regime_key) is not None:
+                    base_hyperparameters[regime_key] = float(family.get(regime_key))
             if family.get("sequence_lookback") is not None:
                 base_hyperparameters["sequence_lookback"] = _optional_int(
                     family.get("sequence_lookback")
@@ -757,6 +764,14 @@ def _phase3_policy_suffix(hyperparameters: Mapping[str, Any]) -> str:
         parts.append(f"bt{len(blocked_tickers)}_{digest}")
     if _bool_value(hyperparameters.get("require_champion_activity", False)):
         parts.append("ca")
+    regime_payload = _regime_filter_payload(hyperparameters)
+    if regime_payload:
+        digest = hashlib.sha1(
+            json.dumps(regime_payload, sort_keys=True, separators=(",", ":")).encode(
+                "utf-8"
+            )
+        ).hexdigest()[:6]
+        parts.append(f"rg_{digest}")
     return "" if not parts else "_" + "_".join(parts)
 
 
@@ -1005,6 +1020,15 @@ def _candidate_from_parts(
         "require_champion_activity": _bool_value(
             hyperparameters.get("require_champion_activity", False)
         ),
+        "min_regime_return_5d": _optional_float(
+            hyperparameters.get("min_regime_return_5d")
+        ),
+        "min_regime_financial_volume_z20": _optional_float(
+            hyperparameters.get("min_regime_financial_volume_z20")
+        ),
+        "min_regime_volume_ratio_20d": _optional_float(
+            hyperparameters.get("min_regime_volume_ratio_20d")
+        ),
         "status": "candidate",
         "notes": notes,
     }
@@ -1080,6 +1104,7 @@ def candidate_family_key(
             "require_champion_activity": _bool_value(
                 hyperparameters.get("require_champion_activity", False)
             ),
+            **_regime_filter_payload(hyperparameters),
         },
     }
     return hashlib.sha256(
@@ -1191,6 +1216,19 @@ def _bool_value(value: Any) -> bool:
     return bool(value)
 
 
+def _regime_filter_payload(hyperparameters: Mapping[str, Any]) -> dict[str, float]:
+    payload: dict[str, float] = {}
+    for key in (
+        "min_regime_return_5d",
+        "min_regime_financial_volume_z20",
+        "min_regime_volume_ratio_20d",
+    ):
+        value = hyperparameters.get(key)
+        if value is not None:
+            payload[key] = _rounded_float(value, 6) or 0.0
+    return payload
+
+
 def _normalized_tickers(value: Any) -> tuple[str, ...]:
     if value is None or value == "":
         return ()
@@ -1209,6 +1247,12 @@ def _optional_int(value: Any) -> int | None:
     if value is None:
         return None
     return int(value)
+
+
+def _optional_float(value: Any) -> float | None:
+    if value is None:
+        return None
+    return float(value)
 
 
 def _rounded_float(value: Any, digits: int) -> float | None:
