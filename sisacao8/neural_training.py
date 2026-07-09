@@ -213,11 +213,16 @@ def align_config_to_dataset(
 
     feature_version = _single_dataset_value(dataset, "feature_version")
     label_version = _single_dataset_value(dataset, "label_version")
-    updates: dict[str, str] = {}
+    updates: dict[str, object] = {}
     if feature_version and feature_version != config.feature_version:
         updates["feature_version"] = feature_version
     if label_version and label_version != config.label_version:
         updates["label_version"] = label_version
+    if (
+        config.require_champion_activity
+        and "champion_net_return" not in dataset.columns
+    ):
+        updates["require_champion_activity"] = False
     if not updates:
         return config
     return replace(config, **updates)

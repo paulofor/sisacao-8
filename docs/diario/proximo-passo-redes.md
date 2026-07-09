@@ -608,3 +608,19 @@ Novo próximo passo operacional: não promover ainda. Rodar diagnóstico multi-s
 - Próximo passo operacional pós-deploy: executar uma TCN shadow com `p50/m08/t20/d15/l20`, `blocked_tickers=["ONCO3","BRKM5","CSAN3"]` e `require_champion_activity=true`, três seeds, comparando contra a rodada `bt3_407e4c`.
 - Critério: só considerar avanço se remover `fold_catastrofico` mantendo `median_delta > 0`, `stable_across_seeds=true` e trades suficientes; caso contrário, parar Fase 4 e voltar para labels/features/regime.
 - Comandos usados: edição de `sisacao8/neural_training.py`, `functions/neural_training/sisacao8/neural_training.py`, `functions/neural_training/main.py`, `sisacao8/neural_evolution.py`, `functions/neural_evolution_orchestrator/sisacao8/neural_evolution.py` e testes associados; `python -m black` nos arquivos alterados.
+
+## 2026-07-09 02:30 UTC — Próximo passo após falha do filtro de champion
+- Após deploy, executei dry-run da TCN `p50/m08/t20/d15/l20` com `blocked_tickers=["ONCO3","BRKM5","CSAN3"]` e `require_champion_activity=true`; o dry-run confirmou o sufixo `bt3_407e4c_ca` nos três candidatos.
+- A rodada real falhou com HTTP 500 nos três treinos. Diagnóstico via MCP HTTP/JSON-RPC nos logs de `neural_training` confirmou a causa: `ValueError: champion_net_return column is required when require_champion_activity is enabled`.
+- Validei via BigQuery `INFORMATION_SCHEMA` que a tabela `neural_eod_training_dataset` não possui `champion_net_return` nem colunas de sinal/champion; os `champion_net_return=0` observados em `neural_daily_returns` eram fallback da avaliação MUEN, não uma trilha real do champion no dataset.
+- Apliquei correção de compatibilidade: quando `require_champion_activity=true` mas o snapshot carregado não possui `champion_net_return`, o treinamento desativa esse filtro no alinhamento da configuração para evitar HTTP 500.
+- Próximo passo operacional: publicar a correção, mas não repetir a rodada `ca` como se fosse teste válido enquanto o dataset não materializar a atividade real do champion. O próximo desenvolvimento deve adicionar `champion_net_return`/atividade do champion ao dataset point-in-time; só então reexecutar a TCN com `require_champion_activity=true`.
+- Comandos usados: Python `urllib.request` com `/tmp/phase4_tcn_blocklist_ca_payload.json` e `/tmp/phase4_tcn_blocklist_ca_run_payload.json`; MCP HTTP JSON-RPC `cloud_run_function_logs` para `neural_training`; MCP BigQuery `INFORMATION_SCHEMA.COLUMNS`; edição de `align_config_to_dataset` e teste de compatibilidade.
+
+## 2026-07-09 03:05 UTC — Próximo passo implementado: champion point-in-time no dataset
+- Como a rodada `require_champion_activity=true` revelou que `neural_eod_training_dataset` ainda não tinha atividade/retorno real do champion, implementei a materialização de `champion_net_return` no construtor do dataset neural.
+- O `neural_training_dataset` agora carrega trades de uma estratégia champion/baseline a partir de `quant_backtest_trades` (`NEURAL_CHAMPION_STRATEGY_ID`, padrão `baseline_daily_momentum_v1`) e faz join point-in-time por `ticker` e `reference_date`.
+- O snapshot passa a carregar `champion_strategy_id`, `champion_strategy_version`, `champion_signal_side`, `champion_net_return` e `champion_trade_active`; quando não há trade do champion, o retorno fica `0.0` e `champion_trade_active=false`.
+- Atualizei o DDL de `neural_eod_training_dataset` com migração idempotente para as novas colunas.
+- Próximo passo operacional: aplicar o DDL, redeployar `neural_training_dataset`, gerar um novo snapshot do dataset, redeployar/usar `neural_training`, e só então repetir a TCN `bt3+ca` contra o snapshot novo.
+- Comandos usados: MCP BigQuery em `quant_backtest_trades`; edição de `functions/neural_training_dataset/main.py`, `infra/bq/17_neural_eod_training_dataset.sql` e testes de dataset.

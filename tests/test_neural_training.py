@@ -73,6 +73,20 @@ def test_prepare_training_arrays_scales_train_split_and_encodes_labels() -> None
     assert scaler.feature_columns == FEATURE_COLUMNS
 
 
+def test_align_config_to_dataset_disables_champion_activity_without_column() -> None:
+    dataset = pd.DataFrame(
+        {
+            "feature_version": ["feature_eod_tabular_v3"],
+            "label_version": ["eod_direction_v1"],
+        }
+    )
+    config = BaselineMlpConfig(require_champion_activity=True)
+
+    aligned = align_config_to_dataset(config, dataset)
+
+    assert aligned.require_champion_activity is False
+
+
 def test_prepare_sequence_training_arrays_materializes_point_in_time_windows() -> None:
     dataset = _training_dataset()
 
