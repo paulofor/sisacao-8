@@ -168,6 +168,7 @@ def test_generate_phase4_candidates_propagate_blocked_tickers_guard() -> None:
                 "max_trades_per_fold": 20,
                 "max_fold_drawdown_stop": 0.15,
                 "blocked_tickers": ["onco3", "BRKM5", "CSAN3"],
+                "require_champion_activity": True,
             }
         ],
     )
@@ -183,7 +184,10 @@ def test_generate_phase4_candidates_propagate_blocked_tickers_guard() -> None:
         "CSAN3",
         "ONCO3",
     )
+    assert candidate.training_request["require_champion_activity"] is True
+    assert candidate.hyperparameters["require_champion_activity"] is True
     assert "bt3_" in candidate.model_version
+    assert candidate.model_version.endswith("_ca_01")
 
 
 def test_generate_phase4_recurrent_shadow_candidates_include_sequence_payloads():

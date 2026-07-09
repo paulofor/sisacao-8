@@ -266,6 +266,10 @@ def _training_config(payload: Mapping[str, Any]) -> BaselineMlpConfig:
         blocked_tickers=_string_tuple_value(
             payload.get("blocked_tickers"), defaults.blocked_tickers
         ),
+        require_champion_activity=_bool_value(
+            payload.get("require_champion_activity"),
+            defaults.require_champion_activity,
+        ),
         candidate_family_hash=(
             str(payload.get("candidate_family_hash"))
             if payload.get("candidate_family_hash")

@@ -627,6 +627,10 @@ def generate_phase3_family_candidates(
                 base_hyperparameters["blocked_tickers"] = _normalized_tickers(
                     family.get("blocked_tickers")
                 )
+            if family.get("require_champion_activity") is not None:
+                base_hyperparameters["require_champion_activity"] = _bool_value(
+                    family.get("require_champion_activity")
+                )
             if family.get("sequence_lookback") is not None:
                 base_hyperparameters["sequence_lookback"] = _optional_int(
                     family.get("sequence_lookback")
@@ -751,6 +755,8 @@ def _phase3_policy_suffix(hyperparameters: Mapping[str, Any]) -> str:
     if blocked_tickers:
         digest = hashlib.sha1(",".join(blocked_tickers).encode("utf-8")).hexdigest()[:6]
         parts.append(f"bt{len(blocked_tickers)}_{digest}")
+    if _bool_value(hyperparameters.get("require_champion_activity", False)):
+        parts.append("ca")
     return "" if not parts else "_" + "_".join(parts)
 
 
@@ -996,6 +1002,9 @@ def _candidate_from_parts(
             else None
         ),
         "blocked_tickers": _normalized_tickers(hyperparameters.get("blocked_tickers")),
+        "require_champion_activity": _bool_value(
+            hyperparameters.get("require_champion_activity", False)
+        ),
         "status": "candidate",
         "notes": notes,
     }
@@ -1067,6 +1076,9 @@ def candidate_family_key(
             ),
             "blocked_tickers": _normalized_tickers(
                 hyperparameters.get("blocked_tickers")
+            ),
+            "require_champion_activity": _bool_value(
+                hyperparameters.get("require_champion_activity", False)
             ),
         },
     }
@@ -1165,6 +1177,18 @@ def _number(value: Any) -> float | None:
     if isinstance(value, (int, float)):
         return float(value)
     return None
+
+
+def _bool_value(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    if isinstance(value, (int, float)):
+        return value != 0
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return bool(value)
 
 
 def _normalized_tickers(value: Any) -> tuple[str, ...]:

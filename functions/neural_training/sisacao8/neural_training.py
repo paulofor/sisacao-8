@@ -120,6 +120,7 @@ class BaselineMlpConfig:
     max_trades_per_fold: int | None = None
     max_fold_drawdown_stop: float | None = None
     blocked_tickers: tuple[str, ...] = ()
+    require_champion_activity: bool = False
     candidate_family_hash: str | None = None
     sequence_lookback: int = 40
 
@@ -486,6 +487,11 @@ def build_muen_economics_from_predictions(
             evaluation_frame,
             blocked_tickers=config.blocked_tickers,
         )
+        labels = apply_champion_activity_filter(
+            labels,
+            evaluation_frame,
+            require_champion_activity=config.require_champion_activity,
+        )
         labels = apply_fold_drawdown_stop(
             labels,
             evaluation_frame,
@@ -662,6 +668,39 @@ def apply_ticker_blocklist(
     tickers = frame["ticker"].astype(str).str.strip().str.upper()
     blocked_mask = tickers.isin(normalized).to_numpy()
     adjusted[blocked_mask] = "neutral"
+    return adjusted
+
+
+def apply_champion_activity_filter(
+    labels: np.ndarray,
+    frame: pd.DataFrame,
+    *,
+    require_champion_activity: bool = False,
+) -> np.ndarray:
+    """Neutralize model trades when the champion is point-in-time neutral.
+
+    ``champion_net_return`` is zero when the champion policy did not take a
+    position for the row.  This filter tests the operational hypothesis found
+    in ticker diagnostics: tail losses are concentrated in isolated model
+    trades against a neutral champion.
+    """
+
+    if not require_champion_activity:
+        return labels
+    if "champion_net_return" not in frame.columns:
+        raise ValueError(
+            "champion_net_return column is required when "
+            "require_champion_activity is enabled"
+        )
+    if len(labels) != len(frame):
+        raise ValueError("labels and frame must have the same length")
+
+    adjusted = labels.copy()
+    champion_returns = pd.to_numeric(
+        frame["champion_net_return"], errors="coerce"
+    ).fillna(0.0)
+    neutral_mask = champion_returns.abs().to_numpy() <= 1e-12
+    adjusted[neutral_mask] = "neutral"
     return adjusted
 
 
