@@ -2246,6 +2246,7 @@ A leitura da tela `Redes neurais — Treinos` indicou 86 redes em estágio `Cand
 - Conclusão confirmada pelo dry-run: a Cloud Function publicada ainda não contém a versão nova que propaga a guarda de regime/liquidez/momentum. Se eu rodasse a execução real agora, ela repetiria a política `bt3` antiga e não testaria o próximo passo.
 - Decisão operacional: não executei a rodada real. Próximo passo é redeployar `neural_evolution_orchestrator` e `neural_training` com a guarda `min_regime_*`; depois repetir o mesmo dry-run e só avançar para real se o `model_version` incluir `rg_<hash>` e o `training_request` propagar os thresholds.
 - Comandos usados: Python `urllib.request` para `https://us-east1-ingestaokraken.cloudfunctions.net/neural_evolution_orchestrator` com `/tmp/phase4_tcn_bt3_regime_payload.json`.
+<<<<<<< codex/analisar-resultados-das-redes-neurais
 
 ## 2026-07-09 14:45 UTC — Rodada TCN `bt3+regime` pós-deploy
 - O usuário confirmou deploy da guarda de regime. Reexecutei o dry-run da TCN `bt3+regime` com `blocked_tickers=["ONCO3","BRKM5","CSAN3"]`, `require_champion_activity=false`, `min_regime_return_5d=0.0`, `min_regime_financial_volume_z20=1.0`, `min_regime_volume_ratio_20d=1.4` e snapshot `neural_eod_training_dataset_2026-06-27_champion_v1`.
@@ -2264,3 +2265,5 @@ A leitura da tela `Redes neurais — Treinos` indicou 86 redes em estágio `Cand
 - A agregação validation/test por `label_class` confirmou que labels `up` têm retorno médio long positivo (`avg_buy_net_return=0.0613` em validation e `0.04036` em test), mas as linhas `neutral` ainda incluem caudas negativas (`min_buy_net_return≈-0.07`). O problema remanescente é classificação/abstenção em eventos neutros extremos, não ausência de retorno médio no label `up`.
 - Conclusão: não abrir nova TCN ainda. O próximo desenvolvimento deve focar no dataset/target para melhorar abstenção em evento extremo, por exemplo adicionar features explícitas de evento/volume spike e/ou um filtro de inferência/treino para caudas de `neutral` com `volume_ratio_20d`/`financial_volume_z20` extremos. Só depois disso reavaliar uma família tabular ou recorrente.
 - Comandos usados: MCP HTTP JSON-RPC em `http://mcpserversisacao.shop/mcp` com consultas BigQuery em `neural_eod_training_dataset` para `RCSL3`/`ARML3` e agregação por `dataset_split,label_class`.
+=======
+>>>>>>> main

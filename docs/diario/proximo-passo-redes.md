@@ -665,6 +665,7 @@ Novo próximo passo operacional: não promover ainda. Rodar diagnóstico multi-s
 ## 2026-07-09 11:35 UTC — Dry-run mostrou deploy pendente para guarda de regime
 - Executei dry-run da TCN `bt3+regime`; a função respondeu HTTP 200, mas os candidatos ainda vieram sem sufixo `rg_<hash>`, indicando que a versão publicada do orquestrador ainda não propaga `min_regime_return_5d`, `min_regime_financial_volume_z20` e `min_regime_volume_ratio_20d`.
 - Não executar rodada real nesse estado, pois ela repetiria a política `bt3` antiga. Próximo passo: redeployar `neural_evolution_orchestrator` e `neural_training`; depois repetir o dry-run e exigir `rg_<hash>` no `model_version` antes da execução real.
+<<<<<<< codex/analisar-resultados-das-redes-neurais
 
 ## 2026-07-09 14:45 UTC — Resultado TCN `bt3+regime` pós-deploy
 - Após deploy, o dry-run confirmou o sufixo `rg_878b89` e a rodada real TCN `bt3+regime` executou com `trained_count=3`, `evaluated_count=3`, `failed_count=0`, `daily_return_count=9900`.
@@ -676,3 +677,5 @@ Novo próximo passo operacional: não promover ainda. Rodar diagnóstico multi-s
 - O diagnóstico estrutural mostrou que as caudas remanescentes (`RCSL3` em 2026-06-22 a 2026-06-24) estavam em linhas `label_class=neutral` e `champion_trade_active=false`; o target já indicava abstenção, mas a rede abriu exposição.
 - O evento mais claro é `RCSL3` em 2026-06-24: volume/momentum extremos (`financial_volume_z20=4.10`, `volume_ratio_20d=8.46`, `return_5d=0.189`, `volatility_20d=0.051`) e ambos os lados direcionais ruins.
 - Próximo passo operacional: não treinar nova TCN. Implementar ou testar primeiro uma melhoria estrutural de dataset/target para eventos extremos de neutralidade, como features de volume spike/evento e/ou uma regra de abstenção para `neutral` extremo. Depois reavaliar em shadow pequena, preferencialmente começando por família tabular mais interpretável antes de voltar para recorrentes.
+=======
+>>>>>>> main
