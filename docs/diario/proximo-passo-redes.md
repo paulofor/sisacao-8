@@ -624,3 +624,10 @@ Novo próximo passo operacional: não promover ainda. Rodar diagnóstico multi-s
 - Atualizei o DDL de `neural_eod_training_dataset` com migração idempotente para as novas colunas.
 - Próximo passo operacional: aplicar o DDL, redeployar `neural_training_dataset`, gerar um novo snapshot do dataset, redeployar/usar `neural_training`, e só então repetir a TCN `bt3+ca` contra o snapshot novo.
 - Comandos usados: MCP BigQuery em `quant_backtest_trades`; edição de `functions/neural_training_dataset/main.py`, `infra/bq/17_neural_eod_training_dataset.sql` e testes de dataset.
+
+## 2026-07-09 03:35 UTC — Validação pós-DDL do champion dataset
+- O DDL das colunas `champion_*` foi aplicado com sucesso: BigQuery `INFORMATION_SCHEMA` retornou as cinco colunas esperadas em `neural_eod_training_dataset`.
+- Executei `neural_training_dataset` para gerar o snapshot `neural_eod_training_dataset_2026-06-27_champion_v1`; a função retornou HTTP 200, `rows=9044`, splits `train=5894`, `validation=750`, `test=900`, `embargo=1500`.
+- A validação do snapshot mostrou `champion_active_rows=0`, `champion_return_rows=0` e `champion_strategy_ids=0`; portanto o DDL está correto, mas a Cloud Function publicada ainda não está com o código que faz join em `quant_backtest_trades` e popula as colunas `champion_*`.
+- Próximo passo operacional: redeployar `neural_training_dataset` com o commit que materializa `champion_net_return`; depois recriar o snapshot `neural_eod_training_dataset_2026-06-27_champion_v1` com `replace_snapshot=true` e validar novamente `champion_active_rows > 0` antes de rodar TCN `bt3+ca`.
+- Comandos usados: MCP HTTP JSON-RPC em `http://mcpserversisacao.shop/mcp` com `INFORMATION_SCHEMA.COLUMNS` e agregação do snapshot; Python `urllib.request` para chamar `neural_training_dataset` com `/tmp/neural_training_dataset_champion_payload.json`.
