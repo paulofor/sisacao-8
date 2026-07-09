@@ -500,3 +500,91 @@ gcloud scheduler jobs describe neural-evolution-phase3-30m \
   --location=us-east1 \
   --format='yaml(name,state,schedule,timeZone,attemptDeadline,httpTarget.uri,httpTarget.httpMethod,httpTarget.body,nextRunTime,lastAttemptTime)'
 ```
+
+## Processo em passos para pesquisa neural
+
+Para transformar as rodadas manuais em processo repetível, use o runbook `docs/implementacao/processo-evolucao-neural-em-passos.md`. Ele define quando rodar manualmente, quando diagnosticar, quando repetir multi-seed e quando uma política está madura o suficiente para Scheduler.
+
+## Fase 4 recorrente em shadow — início manual pós-deploy
+
+Use esta sequência depois de publicar `functions/neural_training` e `functions/neural_evolution_orchestrator` com suporte a `phase4_recurrent_shadow`. A Fase 4 deve começar manualmente e em shadow; não reutilize o Scheduler de Fase 2/Fase 3 antes de confirmar dry-run e primeira rodada real pequena.
+
+### 1. Dry-run obrigatório
+
+Este comando não treina nem grava resultados de treino; ele valida se a função publicada reconhece a estratégia e gera as três famílias recorrentes/temporais esperadas.
+
+```bash
+curl -sS -X POST 'https://us-east1-ingestaokraken.cloudfunctions.net/neural_evolution_orchestrator' \
+  -H 'Content-Type: application/json' \
+  --data '{
+    "strategy": "phase4_recurrent_shadow",
+    "dry_run": true,
+    "budget": {
+      "max_trials": 3,
+      "max_runtime_minutes": 180,
+      "max_parameter_count": 150000,
+      "max_layers": 4,
+      "random_seed": 20260707
+    }
+  }' | python -m json.tool
+```
+
+Critérios mínimos para avançar:
+
+- `status` igual a `ok`;
+- `dry_run` igual a `true`;
+- `candidate_count` igual a `3`;
+- `architecture_types` contendo `gru_sequence`, `lstm_sequence` e `tcn_sequence`;
+- `candidates` com prefixo `neural_eod_phase4_` e sufixo de política `p50_m08_t35_l20`.
+
+### 2. Primeira rodada real pequena
+
+Depois do dry-run passar, execute uma rodada real pequena com as três famílias. Esta chamada treina e grava registros de candidato, métricas e decisões MUEN. Ela continua em shadow/research e não aprova modelos automaticamente.
+
+```bash
+curl -sS -X POST 'https://us-east1-ingestaokraken.cloudfunctions.net/neural_evolution_orchestrator' \
+  -H 'Content-Type: application/json' \
+  --data '{
+    "strategy": "phase4_recurrent_shadow",
+    "budget": {
+      "max_trials": 3,
+      "max_runtime_minutes": 180,
+      "max_parameter_count": 150000,
+      "max_layers": 4,
+      "random_seed": 20260707
+    }
+  }' | python -m json.tool
+```
+
+Resultado esperado: `trained_count` maior que zero, `failed_count` igual a `0` ou, se houver falha, investigar antes de repetir; `gate_decision_count` deve refletir avaliações MUEN emitidas. Não execute `approve_if_passed`.
+
+### 3. Validação pela API operacional
+
+```bash
+curl -sS 'http://34.194.252.70/api/ops/neural/training-runs' \
+  | python -m json.tool
+
+curl -sS 'http://34.194.252.70/api/ops/neural/gate-decisions' \
+  | python -m json.tool
+```
+
+Procure `modelVersion`/`candidateFamilyHash` com prefixos `neural_eod_phase4_`, arquiteturas `gru_sequence`, `lstm_sequence` ou `tcn_sequence`, `sequence_lookback=20` nos hiperparâmetros e decisão MUEN auditável.
+
+### 4. Scheduler opcional separado
+
+Só crie Scheduler da Fase 4 depois de dry-run e primeira rodada real pequena passarem. Use um job separado para não alterar o `neural-evolution-daily` existente.
+
+```bash
+gcloud scheduler jobs create http neural-evolution-phase4-shadow-weekly \
+  --project=ingestaokraken \
+  --location=us-east1 \
+  --schedule='0 8 * * 1' \
+  --time-zone='America/Sao_Paulo' \
+  --uri='https://us-east1-ingestaokraken.cloudfunctions.net/neural_evolution_orchestrator' \
+  --http-method=POST \
+  --headers='Content-Type=application/json' \
+  --message-body='{"strategy":"phase4_recurrent_shadow","budget":{"max_trials":3,"max_runtime_minutes":180,"max_parameter_count":150000,"max_layers":4,"random_seed":20260707}}' \
+  --attempt-deadline=1800s
+```
+
+Enquanto a função estiver pública, mantenha o comando sem OIDC. Se a função passar a exigir autenticação, valide service account, `roles/run.invoker` e `roles/iam.serviceAccountUser` antes de adicionar OIDC.

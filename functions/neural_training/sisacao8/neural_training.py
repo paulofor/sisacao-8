@@ -22,6 +22,7 @@ from sisacao8.neural_dataset import FEATURE_VERSION, LABEL_VERSION
 from sisacao8.neural_muen import PROTOCOL_VERSION as MUEN_PROTOCOL_VERSION
 from sisacao8.neural_muen import (
     aggregate_family_evaluation,
+    daily_return_rows,
     evaluate_fold_economics,
 )
 
@@ -117,6 +118,11 @@ class BaselineMlpConfig:
     min_directional_probability: float = 0.45
     min_directional_margin: float = 0.05
     max_trades_per_fold: int | None = None
+    max_fold_drawdown_stop: float | None = None
+    blocked_tickers: tuple[str, ...] = ()
+    require_champion_activity: bool = False
+    candidate_family_hash: str | None = None
+    sequence_lookback: int = 40
 
     def __post_init__(self) -> None:
         if not self.hidden_units:
@@ -141,11 +147,24 @@ class BaselineMlpConfig:
             raise ValueError("min_directional_margin must be non-negative")
         if self.max_trades_per_fold is not None and self.max_trades_per_fold <= 0:
             raise ValueError("max_trades_per_fold must be positive when provided")
+        if self.max_fold_drawdown_stop is not None and not (
+            0 < self.max_fold_drawdown_stop < 1
+        ):
+            raise ValueError(
+                "max_fold_drawdown_stop must be between 0 and 1 when provided"
+            )
+        if any(not str(ticker).strip() for ticker in self.blocked_tickers):
+            raise ValueError("blocked_tickers entries must be non-empty strings")
+        if not 20 <= self.sequence_lookback <= 60:
+            raise ValueError("sequence_lookback must be between 20 and 60 pregões")
         allowed_architectures = {
             "mlp",
             "residual_mlp",
             "wide_deep_mlp",
             "tabular_bottleneck_mlp",
+            "gru_sequence",
+            "lstm_sequence",
+            "tcn_sequence",
         }
         if self.architecture_type not in allowed_architectures:
             raise ValueError(
@@ -194,11 +213,16 @@ def align_config_to_dataset(
 
     feature_version = _single_dataset_value(dataset, "feature_version")
     label_version = _single_dataset_value(dataset, "label_version")
-    updates: dict[str, str] = {}
+    updates: dict[str, object] = {}
     if feature_version and feature_version != config.feature_version:
         updates["feature_version"] = feature_version
     if label_version and label_version != config.label_version:
         updates["label_version"] = label_version
+    if (
+        config.require_champion_activity
+        and "champion_net_return" not in dataset.columns
+    ):
+        updates["require_champion_activity"] = False
     if not updates:
         return config
     return replace(config, **updates)
@@ -244,6 +268,78 @@ def prepare_training_arrays(
     return x_by_split, y_by_split, scaler
 
 
+def prepare_sequence_training_arrays(
+    dataset: pd.DataFrame,
+    *,
+    feature_columns: tuple[str, ...] = FEATURE_COLUMNS,
+    sequence_lookback: int = 40,
+    expected_feature_version: str = FEATURE_VERSION,
+    expected_label_version: str = LABEL_VERSION,
+) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray], FeatureScaler, pd.DataFrame]:
+    """Materialize point-in-time ticker windows for recurrent shadow models.
+
+    Each sample uses only rows from the same ticker with ``reference_date`` less
+    than or equal to the target row. The label remains the target row label, so
+    recurrent candidates are evaluated by the same walk-forward splits and MUEN
+    realized-return columns as tabular candidates.
+    """
+
+    if not 20 <= sequence_lookback <= 60:
+        raise ValueError("sequence_lookback must be between 20 and 60 pregões")
+    required = set(feature_columns) | {
+        "ticker",
+        "reference_date",
+        "dataset_split",
+        "label_class",
+    }
+    missing = sorted(required.difference(dataset.columns))
+    if missing:
+        raise ValueError(f"Missing sequence training columns: {missing}")
+    _validate_dataset(
+        dataset,
+        feature_columns,
+        expected_feature_version=expected_feature_version,
+        expected_label_version=expected_label_version,
+    )
+    train = dataset[dataset["dataset_split"].eq("train")].copy()
+    if train.empty:
+        raise ValueError("dataset must contain rows with dataset_split='train'")
+    scaler = FeatureScaler.fit(train, feature_columns)
+    ordered = dataset.dropna(subset=["dataset_split"]).copy()
+    ordered["reference_date"] = pd.to_datetime(ordered["reference_date"])
+    ordered = ordered.sort_values(["ticker", "reference_date"]).reset_index(drop=True)
+
+    x_by_split: dict[str, list[np.ndarray]] = {}
+    y_by_split: dict[str, list[int]] = {}
+    materialized_rows: list[pd.Series] = []
+    label_to_index = {label: index for index, label in enumerate(LABEL_CLASSES)}
+    for _ticker, ticker_frame in ordered.groupby("ticker", sort=False):
+        scaled = scaler.transform(ticker_frame)
+        for position in range(sequence_lookback - 1, len(ticker_frame)):
+            row = ticker_frame.iloc[position]
+            label = row.get("label_class")
+            if pd.isna(label):
+                continue
+            split_name = str(row["dataset_split"])
+            start = position - sequence_lookback + 1
+            x_by_split.setdefault(split_name, []).append(scaled[start : position + 1])
+            y_by_split.setdefault(split_name, []).append(label_to_index[str(label)])
+            materialized_rows.append(row)
+
+    if "train" not in x_by_split:
+        raise ValueError("sequence dataset must contain train windows")
+    x_arrays = {
+        split: np.stack(windows).astype(np.float32)
+        for split, windows in x_by_split.items()
+    }
+    y_arrays = {
+        split: np.asarray(labels, dtype=np.int64)
+        for split, labels in y_by_split.items()
+    }
+    materialized = pd.DataFrame(materialized_rows).reset_index(drop=True)
+    return x_arrays, y_arrays, scaler, materialized
+
+
 def encode_labels(labels: pd.Series) -> np.ndarray:
     """Encode textual labels into stable integer class ids."""
 
@@ -270,13 +366,27 @@ def train_baseline_mlp(
     feature_columns = FEATURE_COLUMNS_BY_VERSION.get(
         config.feature_version, FEATURE_COLUMNS
     )
-    x_by_split, y_by_split, scaler = prepare_training_arrays(
-        dataset,
-        feature_columns=feature_columns,
-        expected_feature_version=config.feature_version,
-        expected_label_version=config.label_version,
-    )
-    model = _build_model(x_by_split["train"].shape[1], config)
+    if _is_sequence_architecture(config.architecture_type):
+        x_by_split, y_by_split, scaler, metrics_dataset = (
+            prepare_sequence_training_arrays(
+                dataset,
+                feature_columns=feature_columns,
+                sequence_lookback=config.sequence_lookback,
+                expected_feature_version=config.feature_version,
+                expected_label_version=config.label_version,
+            )
+        )
+        model_input_shape = x_by_split["train"].shape[1:]
+    else:
+        x_by_split, y_by_split, scaler = prepare_training_arrays(
+            dataset,
+            feature_columns=feature_columns,
+            expected_feature_version=config.feature_version,
+            expected_label_version=config.label_version,
+        )
+        metrics_dataset = dataset
+        model_input_shape = x_by_split["train"].shape[1]
+    model = _build_model(model_input_shape, config)
     validation_data = None
     if config.validation_split_name in x_by_split:
         validation_data = (
@@ -299,7 +409,7 @@ def train_baseline_mlp(
     }
     metrics = evaluate_probabilities_by_split(y_by_split, probabilities_by_split)
     muen_economics = build_muen_economics_from_predictions(
-        dataset,
+        metrics_dataset,
         probabilities_by_split,
         config=config,
     )
@@ -349,8 +459,10 @@ def build_muen_economics_from_predictions(
     materialized = dataset.dropna(subset=["dataset_split"]).copy()
     dataset_snapshot = _dataset_snapshot(materialized)
     fold_metrics = []
+    daily_returns = []
     eligible_splits = {"validation", "test", "research"}
     blocked_splits = {"train", "locked_holdout", "holdout"}
+    family_hash = config.candidate_family_hash or config.model_version
 
     for split_name, split_frame in materialized.groupby("dataset_split", sort=False):
         split = str(split_name)
@@ -375,27 +487,60 @@ def build_muen_economics_from_predictions(
             max_trades_per_fold=config.max_trades_per_fold,
         )
         evaluation_frame = split_frame.copy()
+        labels = apply_ticker_blocklist(
+            labels,
+            evaluation_frame,
+            blocked_tickers=config.blocked_tickers,
+        )
+        labels = apply_champion_activity_filter(
+            labels,
+            evaluation_frame,
+            require_champion_activity=config.require_champion_activity,
+        )
+        labels = apply_fold_drawdown_stop(
+            labels,
+            evaluation_frame,
+            max_fold_drawdown_stop=config.max_fold_drawdown_stop,
+        )
         evaluation_frame["predicted_label"] = labels.tolist()
         for cost_multiplier in cost_multipliers:
+            fold_id = f"{split}_cost_{str(cost_multiplier).replace('.', '_')}"
             metrics = evaluate_fold_economics(
                 evaluation_frame,
-                fold_id=f"{split}_cost_{str(cost_multiplier).replace('.', '_')}",
+                fold_id=fold_id,
                 cost_multiplier=cost_multiplier,
             )
             fold_metrics.append(metrics)
+            if "reference_date" in evaluation_frame.columns:
+                daily_returns.extend(
+                    daily_return_rows(
+                        evaluation_frame,
+                        protocol_version=MUEN_PROTOCOL_VERSION,
+                        dataset_snapshot=dataset_snapshot,
+                        candidate_family_hash=family_hash,
+                        trial_id=(
+                            f"{config.model_version}_{fold_id}_"
+                            f"{int(config.random_seed)}"
+                        ),
+                        fold_id=fold_id,
+                        seed=int(config.random_seed),
+                        cost_multiplier=cost_multiplier,
+                    )
+                )
 
     payload: dict[str, object] = {
         "protocol_version": MUEN_PROTOCOL_VERSION,
         "dataset_snapshot": dataset_snapshot,
-        "candidate_family_hash": config.model_version,
+        "candidate_family_hash": family_hash,
         "seed_count": 1,
         "seed": int(config.random_seed),
         "cost_multipliers": list(cost_multipliers),
         "fold_metrics": [metric.to_json_dict() for metric in fold_metrics],
+        "daily_returns": daily_returns,
     }
     if fold_metrics:
         payload["family_evaluation"] = aggregate_family_evaluation(
-            config.model_version,
+            family_hash,
             fold_metrics,
             seed_count=1,
         ).to_json_dict()
@@ -496,6 +641,120 @@ def apply_fold_trade_budget(
         if int(position) not in keep_positions
     ]
     adjusted[drop_positions] = "neutral"
+    return adjusted
+
+
+def apply_ticker_blocklist(
+    labels: np.ndarray,
+    frame: pd.DataFrame,
+    *,
+    blocked_tickers: tuple[str, ...] | list[str] | set[str] = (),
+) -> np.ndarray:
+    """Neutralize directional decisions for configured tail-risk tickers.
+
+    This guard is intentionally explicit and payload-driven: it does not learn
+    from validation/test outcomes during the run.  Operators can use the
+    previously persisted ``neural_daily_returns`` diagnostics to propose a
+    small blocklist, then rerun the same family in shadow with the Gate MUEN
+    unchanged.
+    """
+
+    normalized = {
+        str(ticker).strip().upper() for ticker in blocked_tickers if str(ticker).strip()
+    }
+    if not normalized:
+        return labels
+    if "ticker" not in frame.columns:
+        raise ValueError("ticker column is required when blocked_tickers is configured")
+    if len(labels) != len(frame):
+        raise ValueError("labels and frame must have the same length")
+
+    adjusted = labels.copy()
+    tickers = frame["ticker"].astype(str).str.strip().str.upper()
+    blocked_mask = tickers.isin(normalized).to_numpy()
+    adjusted[blocked_mask] = "neutral"
+    return adjusted
+
+
+def apply_champion_activity_filter(
+    labels: np.ndarray,
+    frame: pd.DataFrame,
+    *,
+    require_champion_activity: bool = False,
+) -> np.ndarray:
+    """Neutralize model trades when the champion is point-in-time neutral.
+
+    ``champion_net_return`` is zero when the champion policy did not take a
+    position for the row.  This filter tests the operational hypothesis found
+    in ticker diagnostics: tail losses are concentrated in isolated model
+    trades against a neutral champion.
+    """
+
+    if not require_champion_activity:
+        return labels
+    if "champion_net_return" not in frame.columns:
+        raise ValueError(
+            "champion_net_return column is required when "
+            "require_champion_activity is enabled"
+        )
+    if len(labels) != len(frame):
+        raise ValueError("labels and frame must have the same length")
+
+    adjusted = labels.copy()
+    champion_returns = pd.to_numeric(
+        frame["champion_net_return"], errors="coerce"
+    ).fillna(0.0)
+    neutral_mask = champion_returns.abs().to_numpy() <= 1e-12
+    adjusted[neutral_mask] = "neutral"
+    return adjusted
+
+
+def apply_fold_drawdown_stop(
+    labels: np.ndarray,
+    frame: pd.DataFrame,
+    *,
+    max_fold_drawdown_stop: float | None,
+) -> np.ndarray:
+    """Neutralize remaining fold decisions after an intrafold drawdown breach.
+
+    The stop is applied chronologically using only realized returns up to the
+    current row. The trade that first breaches the configured drawdown remains in
+    the fold; later directional decisions are converted to ``neutral`` before
+    MUEN economics are computed. This makes the risk policy auditable without
+    changing Gate MUEN thresholds.
+    """
+
+    if max_fold_drawdown_stop is None:
+        return labels
+    if not 0 < max_fold_drawdown_stop < 1:
+        raise ValueError("max_fold_drawdown_stop must be between 0 and 1 when provided")
+    required = {"buy_net_return", "sell_net_return"}
+    if missing := required.difference(frame.columns):
+        raise ValueError(f"Missing drawdown stop columns: {sorted(missing)}")
+    if len(labels) != len(frame):
+        raise ValueError("labels and frame must have the same length")
+
+    adjusted = labels.copy()
+    buy_returns = pd.to_numeric(frame["buy_net_return"], errors="coerce").fillna(0.0)
+    sell_returns = pd.to_numeric(frame["sell_net_return"], errors="coerce").fillna(0.0)
+    equity = 1.0
+    peak = 1.0
+    stopped = False
+    for offset, label in enumerate(labels):
+        if stopped:
+            adjusted[offset] = "neutral"
+            continue
+        if label == "up":
+            realized_return = float(buy_returns.iloc[offset])
+        elif label == "down":
+            realized_return = float(sell_returns.iloc[offset])
+        else:
+            realized_return = 0.0
+        equity *= 1.0 + realized_return
+        peak = max(peak, equity)
+        drawdown = (peak - equity) / peak if peak else 0.0
+        if drawdown >= max_fold_drawdown_stop:
+            stopped = True
     return adjusted
 
 
@@ -604,17 +863,27 @@ def _class_weight(y_train: np.ndarray, mode: str) -> dict[int, float] | None:
     return weights
 
 
-def _build_model(input_size: int, config: BaselineMlpConfig) -> Any:
+def _build_model(input_shape: int | tuple[int, ...], config: BaselineMlpConfig) -> Any:
     import tensorflow as tf
 
+    if isinstance(input_shape, int):
+        tabular_input_size = input_shape
+    else:
+        tabular_input_size = int(input_shape[-1])
     if config.architecture_type == "mlp":
-        model = _build_sequential_mlp(input_size, config, tf)
+        model = _build_sequential_mlp(tabular_input_size, config, tf)
     elif config.architecture_type == "residual_mlp":
-        model = _build_residual_mlp(input_size, config, tf)
+        model = _build_residual_mlp(tabular_input_size, config, tf)
     elif config.architecture_type == "wide_deep_mlp":
-        model = _build_wide_deep_mlp(input_size, config, tf)
+        model = _build_wide_deep_mlp(tabular_input_size, config, tf)
     elif config.architecture_type == "tabular_bottleneck_mlp":
-        model = _build_tabular_bottleneck_mlp(input_size, config, tf)
+        model = _build_tabular_bottleneck_mlp(tabular_input_size, config, tf)
+    elif config.architecture_type == "gru_sequence":
+        model = _build_gru_sequence(input_shape, config, tf)
+    elif config.architecture_type == "lstm_sequence":
+        model = _build_lstm_sequence(input_shape, config, tf)
+    elif config.architecture_type == "tcn_sequence":
+        model = _build_tcn_sequence(input_shape, config, tf)
     else:  # pragma: no cover - guarded by BaselineMlpConfig validation.
         raise ValueError(f"Unsupported architecture_type: {config.architecture_type}")
     model.compile(
@@ -623,6 +892,72 @@ def _build_model(input_size: int, config: BaselineMlpConfig) -> Any:
         metrics=["accuracy"],
     )
     return model
+
+
+def _is_sequence_architecture(architecture_type: str) -> bool:
+    return architecture_type in {"gru_sequence", "lstm_sequence", "tcn_sequence"}
+
+
+def _sequence_input_shape(input_shape: int | tuple[int, ...]) -> tuple[int, int]:
+    if isinstance(input_shape, int):
+        raise ValueError("sequence architectures require 3D training arrays")
+    if len(input_shape) != 2:
+        raise ValueError(
+            "sequence architectures require input_shape=(lookback, features)"
+        )
+    return int(input_shape[0]), int(input_shape[1])
+
+
+def _build_gru_sequence(
+    input_shape: int | tuple[int, ...], config: BaselineMlpConfig, tf: Any
+) -> Any:
+    shape = _sequence_input_shape(input_shape)
+    inputs = tf.keras.Input(shape=shape, name="feature_window")
+    units = int(config.hidden_units[0])
+    x = tf.keras.layers.GRU(units, name="gru_encoder")(inputs)
+    x = _dropout_if_needed(x, config, tf)
+    outputs = tf.keras.layers.Dense(
+        len(LABEL_CLASSES), activation="softmax", name="class_probabilities"
+    )(x)
+    return tf.keras.Model(inputs=inputs, outputs=outputs, name=config.model_id)
+
+
+def _build_lstm_sequence(
+    input_shape: int | tuple[int, ...], config: BaselineMlpConfig, tf: Any
+) -> Any:
+    shape = _sequence_input_shape(input_shape)
+    inputs = tf.keras.Input(shape=shape, name="feature_window")
+    units = int(config.hidden_units[0])
+    x = tf.keras.layers.LSTM(units, name="lstm_encoder")(inputs)
+    x = _dropout_if_needed(x, config, tf)
+    outputs = tf.keras.layers.Dense(
+        len(LABEL_CLASSES), activation="softmax", name="class_probabilities"
+    )(x)
+    return tf.keras.Model(inputs=inputs, outputs=outputs, name=config.model_id)
+
+
+def _build_tcn_sequence(
+    input_shape: int | tuple[int, ...], config: BaselineMlpConfig, tf: Any
+) -> Any:
+    shape = _sequence_input_shape(input_shape)
+    inputs = tf.keras.Input(shape=shape, name="feature_window")
+    filters = int(config.hidden_units[0])
+    x = inputs
+    for index, dilation_rate in enumerate((1, 2, 4)):
+        x = tf.keras.layers.Conv1D(
+            filters=filters,
+            kernel_size=3,
+            padding="causal",
+            dilation_rate=dilation_rate,
+            activation="relu",
+            name=f"causal_conv_{index}",
+        )(x)
+        x = _dropout_if_needed(x, config, tf)
+    x = tf.keras.layers.GlobalAveragePooling1D(name="temporal_pooling")(x)
+    outputs = tf.keras.layers.Dense(
+        len(LABEL_CLASSES), activation="softmax", name="class_probabilities"
+    )(x)
+    return tf.keras.Model(inputs=inputs, outputs=outputs, name=config.model_id)
 
 
 def _build_sequential_mlp(input_size: int, config: BaselineMlpConfig, tf: Any) -> Any:
