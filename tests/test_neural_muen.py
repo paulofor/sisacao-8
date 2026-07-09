@@ -190,6 +190,7 @@ def test_daily_return_rows_pair_model_and_champion_returns() -> None:
     frame = pd.DataFrame(
         {
             "reference_date": ["2026-06-22", "2026-06-23", "invalid"],
+            "ticker": ["petr4", "VALE3", "ITUB4"],
             "predicted_label": ["up", "neutral", "down"],
             "buy_net_return": [0.03, 0.01, -0.02],
             "sell_net_return": [-0.03, -0.01, 0.04],
@@ -211,9 +212,11 @@ def test_daily_return_rows_pair_model_and_champion_returns() -> None:
 
     assert len(rows) == 2
     assert rows[0]["reference_date"] == "2026-06-22"
+    assert rows[0]["ticker"] == "PETR4"
     assert rows[0]["model_net_return"] == 0.03
     assert rows[0]["champion_net_return"] == 0.01
     assert rows[0]["delta_net_return"] == 0.019999999999999997
     assert rows[0]["trades"] == 1
     assert rows[1]["model_net_return"] == 0.0
+    assert rows[1]["ticker"] == "VALE3"
     assert rows[1]["exposure"] == 0.0
