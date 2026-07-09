@@ -259,6 +259,37 @@ def _training_config(payload: Mapping[str, Any]) -> BaselineMlpConfig:
             payload.get("max_trades_per_fold"),
             defaults.max_trades_per_fold,
         ),
+        max_fold_drawdown_stop=_optional_float_value(
+            payload.get("max_fold_drawdown_stop"),
+            defaults.max_fold_drawdown_stop,
+        ),
+        blocked_tickers=_string_tuple_value(
+            payload.get("blocked_tickers"), defaults.blocked_tickers
+        ),
+        require_champion_activity=_bool_value(
+            payload.get("require_champion_activity"),
+            defaults.require_champion_activity,
+        ),
+        min_regime_return_5d=_optional_float_value(
+            payload.get("min_regime_return_5d"),
+            defaults.min_regime_return_5d,
+        ),
+        min_regime_financial_volume_z20=_optional_float_value(
+            payload.get("min_regime_financial_volume_z20"),
+            defaults.min_regime_financial_volume_z20,
+        ),
+        min_regime_volume_ratio_20d=_optional_float_value(
+            payload.get("min_regime_volume_ratio_20d"),
+            defaults.min_regime_volume_ratio_20d,
+        ),
+        candidate_family_hash=(
+            str(payload.get("candidate_family_hash"))
+            if payload.get("candidate_family_hash")
+            else defaults.candidate_family_hash
+        ),
+        sequence_lookback=_int_value(
+            payload.get("sequence_lookback"), defaults.sequence_lookback
+        ),
     )
 
 
@@ -301,6 +332,22 @@ def _optional_int_value(value: Any, default: int | None) -> int | None:
     if value is None or value == "":
         return default
     return int(value)
+
+
+def _string_tuple_value(value: Any, default: tuple[str, ...]) -> tuple[str, ...]:
+    if value is None or value == "":
+        return default
+    if isinstance(value, str):
+        return tuple(part.strip().upper() for part in value.split(",") if part.strip())
+    if isinstance(value, (list, tuple, set)):
+        return tuple(str(part).strip().upper() for part in value if str(part).strip())
+    raise ValueError("blocked_tickers must be a comma-separated string or list")
+
+
+def _optional_float_value(value: Any, default: float | None) -> float | None:
+    if value is None or value == "":
+        return default
+    return float(value)
 
 
 def _publish_artifact(

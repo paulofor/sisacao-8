@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import math
 
 import numpy as np
 import pandas as pd
@@ -12,12 +13,17 @@ from sisacao8.neural_training import (
     FeatureScaler,
     align_config_to_dataset,
     _build_model,
+    apply_champion_activity_filter,
+    apply_fold_drawdown_stop,
+    apply_regime_liquidity_filter,
+    apply_ticker_blocklist,
     apply_fold_trade_budget,
     build_artifact_manifest,
     build_muen_economics_from_predictions,
     conservative_directional_labels,
     encode_labels,
     evaluate_predictions,
+    prepare_sequence_training_arrays,
     prepare_training_arrays,
 )
 
@@ -66,6 +72,35 @@ def test_prepare_training_arrays_scales_train_split_and_encodes_labels() -> None
     assert x_by_split["train"].shape[1] == len(FEATURE_COLUMNS)
     assert y_by_split["train"].dtype == np.int64
     assert scaler.feature_columns == FEATURE_COLUMNS
+
+
+def test_align_config_to_dataset_disables_champion_activity_without_column() -> None:
+    dataset = pd.DataFrame(
+        {
+            "feature_version": ["feature_eod_tabular_v3"],
+            "label_version": ["eod_direction_v1"],
+        }
+    )
+    config = BaselineMlpConfig(require_champion_activity=True)
+
+    aligned = align_config_to_dataset(config, dataset)
+
+    assert aligned.require_champion_activity is False
+
+
+def test_prepare_sequence_training_arrays_materializes_point_in_time_windows() -> None:
+    dataset = _training_dataset()
+
+    x_by_split, y_by_split, scaler, materialized = prepare_sequence_training_arrays(
+        dataset, sequence_lookback=20
+    )
+
+    assert "train" in x_by_split
+    assert x_by_split["train"].ndim == 3
+    assert x_by_split["train"].shape[1:] == (20, len(FEATURE_COLUMNS))
+    assert y_by_split["train"].dtype == np.int64
+    assert scaler.feature_columns == FEATURE_COLUMNS
+    assert len(materialized) == sum(len(values) for values in y_by_split.values())
 
 
 def test_evaluate_predictions_reports_confusion_and_coverage() -> None:
@@ -136,6 +171,9 @@ def test_build_model_supports_phase3_architecture_types():
         "residual_mlp",
         "wide_deep_mlp",
         "tabular_bottleneck_mlp",
+        "gru_sequence",
+        "lstm_sequence",
+        "tcn_sequence",
     ]:
         config = BaselineMlpConfig(
             model_id=f"test_{architecture_type}",
@@ -143,7 +181,12 @@ def test_build_model_supports_phase3_architecture_types():
             hidden_units=(16, 8),
             epochs=1,
         )
-        model = _build_model(len(FEATURE_COLUMNS), config)
+        input_shape = (
+            (20, len(FEATURE_COLUMNS))
+            if "sequence" in architecture_type
+            else len(FEATURE_COLUMNS)
+        )
+        model = _build_model(input_shape, config)
 
         assert model.output_shape[-1] == 3
         assert isinstance(model.optimizer, tf.keras.optimizers.Adam)
@@ -270,6 +313,46 @@ def test_build_muen_economics_from_predictions_uses_non_train_splits() -> None:
     assert validation["trades"] == 2
     assert validation["expectancy_net"] == 0.06
     assert economics["family_evaluation"]["total_trades"] == 4
+    assert economics["daily_returns"][0]["ticker"] == "AAA3"
+    assert {row["ticker"] for row in economics["daily_returns"]} >= {"AAA3", "BBB4"}
+
+
+def test_build_muen_economics_family_hash_override_without_dates() -> None:
+    dataset = pd.DataFrame(
+        [
+            {
+                "dataset_split": "validation",
+                "label_class": "up",
+                "buy_net_return": 0.03,
+                "sell_net_return": -0.02,
+            },
+            {
+                "dataset_split": "test",
+                "label_class": "down",
+                "buy_net_return": -0.01,
+                "sell_net_return": 0.02,
+            },
+        ]
+    )
+    probabilities = {
+        "validation": np.array([[0.1, 0.1, 0.8]]),
+        "test": np.array([[0.8, 0.1, 0.1]]),
+    }
+    config = BaselineMlpConfig(
+        model_version="model_seed_1",
+        candidate_family_hash="family_tabular_p50_m08_t35",
+    )
+
+    economics = build_muen_economics_from_predictions(
+        dataset,
+        probabilities,
+        config=config,
+    )
+
+    assert economics["candidate_family_hash"] == "family_tabular_p50_m08_t35"
+    assert economics["family_evaluation"]["candidate_family_hash"] == (
+        "family_tabular_p50_m08_t35"
+    )
 
 
 def test_build_muen_economics_applies_max_trades_per_fold_budget() -> None:
@@ -312,3 +395,225 @@ def test_build_muen_economics_applies_max_trades_per_fold_budget() -> None:
 
     assert economics["fold_metrics"][0]["trades"] == 2
     assert economics["family_evaluation"]["total_trades"] == 2
+
+
+def test_apply_ticker_blocklist_neutralizes_tail_tickers() -> None:
+    labels = np.array(["up", "down", "up", "neutral"], dtype=object)
+    frame = pd.DataFrame({"ticker": ["ONCO3", "PETR4", "brkm5", "CSAN3"]})
+
+    adjusted = apply_ticker_blocklist(
+        labels,
+        frame,
+        blocked_tickers=("onco3", "BRKM5"),
+    )
+
+    assert adjusted.tolist() == ["neutral", "down", "neutral", "neutral"]
+
+
+def test_build_muen_economics_applies_ticker_blocklist_before_metrics() -> None:
+    dataset = pd.DataFrame(
+        [
+            {
+                "dataset_split": "validation",
+                "reference_date": dt.date(2026, 1, day),
+                "ticker": ticker,
+                "label_class": "up",
+                "buy_net_return": value,
+                "sell_net_return": -value,
+            }
+            for day, ticker, value in [
+                (1, "ONCO3", -0.07),
+                (2, "PETR4", 0.03),
+                (3, "BRKM5", -0.07),
+            ]
+        ]
+    )
+    probabilities = {"validation": np.array([[0.10, 0.20, 0.70]] * 3)}
+    config = BaselineMlpConfig(
+        model_version="ticker_guarded",
+        min_directional_probability=0.45,
+        min_directional_margin=0.05,
+        blocked_tickers=("ONCO3", "BRKM5"),
+    )
+
+    economics = build_muen_economics_from_predictions(
+        dataset,
+        probabilities,
+        config=config,
+        cost_multipliers=(1.0,),
+    )
+
+    assert economics["fold_metrics"][0]["trades"] == 1
+    assert math.isclose(economics["fold_metrics"][0]["total_net_return"], 0.03)
+
+
+def test_apply_champion_activity_filter_neutralizes_champion_neutral_rows() -> None:
+    labels = np.array(["up", "down", "up"], dtype=object)
+    frame = pd.DataFrame({"champion_net_return": [0.0, 0.02, None]})
+
+    adjusted = apply_champion_activity_filter(
+        labels,
+        frame,
+        require_champion_activity=True,
+    )
+
+    assert adjusted.tolist() == ["neutral", "down", "neutral"]
+
+
+def test_build_muen_economics_applies_champion_activity_filter() -> None:
+    dataset = pd.DataFrame(
+        [
+            {
+                "dataset_split": "validation",
+                "reference_date": dt.date(2026, 1, day),
+                "ticker": ticker,
+                "label_class": "up",
+                "buy_net_return": value,
+                "sell_net_return": -value,
+                "champion_net_return": champion_return,
+            }
+            for day, ticker, value, champion_return in [
+                (1, "ARML3", -0.07, 0.0),
+                (2, "PETR4", 0.03, 0.01),
+                (3, "RCSL3", -0.07, 0.0),
+            ]
+        ]
+    )
+    probabilities = {"validation": np.array([[0.10, 0.20, 0.70]] * 3)}
+    config = BaselineMlpConfig(
+        model_version="champion_activity_guarded",
+        min_directional_probability=0.45,
+        min_directional_margin=0.05,
+        require_champion_activity=True,
+    )
+
+    economics = build_muen_economics_from_predictions(
+        dataset,
+        probabilities,
+        config=config,
+        cost_multipliers=(1.0,),
+    )
+
+    assert economics["fold_metrics"][0]["trades"] == 1
+    assert math.isclose(economics["fold_metrics"][0]["total_net_return"], 0.03)
+
+
+def test_apply_regime_liquidity_filter_neutralizes_weak_regime_rows() -> None:
+    labels = np.array(["up", "down", "up", "neutral"], dtype=object)
+    frame = pd.DataFrame(
+        {
+            "return_5d": [0.02, -0.01, 0.04, 0.05],
+            "financial_volume_z20": [1.2, 1.3, 0.2, 2.0],
+            "volume_ratio_20d": [1.5, 1.6, 1.7, 0.5],
+        }
+    )
+
+    adjusted = apply_regime_liquidity_filter(
+        labels,
+        frame,
+        min_regime_return_5d=0.0,
+        min_regime_financial_volume_z20=1.0,
+        min_regime_volume_ratio_20d=1.4,
+    )
+
+    assert adjusted.tolist() == ["up", "neutral", "neutral", "neutral"]
+
+
+def test_build_muen_economics_applies_regime_liquidity_filter() -> None:
+    dataset = pd.DataFrame(
+        [
+            {
+                "dataset_split": "validation",
+                "reference_date": dt.date(2026, 1, day),
+                "ticker": ticker,
+                "label_class": "up",
+                "buy_net_return": value,
+                "sell_net_return": -value,
+                "return_5d": return_5d,
+                "financial_volume_z20": financial_volume_z20,
+                "volume_ratio_20d": volume_ratio_20d,
+            }
+            for (
+                day,
+                ticker,
+                value,
+                return_5d,
+                financial_volume_z20,
+                volume_ratio_20d,
+            ) in [
+                (1, "ARML3", -0.07, -0.04, 0.2, 1.6),
+                (2, "PETR4", 0.03, 0.04, 1.2, 1.5),
+                (3, "RCSL3", -0.07, 0.03, 0.3, 0.8),
+            ]
+        ]
+    )
+    probabilities = {"validation": np.array([[0.10, 0.20, 0.70]] * 3)}
+    config = BaselineMlpConfig(
+        model_version="regime_guarded",
+        min_directional_probability=0.45,
+        min_directional_margin=0.05,
+        min_regime_return_5d=0.0,
+        min_regime_financial_volume_z20=1.0,
+        min_regime_volume_ratio_20d=1.4,
+    )
+
+    economics = build_muen_economics_from_predictions(
+        dataset,
+        probabilities,
+        config=config,
+        cost_multipliers=(1.0,),
+    )
+
+    assert economics["fold_metrics"][0]["trades"] == 1
+    assert math.isclose(economics["fold_metrics"][0]["total_net_return"], 0.03)
+
+
+def test_apply_fold_drawdown_stop_neutralizes_after_breach() -> None:
+    labels = np.array(["up", "up", "up", "up"], dtype=object)
+    frame = pd.DataFrame(
+        {
+            "buy_net_return": [0.02, -0.20, 0.50, 0.50],
+            "sell_net_return": [-0.02, 0.20, -0.50, -0.50],
+        }
+    )
+
+    adjusted = apply_fold_drawdown_stop(
+        labels,
+        frame,
+        max_fold_drawdown_stop=0.15,
+    )
+
+    assert adjusted.tolist() == ["up", "up", "neutral", "neutral"]
+
+
+def test_build_muen_economics_applies_drawdown_stop_before_metrics() -> None:
+    dataset = pd.DataFrame(
+        [
+            {
+                "dataset_split": "validation",
+                "reference_date": dt.date(2026, 1, day),
+                "ticker": f"AAA{day}",
+                "label_class": "up",
+                "buy_net_return": value,
+                "sell_net_return": -value,
+            }
+            for day, value in enumerate([0.02, -0.20, 0.50, 0.50], start=1)
+        ]
+    )
+    probabilities = {"validation": np.array([[0.10, 0.20, 0.70]] * 4)}
+    config = BaselineMlpConfig(
+        model_version="drawdown_stopped",
+        min_directional_probability=0.45,
+        min_directional_margin=0.05,
+        max_fold_drawdown_stop=0.15,
+    )
+
+    economics = build_muen_economics_from_predictions(
+        dataset,
+        probabilities,
+        config=config,
+        cost_multipliers=(1.0,),
+    )
+
+    assert economics["fold_metrics"][0]["trades"] == 2
+    assert math.isclose(economics["fold_metrics"][0]["total_net_return"], -0.18)
