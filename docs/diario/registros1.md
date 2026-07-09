@@ -2246,3 +2246,24 @@ A leitura da tela `Redes neurais — Treinos` indicou 86 redes em estágio `Cand
 - Conclusão confirmada pelo dry-run: a Cloud Function publicada ainda não contém a versão nova que propaga a guarda de regime/liquidez/momentum. Se eu rodasse a execução real agora, ela repetiria a política `bt3` antiga e não testaria o próximo passo.
 - Decisão operacional: não executei a rodada real. Próximo passo é redeployar `neural_evolution_orchestrator` e `neural_training` com a guarda `min_regime_*`; depois repetir o mesmo dry-run e só avançar para real se o `model_version` incluir `rg_<hash>` e o `training_request` propagar os thresholds.
 - Comandos usados: Python `urllib.request` para `https://us-east1-ingestaokraken.cloudfunctions.net/neural_evolution_orchestrator` com `/tmp/phase4_tcn_bt3_regime_payload.json`.
+<<<<<<< codex/analisar-resultados-das-redes-neurais
+
+## 2026-07-09 14:45 UTC — Rodada TCN `bt3+regime` pós-deploy
+- O usuário confirmou deploy da guarda de regime. Reexecutei o dry-run da TCN `bt3+regime` com `blocked_tickers=["ONCO3","BRKM5","CSAN3"]`, `require_champion_activity=false`, `min_regime_return_5d=0.0`, `min_regime_financial_volume_z20=1.0`, `min_regime_volume_ratio_20d=1.4` e snapshot `neural_eod_training_dataset_2026-06-27_champion_v1`.
+- O dry-run retornou HTTP 200 com `candidate_count=3` e confirmou a versão nova: os candidatos vieram com sufixo `rg_878b89` no `model_version`, além de `bt3_407e4c`.
+- Executei a rodada real. O orquestrador retornou HTTP 200 em aproximadamente 117 segundos, com `trained_count=3`, `evaluated_count=3`, `failed_count=0`, `daily_return_count=9900`, `fold_metric_count=12`, `family_evaluation_count=1` e `gate_decision_count=1`.
+- Validação MUEN via MCP/BigQuery: a família `neural_eod_phase4_tcn_sequence_p50_m08_t20_d15_l20_bt3_regime_v1` foi `rejected`, com `seeds=3`, `total_trades=6`, `positive_folds=0`, `positive_fold_ratio=0.0`, `median_delta=0.0`, `worst_delta=-0.07000000000000006`, `max_drawdown=0.195643`, `stable_across_seeds=false`.
+- Critérios falhos: `trades_insuficientes`, `folds_positivos_insuficientes`, `nao_supera_champion_mediana`, `fold_catastrofico` e `seeds_instaveis`.
+- Diagnóstico por `neural_daily_returns`: as seis operações restantes concentraram a cauda em `RCSL3` nos dias 2026-06-22, 2026-06-23 e 2026-06-24, todas com `champion_net_return=0.0`, `exposure=1.0` e `delta_net_return` próximo de `-0.07`.
+- Decisão operacional: a guarda de regime reduziu cobertura de `52` para `6` trades, mas não removeu a cauda e não gerou folds positivos. Não promover, não agendar e encerrar a linha incremental TCN Fase 4 (`bt3`, `bt3+ca`, `bt3+regime`) para este snapshot. O próximo trabalho deve voltar para revisão de labels/features/targets ou hipótese de regime estrutural diferente antes de nova arquitetura.
+- Comandos usados: Python `urllib.request` com `/tmp/phase4_tcn_bt3_regime_payload.json` e `/tmp/phase4_tcn_bt3_regime_real_payload.json`; MCP HTTP JSON-RPC em `http://mcpserversisacao.shop/mcp` com consultas em `neural_gate_decisions` e `neural_daily_returns`.
+
+## 2026-07-09 15:20 UTC — Diagnóstico de labels/features após encerramento TCN
+- Executei o próximo passo de diagnóstico estrutural em BigQuery/MCP, focando os tickers de cauda (`RCSL3`, `ARML3`) no snapshot `neural_eod_training_dataset_2026-06-27_champion_v1`.
+- Em `RCSL3`, as perdas da TCN `bt3+regime` em 2026-06-22, 2026-06-23 e 2026-06-24 ocorreram em linhas `label_class=neutral`, `champion_trade_active=false`, com `buy_net_return` e/ou `sell_net_return` negativos/zerados; ou seja, o target já indicava não operar, mas a rede ainda abriu exposição.
+- O caso 2026-06-24 em `RCSL3` é um evento de volume/momentum extremo: `financial_volume_z20=4.104863305929481`, `volume_ratio_20d=8.456098357088456`, `return_5d=0.18918918918918926`, `volatility_20d=0.051140490363449226`, mas `label_class=neutral` e ambos os lados direcionais perderam perto de 7%.
+- A agregação validation/test por `label_class` confirmou que labels `up` têm retorno médio long positivo (`avg_buy_net_return=0.0613` em validation e `0.04036` em test), mas as linhas `neutral` ainda incluem caudas negativas (`min_buy_net_return≈-0.07`). O problema remanescente é classificação/abstenção em eventos neutros extremos, não ausência de retorno médio no label `up`.
+- Conclusão: não abrir nova TCN ainda. O próximo desenvolvimento deve focar no dataset/target para melhorar abstenção em evento extremo, por exemplo adicionar features explícitas de evento/volume spike e/ou um filtro de inferência/treino para caudas de `neutral` com `volume_ratio_20d`/`financial_volume_z20` extremos. Só depois disso reavaliar uma família tabular ou recorrente.
+- Comandos usados: MCP HTTP JSON-RPC em `http://mcpserversisacao.shop/mcp` com consultas BigQuery em `neural_eod_training_dataset` para `RCSL3`/`ARML3` e agregação por `dataset_split,label_class`.
+=======
+>>>>>>> main
