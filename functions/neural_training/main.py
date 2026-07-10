@@ -282,6 +282,22 @@ def _training_config(payload: Mapping[str, Any]) -> BaselineMlpConfig:
             payload.get("min_regime_volume_ratio_20d"),
             defaults.min_regime_volume_ratio_20d,
         ),
+        neutral_event_min_abs_return_5d=_optional_float_value(
+            payload.get("neutral_event_min_abs_return_5d"),
+            defaults.neutral_event_min_abs_return_5d,
+        ),
+        neutral_event_min_financial_volume_z20=_optional_float_value(
+            payload.get("neutral_event_min_financial_volume_z20"),
+            defaults.neutral_event_min_financial_volume_z20,
+        ),
+        neutral_event_min_volume_ratio_20d=_optional_float_value(
+            payload.get("neutral_event_min_volume_ratio_20d"),
+            defaults.neutral_event_min_volume_ratio_20d,
+        ),
+        neutral_event_min_volatility_20d=_optional_float_value(
+            payload.get("neutral_event_min_volatility_20d"),
+            defaults.neutral_event_min_volatility_20d,
+        ),
         candidate_family_hash=(
             str(payload.get("candidate_family_hash"))
             if payload.get("candidate_family_hash")

@@ -638,6 +638,14 @@ def generate_phase3_family_candidates(
             ):
                 if family.get(regime_key) is not None:
                     base_hyperparameters[regime_key] = float(family.get(regime_key))
+            for event_key in (
+                "neutral_event_min_abs_return_5d",
+                "neutral_event_min_financial_volume_z20",
+                "neutral_event_min_volume_ratio_20d",
+                "neutral_event_min_volatility_20d",
+            ):
+                if family.get(event_key) is not None:
+                    base_hyperparameters[event_key] = float(family.get(event_key))
             if family.get("sequence_lookback") is not None:
                 base_hyperparameters["sequence_lookback"] = _optional_int(
                     family.get("sequence_lookback")
@@ -772,6 +780,14 @@ def _phase3_policy_suffix(hyperparameters: Mapping[str, Any]) -> str:
             )
         ).hexdigest()[:6]
         parts.append(f"rg_{digest}")
+    event_payload = _neutral_event_filter_payload(hyperparameters)
+    if event_payload:
+        digest = hashlib.sha1(
+            json.dumps(event_payload, sort_keys=True, separators=(",", ":")).encode(
+                "utf-8"
+            )
+        ).hexdigest()[:6]
+        parts.append(f"nev_{digest}")
     return "" if not parts else "_" + "_".join(parts)
 
 
@@ -1029,6 +1045,18 @@ def _candidate_from_parts(
         "min_regime_volume_ratio_20d": _optional_float(
             hyperparameters.get("min_regime_volume_ratio_20d")
         ),
+        "neutral_event_min_abs_return_5d": _optional_float(
+            hyperparameters.get("neutral_event_min_abs_return_5d")
+        ),
+        "neutral_event_min_financial_volume_z20": _optional_float(
+            hyperparameters.get("neutral_event_min_financial_volume_z20")
+        ),
+        "neutral_event_min_volume_ratio_20d": _optional_float(
+            hyperparameters.get("neutral_event_min_volume_ratio_20d")
+        ),
+        "neutral_event_min_volatility_20d": _optional_float(
+            hyperparameters.get("neutral_event_min_volatility_20d")
+        ),
         "status": "candidate",
         "notes": notes,
     }
@@ -1105,6 +1133,7 @@ def candidate_family_key(
                 hyperparameters.get("require_champion_activity", False)
             ),
             **_regime_filter_payload(hyperparameters),
+            **_neutral_event_filter_payload(hyperparameters),
         },
     }
     return hashlib.sha256(
@@ -1222,6 +1251,22 @@ def _regime_filter_payload(hyperparameters: Mapping[str, Any]) -> dict[str, floa
         "min_regime_return_5d",
         "min_regime_financial_volume_z20",
         "min_regime_volume_ratio_20d",
+    ):
+        value = hyperparameters.get(key)
+        if value is not None:
+            payload[key] = _rounded_float(value, 6) or 0.0
+    return payload
+
+
+def _neutral_event_filter_payload(
+    hyperparameters: Mapping[str, Any],
+) -> dict[str, float]:
+    payload: dict[str, float] = {}
+    for key in (
+        "neutral_event_min_abs_return_5d",
+        "neutral_event_min_financial_volume_z20",
+        "neutral_event_min_volume_ratio_20d",
+        "neutral_event_min_volatility_20d",
     ):
         value = hyperparameters.get(key)
         if value is not None:
