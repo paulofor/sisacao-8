@@ -124,6 +124,10 @@ class BaselineMlpConfig:
     min_regime_return_5d: float | None = None
     min_regime_financial_volume_z20: float | None = None
     min_regime_volume_ratio_20d: float | None = None
+    neutral_event_min_abs_return_5d: float | None = None
+    neutral_event_min_financial_volume_z20: float | None = None
+    neutral_event_min_volume_ratio_20d: float | None = None
+    neutral_event_min_volatility_20d: float | None = None
     candidate_family_hash: str | None = None
     sequence_lookback: int = 40
 
@@ -163,6 +167,14 @@ class BaselineMlpConfig:
             and self.min_regime_volume_ratio_20d < 0
         ):
             raise ValueError("min_regime_volume_ratio_20d must be non-negative")
+        for field_name in (
+            "neutral_event_min_abs_return_5d",
+            "neutral_event_min_volume_ratio_20d",
+            "neutral_event_min_volatility_20d",
+        ):
+            value = getattr(self, field_name)
+            if value is not None and value < 0:
+                raise ValueError(f"{field_name} must be non-negative")
         if not 20 <= self.sequence_lookback <= 60:
             raise ValueError("sequence_lookback must be between 20 and 60 pregões")
         allowed_architectures = {
@@ -512,6 +524,14 @@ def build_muen_economics_from_predictions(
             min_regime_financial_volume_z20=config.min_regime_financial_volume_z20,
             min_regime_volume_ratio_20d=config.min_regime_volume_ratio_20d,
         )
+        labels = apply_neutral_extreme_event_filter(
+            labels,
+            evaluation_frame,
+            min_abs_return_5d=config.neutral_event_min_abs_return_5d,
+            min_financial_volume_z20=config.neutral_event_min_financial_volume_z20,
+            min_volume_ratio_20d=config.neutral_event_min_volume_ratio_20d,
+            min_volatility_20d=config.neutral_event_min_volatility_20d,
+        )
         labels = apply_fold_drawdown_stop(
             labels,
             evaluation_frame,
@@ -768,6 +788,58 @@ def apply_regime_liquidity_filter(
 
     adjusted = labels.copy()
     adjusted[~allowed.to_numpy()] = "neutral"
+    return adjusted
+
+
+def apply_neutral_extreme_event_filter(
+    labels: np.ndarray,
+    frame: pd.DataFrame,
+    *,
+    min_abs_return_5d: float | None = None,
+    min_financial_volume_z20: float | None = None,
+    min_volume_ratio_20d: float | None = None,
+    min_volatility_20d: float | None = None,
+) -> np.ndarray:
+    """Neutralize trades during configured neutral/extreme event conditions.
+
+    This guard implements the post-mortem hypothesis from the RCSL3 tail: rows
+    with abrupt momentum plus extreme volume/volatility can be labelled neutral
+    because both directional sides are unattractive. It is payload-driven and
+    uses only point-in-time features, so operators can test an abstention rule
+    before opening another recurrent-family shadow run.
+    """
+
+    thresholds = {
+        "return_5d": min_abs_return_5d,
+        "financial_volume_z20": min_financial_volume_z20,
+        "volume_ratio_20d": min_volume_ratio_20d,
+        "volatility_20d": min_volatility_20d,
+    }
+    active_thresholds = {
+        column: threshold
+        for column, threshold in thresholds.items()
+        if threshold is not None
+    }
+    if not active_thresholds:
+        return labels
+    if len(labels) != len(frame):
+        raise ValueError("labels and frame must have the same length")
+    missing = [column for column in active_thresholds if column not in frame.columns]
+    if missing:
+        raise ValueError(
+            "neutral extreme event filter requires dataset columns: "
+            + ", ".join(sorted(missing))
+        )
+
+    extreme = pd.Series(True, index=frame.index)
+    for column, threshold in active_thresholds.items():
+        values = pd.to_numeric(frame[column], errors="coerce")
+        if column == "return_5d":
+            values = values.abs()
+        extreme &= values.ge(float(threshold)).fillna(False)
+
+    adjusted = labels.copy()
+    adjusted[extreme.to_numpy()] = "neutral"
     return adjusted
 
 

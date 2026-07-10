@@ -146,6 +146,18 @@ def test_neural_training_trains_uploads_and_registers(monkeypatch, tmp_path):
                     config.min_regime_financial_volume_z20
                 ),
                 "min_regime_volume_ratio_20d": config.min_regime_volume_ratio_20d,
+                "neutral_event_min_abs_return_5d": (
+                    config.neutral_event_min_abs_return_5d
+                ),
+                "neutral_event_min_financial_volume_z20": (
+                    config.neutral_event_min_financial_volume_z20
+                ),
+                "neutral_event_min_volume_ratio_20d": (
+                    config.neutral_event_min_volume_ratio_20d
+                ),
+                "neutral_event_min_volatility_20d": (
+                    config.neutral_event_min_volatility_20d
+                ),
             },
             "dataset_snapshot": "content_hash",
             "dataset_rows": len(dataset),
@@ -183,6 +195,10 @@ def test_neural_training_trains_uploads_and_registers(monkeypatch, tmp_path):
                 "min_regime_return_5d": 0.0,
                 "min_regime_financial_volume_z20": 1.0,
                 "min_regime_volume_ratio_20d": 1.4,
+                "neutral_event_min_abs_return_5d": 0.18,
+                "neutral_event_min_financial_volume_z20": 3.5,
+                "neutral_event_min_volume_ratio_20d": 7.5,
+                "neutral_event_min_volatility_20d": 0.05,
             }
         )
     )
@@ -212,6 +228,10 @@ def test_neural_training_trains_uploads_and_registers(monkeypatch, tmp_path):
     assert row["hyperparameters_json"]["min_regime_return_5d"] == 0.0
     assert row["hyperparameters_json"]["min_regime_financial_volume_z20"] == 1.0
     assert row["hyperparameters_json"]["min_regime_volume_ratio_20d"] == 1.4
+    assert row["hyperparameters_json"]["neutral_event_min_abs_return_5d"] == 0.18
+    assert row["hyperparameters_json"]["neutral_event_min_financial_volume_z20"] == 3.5
+    assert row["hyperparameters_json"]["neutral_event_min_volume_ratio_20d"] == 7.5
+    assert row["hyperparameters_json"]["neutral_event_min_volatility_20d"] == 0.05
     assert row["training_dataset_snapshot"] == "snapshot_2026"
     assert row["artifact_uri"] == response["artifact_uri"]
     assert row["test_accuracy"] == 0.6

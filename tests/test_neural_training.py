@@ -15,9 +15,10 @@ from sisacao8.neural_training import (
     _build_model,
     apply_champion_activity_filter,
     apply_fold_drawdown_stop,
+    apply_fold_trade_budget,
+    apply_neutral_extreme_event_filter,
     apply_regime_liquidity_filter,
     apply_ticker_blocklist,
-    apply_fold_trade_budget,
     build_artifact_manifest,
     build_muen_economics_from_predictions,
     conservative_directional_labels,
@@ -519,6 +520,29 @@ def test_apply_regime_liquidity_filter_neutralizes_weak_regime_rows() -> None:
     assert adjusted.tolist() == ["up", "neutral", "neutral", "neutral"]
 
 
+def test_apply_neutral_extreme_event_filter_neutralizes_spike_rows() -> None:
+    labels = np.array(["up", "down", "up", "neutral"], dtype=object)
+    frame = pd.DataFrame(
+        {
+            "return_5d": [0.19, -0.21, 0.04, 0.30],
+            "financial_volume_z20": [4.1, 3.8, 4.2, 5.0],
+            "volume_ratio_20d": [8.4, 7.9, 8.2, 9.1],
+            "volatility_20d": [0.052, 0.061, 0.049, 0.070],
+        }
+    )
+
+    adjusted = apply_neutral_extreme_event_filter(
+        labels,
+        frame,
+        min_abs_return_5d=0.18,
+        min_financial_volume_z20=3.5,
+        min_volume_ratio_20d=7.5,
+        min_volatility_20d=0.05,
+    )
+
+    assert adjusted.tolist() == ["neutral", "neutral", "up", "neutral"]
+
+
 def test_build_muen_economics_applies_regime_liquidity_filter() -> None:
     dataset = pd.DataFrame(
         [
@@ -566,6 +590,56 @@ def test_build_muen_economics_applies_regime_liquidity_filter() -> None:
 
     assert economics["fold_metrics"][0]["trades"] == 1
     assert math.isclose(economics["fold_metrics"][0]["total_net_return"], 0.03)
+
+
+def test_build_muen_economics_applies_neutral_extreme_event_filter() -> None:
+    dataset = pd.DataFrame(
+        [
+            {
+                "dataset_split": "validation",
+                "reference_date": dt.date(2026, 1, day),
+                "ticker": ticker,
+                "label_class": "neutral",
+                "buy_net_return": -0.07,
+                "sell_net_return": -0.07,
+                "return_5d": return_5d,
+                "financial_volume_z20": financial_volume_z20,
+                "volume_ratio_20d": volume_ratio_20d,
+                "volatility_20d": volatility_20d,
+            }
+            for (
+                day,
+                ticker,
+                return_5d,
+                financial_volume_z20,
+                volume_ratio_20d,
+                volatility_20d,
+            ) in [
+                (1, "RCSL3", 0.19, 4.1, 8.4, 0.052),
+                (2, "PETR4", 0.04, 1.2, 1.5, 0.018),
+            ]
+        ]
+    )
+    probabilities = {"validation": np.array([[0.10, 0.20, 0.70]] * 2)}
+    config = BaselineMlpConfig(
+        model_version="neutral_event_guarded",
+        min_directional_probability=0.45,
+        min_directional_margin=0.05,
+        neutral_event_min_abs_return_5d=0.18,
+        neutral_event_min_financial_volume_z20=3.5,
+        neutral_event_min_volume_ratio_20d=7.5,
+        neutral_event_min_volatility_20d=0.05,
+    )
+
+    economics = build_muen_economics_from_predictions(
+        dataset,
+        probabilities,
+        config=config,
+        cost_multipliers=(1.0,),
+    )
+
+    assert economics["fold_metrics"][0]["trades"] == 1
+    assert math.isclose(economics["fold_metrics"][0]["total_net_return"], -0.07)
 
 
 def test_apply_fold_drawdown_stop_neutralizes_after_breach() -> None:

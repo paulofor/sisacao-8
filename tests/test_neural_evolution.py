@@ -172,6 +172,10 @@ def test_generate_phase4_candidates_propagate_blocked_tickers_guard() -> None:
                 "min_regime_return_5d": 0.0,
                 "min_regime_financial_volume_z20": 1.0,
                 "min_regime_volume_ratio_20d": 1.4,
+                "neutral_event_min_abs_return_5d": 0.18,
+                "neutral_event_min_financial_volume_z20": 3.5,
+                "neutral_event_min_volume_ratio_20d": 7.5,
+                "neutral_event_min_volatility_20d": 0.05,
             }
         ],
     )
@@ -195,8 +199,17 @@ def test_generate_phase4_candidates_propagate_blocked_tickers_guard() -> None:
     assert candidate.hyperparameters["min_regime_return_5d"] == 0.0
     assert candidate.hyperparameters["min_regime_financial_volume_z20"] == 1.0
     assert candidate.hyperparameters["min_regime_volume_ratio_20d"] == 1.4
+    assert candidate.training_request["neutral_event_min_abs_return_5d"] == 0.18
+    assert candidate.training_request["neutral_event_min_financial_volume_z20"] == 3.5
+    assert candidate.training_request["neutral_event_min_volume_ratio_20d"] == 7.5
+    assert candidate.training_request["neutral_event_min_volatility_20d"] == 0.05
+    assert candidate.hyperparameters["neutral_event_min_abs_return_5d"] == 0.18
+    assert candidate.hyperparameters["neutral_event_min_financial_volume_z20"] == 3.5
+    assert candidate.hyperparameters["neutral_event_min_volume_ratio_20d"] == 7.5
+    assert candidate.hyperparameters["neutral_event_min_volatility_20d"] == 0.05
     assert "bt3_" in candidate.model_version
     assert "_ca_rg_" in candidate.model_version
+    assert "_nev_" in candidate.model_version
     assert candidate.model_version.endswith("_01")
 
 
@@ -299,6 +312,7 @@ def test_candidate_family_key_ignores_seed_but_keeps_model_knobs():
     changed_policy_hp = {**base_hp, "min_directional_probability": 0.55}
     changed_budget_hp = {**base_hp, "max_trades_per_fold": 60}
     changed_regime_hp = {**base_hp, "min_regime_financial_volume_z20": 1.0}
+    changed_event_hp = {**base_hp, "neutral_event_min_volume_ratio_20d": 7.5}
 
     assert candidate_family_key(architecture, base_hp) == candidate_family_key(
         architecture, repeated_hp
@@ -314,6 +328,9 @@ def test_candidate_family_key_ignores_seed_but_keeps_model_knobs():
     )
     assert candidate_family_key(architecture, base_hp) != candidate_family_key(
         architecture, changed_regime_hp
+    )
+    assert candidate_family_key(architecture, base_hp) != candidate_family_key(
+        architecture, changed_event_hp
     )
 
 
