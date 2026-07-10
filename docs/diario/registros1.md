@@ -2265,5 +2265,4 @@ A leitura da tela `Redes neurais — Treinos` indicou 86 redes em estágio `Cand
 - A agregação validation/test por `label_class` confirmou que labels `up` têm retorno médio long positivo (`avg_buy_net_return=0.0613` em validation e `0.04036` em test), mas as linhas `neutral` ainda incluem caudas negativas (`min_buy_net_return≈-0.07`). O problema remanescente é classificação/abstenção em eventos neutros extremos, não ausência de retorno médio no label `up`.
 - Conclusão: não abrir nova TCN ainda. O próximo desenvolvimento deve focar no dataset/target para melhorar abstenção em evento extremo, por exemplo adicionar features explícitas de evento/volume spike e/ou um filtro de inferência/treino para caudas de `neutral` com `volume_ratio_20d`/`financial_volume_z20` extremos. Só depois disso reavaliar uma família tabular ou recorrente.
 - Comandos usados: MCP HTTP JSON-RPC em `http://mcpserversisacao.shop/mcp` com consultas BigQuery em `neural_eod_training_dataset` para `RCSL3`/`ARML3` e agregação por `dataset_split,label_class`.
-=======
->>>>>>> main
+
