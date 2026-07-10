@@ -14,6 +14,8 @@ import com.sisacao.backend.ops.OpsIncident;
 import com.sisacao.backend.ops.NeuralTrainingDataAllocation;
 import com.sisacao.backend.ops.NeuralTrainingRun;
 import com.sisacao.backend.ops.NeuralEvolutionLeaderboardEntry;
+import com.sisacao.backend.ops.NeuralChampionMonitoring;
+import com.sisacao.backend.ops.NeuralChampionPrediction;
 import com.sisacao.backend.ops.NeuralGateDecisionAttempt;
 import com.sisacao.backend.ops.OpsOverview;
 import com.sisacao.backend.ops.PipelineJobStatus;
@@ -219,6 +221,142 @@ public class BigQueryOpsClient {
         List<NeuralGateDecisionAttempt> rows = new ArrayList<>();
         for (FieldValueList row : result.iterateAll()) {
             rows.add(toNeuralGateDecisionAttempt(row));
+        }
+        return Collections.unmodifiableList(rows);
+    }
+
+    public NeuralChampionMonitoring fetchNeuralChampionMonitoring() {
+        NeuralTrainingRun champion = fetchApprovedNeuralChampion().orElse(null);
+        if (champion == null || champion.modelVersion() == null || champion.modelVersion().isBlank()) {
+            return new NeuralChampionMonitoring(null, null, null, null, List.of(), List.of());
+        }
+        NeuralGateDecisionAttempt gateDecision = fetchLatestGateDecisionForChampion(champion.modelVersion()).orElse(null);
+        List<NeuralChampionPrediction> predictions = fetchLatestChampionPredictions(champion.modelVersion());
+        List<SignalHistoryEntry> signals = fetchLatestChampionSignals(champion.modelVersion());
+        return new NeuralChampionMonitoring(
+                champion,
+                fantasyNameForChampion(champion.modelVersion()),
+                fantasyNameOriginForChampion(champion.modelVersion()),
+                gateDecision,
+                predictions,
+                signals);
+    }
+
+    private String fantasyNameForChampion(String modelVersion) {
+        return "Apolo NEV";
+    }
+
+    private String fantasyNameOriginForChampion(String modelVersion) {
+        return "Apolo, deus greco-romano associado à profecia, clareza e precisão; nome fantasia operacional do champion NEV aprovado.";
+    }
+
+    private Optional<NeuralTrainingRun> fetchApprovedNeuralChampion() {
+        String sql = "SELECT "
+                + "model_id, model_version, status, feature_version, label_version, "
+                + "training_dataset_snapshot, artifact_uri, "
+                + "ARRAY_LENGTH(feature_columns) AS feature_columns_count, "
+                + "ARRAY_LENGTH(label_classes) AS label_classes_count, "
+                + "directional_precision, coverage, validation_accuracy, test_accuracy, "
+                + "TO_JSON_STRING(metrics_json) AS metrics_json, "
+                + "TO_JSON_STRING(confusion_matrix_json) AS confusion_matrix_json, "
+                + "trained_at, created_at, notes, "
+                + "COUNT(*) OVER () AS total_runs, "
+                + "COUNTIF(LOWER(status) = 'candidate') OVER () AS candidate_runs, "
+                + "COUNTIF(LOWER(status) = 'approved') OVER () AS approved_runs, "
+                + "COUNTIF(LOWER(status) IN ('rejected', 'reject')) OVER () AS rejected_runs, "
+                + "COUNTIF(LOWER(status) IN ('running', 'training', 'in_progress')) OVER () AS active_training_runs, "
+                + "0 AS phase3_runs, 0 AS pending_gate_candidate_runs "
+                + "FROM " + qualifiedQuantView(properties.getNeuralModelRegistryTable()) + " "
+                + "WHERE LOWER(status) = 'approved' "
+                + "ORDER BY trained_at DESC, created_at DESC LIMIT 1";
+        TableResult result = runQuery(sql, Map.of());
+        for (FieldValueList row : result.iterateAll()) {
+            return Optional.of(toNeuralTrainingRun(row));
+        }
+        return Optional.empty();
+    }
+
+    private Optional<NeuralGateDecisionAttempt> fetchLatestGateDecisionForChampion(String modelVersion) {
+        Map<String, QueryParameterValue> params = Map.of("modelVersion", QueryParameterValue.string(modelVersion));
+        String registryTable = qualifiedQuantView(properties.getNeuralModelRegistryTable());
+        String gateTable = qualifiedQuantView(properties.getNeuralGateDecisionsTable());
+        String familyTable = qualifiedQuantView(properties.getNeuralFamilyEvaluationsTable());
+        String sql = "WITH champion AS ("
+                + "SELECT JSON_VALUE(metrics_json, '$.muen_economics.candidate_family_hash') AS family_hash "
+                + "FROM " + registryTable + " WHERE model_version = @modelVersion "
+                + "ORDER BY created_at DESC LIMIT 1) "
+                + "SELECT d.decision_id, d.protocol_version, d.dataset_snapshot, d.candidate_family_hash, "
+                + "d.gate_name, d.decision_status, d.passed, "
+                + "COUNT(*) OVER () AS total_decisions, "
+                + "COUNTIF(d.decision_status = 'rejected' OR d.passed = FALSE) OVER () AS rejected_decisions, "
+                + "COUNTIF(d.decision_status = 'passed' OR d.passed = TRUE) OVER () AS passed_decisions, "
+                + "ARRAY_TO_STRING(d.failed_criteria, ', ') AS failed_criteria, "
+                + "TO_JSON_STRING(d.metrics_json) AS metrics_json, d.gate_engine_version, d.decided_at, "
+                + "f.folds, f.seeds, f.positive_folds, f.positive_fold_ratio, "
+                + "f.median_delta_expectancy_vs_champion, f.median_expectancy_net, "
+                + "f.max_drawdown, f.total_trades, f.stable_across_seeds "
+                + "FROM " + gateTable + " d "
+                + "JOIN champion c ON d.candidate_family_hash = c.family_hash "
+                + "LEFT JOIN (SELECT * FROM " + familyTable + " "
+                + "QUALIFY ROW_NUMBER() OVER (PARTITION BY protocol_version, dataset_snapshot, "
+                + "candidate_family_hash ORDER BY created_at DESC) = 1) f "
+                + "ON f.protocol_version = d.protocol_version "
+                + "AND f.dataset_snapshot = d.dataset_snapshot "
+                + "AND f.candidate_family_hash = d.candidate_family_hash "
+                + "ORDER BY d.decided_at DESC LIMIT 1";
+        TableResult result = runQuery(sql, params);
+        for (FieldValueList row : result.iterateAll()) {
+            return Optional.of(toNeuralGateDecisionAttempt(row));
+        }
+        return Optional.empty();
+    }
+
+    private List<NeuralChampionPrediction> fetchLatestChampionPredictions(String modelVersion) {
+        Map<String, QueryParameterValue> params = Map.of("modelVersion", QueryParameterValue.string(modelVersion));
+        String predictionsTable = qualifiedQuantView("neural_eod_predictions");
+        String sql = "SELECT reference_date, valid_for, ticker, suggested_action, confidence, "
+                + "prob_up, prob_down, prob_neutral, close, financial_volume, job_run_id, created_at "
+                + "FROM " + predictionsTable + " "
+                + "WHERE model_version = @modelVersion "
+                + "AND reference_date = (SELECT MAX(reference_date) FROM " + predictionsTable
+                + " WHERE model_version = @modelVersion) "
+                + "ORDER BY confidence DESC, ticker ASC LIMIT 100";
+        TableResult result;
+        try {
+            result = runQuery(sql, params);
+        } catch (OpsDataAccessException ex) {
+            if (isNotFound(ex)) {
+                return List.of();
+            }
+            throw ex;
+        }
+        List<NeuralChampionPrediction> rows = new ArrayList<>();
+        for (FieldValueList row : result.iterateAll()) {
+            rows.add(toNeuralChampionPrediction(row));
+        }
+        return Collections.unmodifiableList(rows);
+    }
+
+    private List<SignalHistoryEntry> fetchLatestChampionSignals(String modelVersion) {
+        Map<String, QueryParameterValue> params = Map.of("modelVersion", QueryParameterValue.string(modelVersion));
+        String signalsTable = qualifiedSignalsTable();
+        String sql = "SELECT date_ref AS dateRef, COALESCE(valid_for, date_ref) AS validFor, "
+                + "ticker, side, entry, target, stop, score, CAST(rank AS INT64) AS rank, created_at AS createdAt "
+                + "FROM " + signalsTable + " "
+                + "WHERE model_version IN (@modelVersion, CONCAT('neural:', @modelVersion)) "
+                + "AND date_ref = (SELECT MAX(date_ref) FROM " + signalsTable
+                + " WHERE model_version IN (@modelVersion, CONCAT('neural:', @modelVersion))) "
+                + "ORDER BY rank ASC NULLS LAST, score DESC NULLS LAST, ticker ASC LIMIT 100";
+        List<SignalHistoryEntry> rows = new ArrayList<>();
+        try {
+            for (FieldValueList row : runQuery(sql, params).iterateAll()) {
+                rows.add(toSignalHistory(row));
+            }
+        } catch (OpsDataAccessException ex) {
+            if (isNotFound(ex)) {
+                return List.of();
+            }
+            throw ex;
         }
         return Collections.unmodifiableList(rows);
     }
@@ -672,6 +810,22 @@ public class BigQueryOpsClient {
                 getLong(row, "total_decisions", "totalDecisions"),
                 getLong(row, "rejected_decisions", "rejectedDecisions"),
                 getLong(row, "passed_decisions", "passedDecisions"));
+    }
+
+    private NeuralChampionPrediction toNeuralChampionPrediction(FieldValueList row) {
+        return new NeuralChampionPrediction(
+                getDate(row, "reference_date", "referenceDate"),
+                getDate(row, "valid_for", "validFor"),
+                getString(row, "ticker"),
+                getString(row, "suggested_action", "suggestedAction"),
+                getDouble(row, "confidence"),
+                getDouble(row, "prob_up", "probUp"),
+                getDouble(row, "prob_down", "probDown"),
+                getDouble(row, "prob_neutral", "probNeutral"),
+                getDouble(row, "close"),
+                getDouble(row, "financial_volume", "financialVolume"),
+                getString(row, "job_run_id", "jobRunId"),
+                getTimestamp(row, "created_at", "createdAt"));
     }
 
     private QuantDataInventorySummary toQuantDataInventorySummary(FieldValueList row) {

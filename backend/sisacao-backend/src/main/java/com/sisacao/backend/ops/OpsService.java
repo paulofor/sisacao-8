@@ -51,6 +51,10 @@ public class OpsService {
         return bigQueryOpsClient.fetchNeuralGateDecisions();
     }
 
+    public NeuralChampionMonitoring getNeuralChampionMonitoring() {
+        return bigQueryOpsClient.fetchNeuralChampionMonitoring();
+    }
+
     public QuantDataInventorySummary getQuantDataInventorySummary() {
         return bigQueryOpsClient.fetchQuantDataInventorySummary();
     }

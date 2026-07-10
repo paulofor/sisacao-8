@@ -193,6 +193,30 @@ export interface NeuralTrainingRun {
   pendingGateCandidateRuns: number | null
 }
 
+export interface NeuralChampionPrediction {
+  referenceDate: string | null
+  validFor: string | null
+  ticker: string
+  suggestedAction: string
+  confidence: number | null
+  probUp: number | null
+  probDown: number | null
+  probNeutral: number | null
+  close: number | null
+  financialVolume: number | null
+  jobRunId: string | null
+  createdAt: string | null
+}
+
+export interface NeuralChampionMonitoring {
+  champion: NeuralTrainingRun | null
+  fantasyName: string | null
+  fantasyNameOrigin: string | null
+  gateDecision: NeuralGateDecisionAttempt | null
+  predictions: NeuralChampionPrediction[]
+  signals: OpsSignalHistoryEntry[]
+}
+
 export interface AiAdvisorRequest {
   advisorRunId: string
   task: string
@@ -318,6 +342,96 @@ const stringifyDetails = (value: unknown): string | null => {
   }
   return null
 }
+
+const parseNeuralTrainingRun = (record: Record<string, unknown>): NeuralTrainingRun => ({
+  modelId: asString(record.modelId ?? record.model_id, '—'),
+  modelVersion: asString(record.modelVersion ?? record.model_version, '—'),
+  status: asNullableString(record.status),
+  featureVersion: asString(record.featureVersion ?? record.feature_version, '—'),
+  labelVersion: asString(record.labelVersion ?? record.label_version, '—'),
+  trainingDatasetSnapshot: asNullableString(
+    record.trainingDatasetSnapshot ?? record.training_dataset_snapshot,
+  ),
+  artifactUri: asNullableString(record.artifactUri ?? record.artifact_uri),
+  featureColumnsCount: toInteger(record.featureColumnsCount ?? record.feature_columns_count),
+  labelClassesCount: toInteger(record.labelClassesCount ?? record.label_classes_count),
+  directionalPrecision: toNumber(record.directionalPrecision ?? record.directional_precision),
+  coverage: toNumber(record.coverage),
+  validationAccuracy: toNumber(record.validationAccuracy ?? record.validation_accuracy),
+  testAccuracy: toNumber(record.testAccuracy ?? record.test_accuracy),
+  metricsJson: asNullableString(record.metricsJson ?? record.metrics_json),
+  confusionMatrixJson: asNullableString(record.confusionMatrixJson ?? record.confusion_matrix_json),
+  trainedAt: toIsoDateTime(record.trainedAt ?? record.trained_at),
+  createdAt: toIsoDateTime(record.createdAt ?? record.created_at),
+  notes: asNullableString(record.notes),
+  totalRuns: toNumber(record.totalRuns ?? record.total_runs),
+  candidateRuns: toNumber(record.candidateRuns ?? record.candidate_runs),
+  approvedRuns: toNumber(record.approvedRuns ?? record.approved_runs),
+  rejectedRuns: toNumber(record.rejectedRuns ?? record.rejected_runs),
+  activeTrainingRuns: toNumber(record.activeTrainingRuns ?? record.active_training_runs),
+  phase3Runs: toNumber(record.phase3Runs ?? record.phase3_runs),
+  pendingGateCandidateRuns: toNumber(
+    record.pendingGateCandidateRuns ?? record.pending_gate_candidate_runs,
+  ),
+})
+
+const parseNeuralGateDecision = (record: Record<string, unknown>): NeuralGateDecisionAttempt => ({
+  decisionId: asString(record.decisionId ?? record.decision_id, '—'),
+  protocolVersion: asNullableString(record.protocolVersion ?? record.protocol_version),
+  datasetSnapshot: asNullableString(record.datasetSnapshot ?? record.dataset_snapshot),
+  candidateFamilyHash: asNullableString(record.candidateFamilyHash ?? record.candidate_family_hash),
+  gateName: asNullableString(record.gateName ?? record.gate_name),
+  decisionStatus: asNullableString(record.decisionStatus ?? record.decision_status),
+  passed: toBoolean(record.passed),
+  failedCriteria: asNullableString(record.failedCriteria ?? record.failed_criteria),
+  metricsJson: asNullableString(record.metricsJson ?? record.metrics_json),
+  gateEngineVersion: asNullableString(record.gateEngineVersion ?? record.gate_engine_version),
+  decidedAt: toIsoDateTime(record.decidedAt ?? record.decided_at),
+  folds: toNumber(record.folds),
+  seeds: toNumber(record.seeds),
+  positiveFolds: toNumber(record.positiveFolds ?? record.positive_folds),
+  positiveFoldRatio: toNumber(record.positiveFoldRatio ?? record.positive_fold_ratio),
+  medianDeltaExpectancyVsChampion: toNumber(
+    record.medianDeltaExpectancyVsChampion ?? record.median_delta_expectancy_vs_champion,
+  ),
+  medianExpectancyNet: toNumber(record.medianExpectancyNet ?? record.median_expectancy_net),
+  maxDrawdown: toNumber(record.maxDrawdown ?? record.max_drawdown),
+  totalTrades: toNumber(record.totalTrades ?? record.total_trades),
+  stableAcrossSeeds: toBoolean(record.stableAcrossSeeds ?? record.stable_across_seeds),
+  totalDecisions: toNumber(record.totalDecisions ?? record.total_decisions),
+  rejectedDecisions: toNumber(record.rejectedDecisions ?? record.rejected_decisions),
+  passedDecisions: toNumber(record.passedDecisions ?? record.passed_decisions),
+})
+
+const parseOpsSignalHistoryEntry = (record: Record<string, unknown>): OpsSignalHistoryEntry => ({
+  dateRef: toIsoDate(record.dateRef ?? record.date_ref ?? record.generated_at),
+  validFor: toIsoDate(record.validFor ?? record.valid_for ?? record.validDate),
+  ticker: asString(record.ticker) || '—',
+  side: (asUpperString(record.side) as OpsSignalSide) ?? '—',
+  entry: toNumber(record.entry ?? record.entry_price ?? record.preco_entrada),
+  target: toNumber(record.target ?? record.target_price ?? record.preco_alvo),
+  stop: toNumber(record.stop ?? record.stop_loss ?? record.preco_stop),
+  score: toNumber(record.score),
+  rank: toNumber(record.rank),
+  createdAt: toIsoDateTime(record.createdAt ?? record.created_at ?? record.timestamp),
+})
+
+const parseNeuralChampionPrediction = (
+  record: Record<string, unknown>,
+): NeuralChampionPrediction => ({
+  referenceDate: toIsoDate(record.referenceDate ?? record.reference_date),
+  validFor: toIsoDate(record.validFor ?? record.valid_for),
+  ticker: asString(record.ticker) || '—',
+  suggestedAction: asUpperString(record.suggestedAction ?? record.suggested_action) ?? '—',
+  confidence: toNumber(record.confidence),
+  probUp: toNumber(record.probUp ?? record.prob_up),
+  probDown: toNumber(record.probDown ?? record.prob_down),
+  probNeutral: toNumber(record.probNeutral ?? record.prob_neutral),
+  close: toNumber(record.close),
+  financialVolume: toNumber(record.financialVolume ?? record.financial_volume),
+  jobRunId: asNullableString(record.jobRunId ?? record.job_run_id),
+  createdAt: toIsoDateTime(record.createdAt ?? record.created_at),
+})
 
 export const fetchOpsOverview = async (): Promise<OpsOverview | null> => {
   const response = await apiClient.get<unknown>('/ops/overview')
@@ -545,86 +659,30 @@ export const fetchNeuralTrainingRuns = async (): Promise<NeuralTrainingRun[]> =>
   const response = await apiClient.get<unknown>('/ops/neural/training-runs')
   const items = Array.isArray(response.data) ? response.data : []
 
-  return items.map((item) => {
-    const record = item as Record<string, unknown>
-
-    return {
-      modelId: asString(record.modelId ?? record.model_id, '—'),
-      modelVersion: asString(record.modelVersion ?? record.model_version, '—'),
-      status: asNullableString(record.status),
-      featureVersion: asString(record.featureVersion ?? record.feature_version, '—'),
-      labelVersion: asString(record.labelVersion ?? record.label_version, '—'),
-      trainingDatasetSnapshot: asNullableString(
-        record.trainingDatasetSnapshot ?? record.training_dataset_snapshot,
-      ),
-      artifactUri: asNullableString(record.artifactUri ?? record.artifact_uri),
-      featureColumnsCount: toInteger(
-        record.featureColumnsCount ?? record.feature_columns_count,
-      ),
-      labelClassesCount: toInteger(
-        record.labelClassesCount ?? record.label_classes_count,
-      ),
-      directionalPrecision: toNumber(
-        record.directionalPrecision ?? record.directional_precision,
-      ),
-      coverage: toNumber(record.coverage),
-      validationAccuracy: toNumber(
-        record.validationAccuracy ?? record.validation_accuracy,
-      ),
-      testAccuracy: toNumber(record.testAccuracy ?? record.test_accuracy),
-      metricsJson: asNullableString(record.metricsJson ?? record.metrics_json),
-      confusionMatrixJson: asNullableString(
-        record.confusionMatrixJson ?? record.confusion_matrix_json,
-      ),
-      trainedAt: toIsoDateTime(record.trainedAt ?? record.trained_at),
-      createdAt: toIsoDateTime(record.createdAt ?? record.created_at),
-      notes: asNullableString(record.notes),
-      totalRuns: toNumber(record.totalRuns ?? record.total_runs),
-      candidateRuns: toNumber(record.candidateRuns ?? record.candidate_runs),
-      approvedRuns: toNumber(record.approvedRuns ?? record.approved_runs),
-      rejectedRuns: toNumber(record.rejectedRuns ?? record.rejected_runs),
-      activeTrainingRuns: toNumber(record.activeTrainingRuns ?? record.active_training_runs),
-      phase3Runs: toNumber(record.phase3Runs ?? record.phase3_runs),
-      pendingGateCandidateRuns: toNumber(record.pendingGateCandidateRuns ?? record.pending_gate_candidate_runs),
-    }
-  })
+  return items.map((item) => parseNeuralTrainingRun(item as Record<string, unknown>))
 }
 
 export const fetchNeuralGateDecisions = async (): Promise<NeuralGateDecisionAttempt[]> => {
   const response = await apiClient.get<unknown>('/ops/neural/gate-decisions')
   const items = Array.isArray(response.data) ? response.data : []
 
-  return items.map((item) => {
-    const record = item as Record<string, unknown>
+  return items.map((item) => parseNeuralGateDecision(item as Record<string, unknown>))
+}
 
-    return {
-      decisionId: asString(record.decisionId ?? record.decision_id, '—'),
-      protocolVersion: asNullableString(record.protocolVersion ?? record.protocol_version),
-      datasetSnapshot: asNullableString(record.datasetSnapshot ?? record.dataset_snapshot),
-      candidateFamilyHash: asNullableString(record.candidateFamilyHash ?? record.candidate_family_hash),
-      gateName: asNullableString(record.gateName ?? record.gate_name),
-      decisionStatus: asNullableString(record.decisionStatus ?? record.decision_status),
-      passed: toBoolean(record.passed),
-      failedCriteria: asNullableString(record.failedCriteria ?? record.failed_criteria),
-      metricsJson: asNullableString(record.metricsJson ?? record.metrics_json),
-      gateEngineVersion: asNullableString(record.gateEngineVersion ?? record.gate_engine_version),
-      decidedAt: toIsoDateTime(record.decidedAt ?? record.decided_at),
-      folds: toNumber(record.folds),
-      seeds: toNumber(record.seeds),
-      positiveFolds: toNumber(record.positiveFolds ?? record.positive_folds),
-      positiveFoldRatio: toNumber(record.positiveFoldRatio ?? record.positive_fold_ratio),
-      medianDeltaExpectancyVsChampion: toNumber(
-        record.medianDeltaExpectancyVsChampion ?? record.median_delta_expectancy_vs_champion,
-      ),
-      medianExpectancyNet: toNumber(record.medianExpectancyNet ?? record.median_expectancy_net),
-      maxDrawdown: toNumber(record.maxDrawdown ?? record.max_drawdown),
-      totalTrades: toNumber(record.totalTrades ?? record.total_trades),
-      stableAcrossSeeds: toBoolean(record.stableAcrossSeeds ?? record.stable_across_seeds),
-      totalDecisions: toNumber(record.totalDecisions ?? record.total_decisions),
-      rejectedDecisions: toNumber(record.rejectedDecisions ?? record.rejected_decisions),
-      passedDecisions: toNumber(record.passedDecisions ?? record.passed_decisions),
-    }
-  })
+export const fetchNeuralChampionMonitoring = async (): Promise<NeuralChampionMonitoring> => {
+  const response = await apiClient.get<unknown>('/ops/neural/champion-monitoring')
+  const data = asRecord(response.data)
+  const predictions = Array.isArray(data.predictions) ? data.predictions : []
+  const signals = Array.isArray(data.signals) ? data.signals : []
+
+  return {
+    champion: data.champion ? parseNeuralTrainingRun(asRecord(data.champion)) : null,
+    fantasyName: asNullableString(data.fantasyName ?? data.fantasy_name),
+    fantasyNameOrigin: asNullableString(data.fantasyNameOrigin ?? data.fantasy_name_origin),
+    gateDecision: data.gateDecision ? parseNeuralGateDecision(asRecord(data.gateDecision)) : null,
+    predictions: predictions.map((item) => parseNeuralChampionPrediction(asRecord(item))),
+    signals: signals.map((item) => parseOpsSignalHistoryEntry(asRecord(item))),
+  }
 }
 
 const asRecord = (value: unknown): Record<string, unknown> => {
