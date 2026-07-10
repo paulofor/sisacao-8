@@ -210,6 +210,8 @@ export interface NeuralChampionPrediction {
 
 export interface NeuralChampionMonitoring {
   champion: NeuralTrainingRun | null
+  fantasyName: string | null
+  fantasyNameOrigin: string | null
   gateDecision: NeuralGateDecisionAttempt | null
   predictions: NeuralChampionPrediction[]
   signals: OpsSignalHistoryEntry[]
@@ -675,6 +677,8 @@ export const fetchNeuralChampionMonitoring = async (): Promise<NeuralChampionMon
 
   return {
     champion: data.champion ? parseNeuralTrainingRun(asRecord(data.champion)) : null,
+    fantasyName: asNullableString(data.fantasyName ?? data.fantasy_name),
+    fantasyNameOrigin: asNullableString(data.fantasyNameOrigin ?? data.fantasy_name_origin),
     gateDecision: data.gateDecision ? parseNeuralGateDecision(asRecord(data.gateDecision)) : null,
     predictions: predictions.map((item) => parseNeuralChampionPrediction(asRecord(item))),
     signals: signals.map((item) => parseOpsSignalHistoryEntry(asRecord(item))),

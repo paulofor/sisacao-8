@@ -50,6 +50,8 @@ const formatNumber = (value: number | null | undefined, digits = 2) => {
 
 const NeuralChampionTab: FC<NeuralChampionTabProps> = ({ data, isLoading, error }) => {
   const champion = data?.champion ?? null
+  const fantasyName = data?.fantasyName ?? 'Apolo NEV'
+  const fantasyNameOrigin = data?.fantasyNameOrigin ?? 'Apolo, deus greco-romano associado à profecia, clareza e precisão.'
   const gateDecision = data?.gateDecision ?? null
   const predictions = data?.predictions ?? []
   const signals = data?.signals ?? []
@@ -76,12 +78,15 @@ const NeuralChampionTab: FC<NeuralChampionTabProps> = ({ data, isLoading, error 
           <Stack direction="row" alignItems="center" spacing={1} flexWrap="wrap">
             <EmojiEventsIcon color="warning" />
             <Typography variant="h5" component="h2">
-              Champion neural aprovado
+              {fantasyName}
             </Typography>
             <StatusChip status={champion.status ?? 'approved'} />
           </Stack>
+          <Typography variant="subtitle1" color="text.secondary">
+            Champion neural aprovado · {fantasyNameOrigin}
+          </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ wordBreak: 'break-all' }}>
-            {champion.modelVersion}
+            Nome técnico: {champion.modelVersion}
           </Typography>
           <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} flexWrap="wrap">
             <Chip label={`Dataset: ${champion.trainingDatasetSnapshot ?? '—'}`} />

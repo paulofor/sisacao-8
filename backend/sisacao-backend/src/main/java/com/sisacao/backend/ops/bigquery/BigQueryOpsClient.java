@@ -228,12 +228,26 @@ public class BigQueryOpsClient {
     public NeuralChampionMonitoring fetchNeuralChampionMonitoring() {
         NeuralTrainingRun champion = fetchApprovedNeuralChampion().orElse(null);
         if (champion == null || champion.modelVersion() == null || champion.modelVersion().isBlank()) {
-            return new NeuralChampionMonitoring(null, null, List.of(), List.of());
+            return new NeuralChampionMonitoring(null, null, null, null, List.of(), List.of());
         }
         NeuralGateDecisionAttempt gateDecision = fetchLatestGateDecisionForChampion(champion.modelVersion()).orElse(null);
         List<NeuralChampionPrediction> predictions = fetchLatestChampionPredictions(champion.modelVersion());
         List<SignalHistoryEntry> signals = fetchLatestChampionSignals(champion.modelVersion());
-        return new NeuralChampionMonitoring(champion, gateDecision, predictions, signals);
+        return new NeuralChampionMonitoring(
+                champion,
+                fantasyNameForChampion(champion.modelVersion()),
+                fantasyNameOriginForChampion(champion.modelVersion()),
+                gateDecision,
+                predictions,
+                signals);
+    }
+
+    private String fantasyNameForChampion(String modelVersion) {
+        return "Apolo NEV";
+    }
+
+    private String fantasyNameOriginForChampion(String modelVersion) {
+        return "Apolo, deus greco-romano associado à profecia, clareza e precisão; nome fantasia operacional do champion NEV aprovado.";
     }
 
     private Optional<NeuralTrainingRun> fetchApprovedNeuralChampion() {
