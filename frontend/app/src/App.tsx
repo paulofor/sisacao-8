@@ -11,6 +11,7 @@ import InventoryIcon from '@mui/icons-material/Inventory'
 import ScienceIcon from '@mui/icons-material/Science'
 import ModelTrainingIcon from '@mui/icons-material/ModelTraining'
 import TimelineIcon from '@mui/icons-material/Timeline'
+import EmojiEventsIcon from '@mui/icons-material/EmojiEvents'
 import {
   AppBar,
   Box,
@@ -38,6 +39,7 @@ import IncidentesTab from './components/tabs/IncidentesTab'
 import OperacaoTab from './components/tabs/OperacaoTab'
 import QuantPhase0Tab from './components/tabs/QuantPhase0Tab'
 import NeuralJourneyTab from './components/tabs/NeuralJourneyTab'
+import NeuralChampionTab from './components/tabs/NeuralChampionTab'
 import NeuralOverviewTab from './components/tabs/NeuralOverviewTab'
 import NeuralTrainingDataTab from './components/tabs/NeuralTrainingDataTab'
 import NeuralEvolutionTab from './components/tabs/NeuralEvolutionTab'
@@ -58,6 +60,7 @@ import { useOpsPipeline } from './hooks/useOpsPipeline'
 import { useNeuralTrainingDataAllocation } from './hooks/useNeuralTrainingDataAllocation'
 import { useNeuralEvolutionLeaderboard } from './hooks/useNeuralEvolutionLeaderboard'
 import { useNeuralGateDecisions } from './hooks/useNeuralGateDecisions'
+import { useNeuralChampionMonitoring } from './hooks/useNeuralChampionMonitoring'
 import { useNeuralTrainingRuns } from './hooks/useNeuralTrainingRuns'
 import { useOpsSignalsNext } from './hooks/useOpsSignalsNext'
 import { useQuantDataInventorySummary } from './hooks/useQuantDataInventorySummary'
@@ -109,6 +112,7 @@ type TabValue =
   | 'neural-training-data'
   | 'neural-training-runs'
   | 'neural-evolution'
+  | 'neural-champion'
   | 'ai-advisor'
 
 type MenuItem = {
@@ -136,6 +140,7 @@ const menuGroups: Array<{ title: string; items: MenuItem[] }> = [
       { label: 'Dados de treino', value: 'neural-training-data', icon: ScienceIcon },
       { label: 'Treinos', value: 'neural-training-runs', icon: ModelTrainingIcon },
       { label: 'Evolução', value: 'neural-evolution', icon: TimelineIcon },
+      { label: 'Champion NEV', value: 'neural-champion', icon: EmojiEventsIcon },
       { label: 'Advisor IA Gemini', value: 'ai-advisor', icon: AutoAwesomeIcon },
     ],
   },
@@ -182,6 +187,7 @@ function App() {
   const neuralTrainingRunsQuery = useNeuralTrainingRuns()
   const neuralEvolutionLeaderboardQuery = useNeuralEvolutionLeaderboard()
   const neuralGateDecisionsQuery = useNeuralGateDecisions()
+  const neuralChampionMonitoringQuery = useNeuralChampionMonitoring()
   const quantTickerCoverageQuery = useQuantTickerCoverage(150)
   const quantDataQualityIncidentsQuery = useQuantDataQualityIncidents(150)
   const quantBaselineStrategiesQuery = useQuantBaselineStrategies()
@@ -219,6 +225,7 @@ function App() {
     'neural-training-data': [neuralTrainingDataAllocationQuery] as QueryResult[],
     'neural-training-runs': [neuralTrainingRunsQuery, neuralGateDecisionsQuery] as QueryResult[],
     'neural-evolution': [neuralEvolutionLeaderboardQuery] as QueryResult[],
+    'neural-champion': [neuralChampionMonitoringQuery] as QueryResult[],
     'ai-advisor': [neuralEvolutionLeaderboardQuery] as QueryResult[],
     sinais: [opsSignalsNextQuery] as QueryResult[],
     incidentes: [opsIncidentsOpenQuery] as QueryResult[],
@@ -452,6 +459,14 @@ function App() {
             gateDecisionsError={neuralGateDecisionsQuery.error}
             gateDecisionsLoading={neuralGateDecisionsQuery.isLoading && (neuralGateDecisionsQuery.data ?? []).length === 0}
             trainingRuns={neuralTrainingRunsQuery.data ?? []}
+          />
+        ) : null}
+
+        {activeTab === 'neural-champion' ? (
+          <NeuralChampionTab
+            data={neuralChampionMonitoringQuery.data}
+            error={neuralChampionMonitoringQuery.error}
+            isLoading={neuralChampionMonitoringQuery.isLoading && !neuralChampionMonitoringQuery.data}
           />
         ) : null}
 

@@ -56,6 +56,11 @@ public class OpsController {
         return opsService.getNeuralGateDecisions();
     }
 
+    @GetMapping("/neural/champion-monitoring")
+    public NeuralChampionMonitoring getNeuralChampionMonitoring() {
+        return opsService.getNeuralChampionMonitoring();
+    }
+
     @GetMapping("/quant/inventory-summary")
     public QuantDataInventorySummary getQuantDataInventorySummary() {
         return opsService.getQuantDataInventorySummary();
