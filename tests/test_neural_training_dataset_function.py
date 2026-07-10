@@ -10,13 +10,16 @@ import functions.neural_training_dataset.main as module
 
 
 class _FakeQueryJob:
-    def __init__(self, rows=None):
+    def __init__(self, rows=None, dataframe=None):
         self._rows = rows or []
+        self._dataframe = dataframe
 
     def result(self):
         return self._rows
 
     def to_dataframe(self):
+        if self._dataframe is not None:
+            return self._dataframe.copy()
         rows = []
         start = dt.date(2024, 1, 1)
         for day in range(45):
@@ -53,6 +56,21 @@ class _FakeClient:
         self.queries.append(query)
         if "SELECT data AS holiday_date" in query:
             return _FakeQueryJob([])
+        if "quant_backtest_trades" in query:
+            return _FakeQueryJob(
+                dataframe=pd.DataFrame(
+                    [
+                        {
+                            "ticker": "TEST3",
+                            "reference_date": dt.date(2024, 1, 25),
+                            "champion_strategy_id": "baseline_daily_momentum_v1",
+                            "champion_strategy_version": "v1",
+                            "champion_signal_side": "BUY",
+                            "champion_net_return": 0.025,
+                        }
+                    ]
+                )
+            )
         return _FakeQueryJob()
 
     def load_table_from_json(self, rows, table_id, job_config=None):
@@ -113,6 +131,10 @@ def test_neural_training_dataset_materializes_and_loads_rows(monkeypatch):
     assert first_row["metadata_json"]["builder"].endswith("build_training_dataset")
     assert first_row["metadata_json"]["protocol_version"] == "neural_eod_protocol_v1"
     assert first_row["metadata_json"]["manifest_query_hash"]
+    assert "champion_net_return" in first_row
+    assert "event_tail_risk_score" in first_row
+    assert "champion_trade_active" in first_row
+    assert any(row["champion_trade_active"] for row in dataset_rows)
     manifest_rows = [
         row
         for row in fake_client.loaded_rows
@@ -120,7 +142,7 @@ def test_neural_training_dataset_materializes_and_loads_rows(monkeypatch):
         and row.get("manifest_json") is not None
     ]
     assert len(manifest_rows) == 1
-    assert manifest_rows[0]["feature_version"] == "feature_eod_tabular_v3"
+    assert manifest_rows[0]["feature_version"] == "feature_eod_tabular_v4"
     loaded_splits = {row["dataset_split"] for row in dataset_rows}
     assert {"train", "validation", "test"}.issubset(loaded_splits)
 

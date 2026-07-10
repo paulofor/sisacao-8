@@ -20,7 +20,7 @@ from sisacao8.trade_engine import TradeEngineConfig, simulate_eod_barrier_trade
 
 LabelClass = Literal["up", "down", "neutral"]
 
-FEATURE_VERSION = "feature_eod_tabular_v3"
+FEATURE_VERSION = "feature_eod_tabular_v4"
 LABEL_VERSION = "label_eod_barrier_v2"
 DEFAULT_MIN_HISTORY_DAYS = 20
 
@@ -448,6 +448,19 @@ def _build_features(candles: pd.DataFrame, min_history_days: int) -> pd.DataFram
         group["volume_ratio_5d"] = volume / volume.rolling(5).mean()
         group["volume_ratio_20d"] = volume / volume.rolling(20).mean()
         group["financial_volume_ratio_20d"] = fin_volume / fin_volume.rolling(20).mean()
+        volume_ratio_20d = group["volume_ratio_20d"]
+        financial_volume_z20 = group["financial_volume_z20"]
+        return_5d = group["return_5d"]
+        group["event_volume_spike_20d"] = volume_ratio_20d.ge(3.0).astype(float)
+        group["event_financial_volume_spike_z20"] = financial_volume_z20.ge(3.0).astype(
+            float
+        )
+        group["event_abs_return_5d_ge_10"] = return_5d.abs().ge(0.10).astype(float)
+        group["event_tail_risk_score"] = (
+            volume_ratio_20d.sub(3.0).clip(lower=0).fillna(0.0)
+            + financial_volume_z20.sub(3.0).clip(lower=0).fillna(0.0)
+            + return_5d.abs().sub(0.10).mul(10.0).clip(lower=0).fillna(0.0)
+        )
         sma_5 = close.rolling(5).mean()
         sma_20 = close.rolling(20).mean()
         sma_50 = close.rolling(50).mean()
@@ -512,6 +525,10 @@ def _build_features(candles: pd.DataFrame, min_history_days: int) -> pd.DataFram
             "volume_ratio_5d",
             "volume_ratio_20d",
             "financial_volume_ratio_20d",
+            "event_volume_spike_20d",
+            "event_financial_volume_spike_z20",
+            "event_abs_return_5d_ge_10",
+            "event_tail_risk_score",
             "trend_sma_5_20_pct",
             "distance_high_20d_pct",
             "distance_low_20d_pct",
