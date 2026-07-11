@@ -29,7 +29,7 @@ MODEL_REGISTRY_TABLE_ID = os.environ.get(
     "BQ_NEURAL_MODEL_REGISTRY_TABLE", "neural_model_registry"
 )
 HOLIDAYS_TABLE_ID = os.environ.get("BQ_HOLIDAYS_TABLE", "feriados_b3")
-MODEL_ID = os.environ.get("NEURAL_MODEL_ID", "neural_eod_mlp")
+MODEL_ID = os.environ.get("NEURAL_MODEL_ID", "").strip()
 MODEL_VERSION = os.environ.get("NEURAL_MODEL_VERSION")
 APPROVED_STATUSES = tuple(
     item.strip().lower()
@@ -156,6 +156,7 @@ def _load_registry_entry(
     explicit_uri = payload.get("artifact_uri") or os.environ.get(
         "NEURAL_MODEL_ARTIFACT_URI"
     )
+    explicit_model_id = str(payload.get("model_id") or MODEL_ID).strip()
     explicit_version = payload.get("model_version") or MODEL_VERSION
     if explicit_uri:
         return {
@@ -166,15 +167,16 @@ def _load_registry_entry(
     query = f"""
         SELECT model_id, model_version, artifact_uri, status, created_at
         FROM `{_table_ref(MODEL_REGISTRY_TABLE_ID)}`
-        WHERE model_id = @model_id
+        WHERE (@model_id = '' OR model_id = @model_id)
           AND LOWER(status) IN UNNEST(@statuses)
           AND (@model_version IS NULL OR model_version = @model_version)
-        ORDER BY created_at DESC
+        ORDER BY CASE WHEN LOWER(status) = 'approved' THEN 0 ELSE 1 END,
+                 created_at DESC
         LIMIT 1
     """
     job_config = bigquery.QueryJobConfig(
         query_parameters=[
-            bigquery.ScalarQueryParameter("model_id", "STRING", MODEL_ID),
+            bigquery.ScalarQueryParameter("model_id", "STRING", explicit_model_id),
             bigquery.ArrayQueryParameter("statuses", "STRING", status_params),
             bigquery.ScalarQueryParameter("model_version", "STRING", explicit_version),
         ]
