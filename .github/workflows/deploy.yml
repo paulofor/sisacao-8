@@ -92,6 +92,13 @@ jobs:
             memory: 512Mi
             timeout: 600s
             env: BQ_INTRADAY_DATASET=cotacao_intraday,BQ_NEURAL_MODEL_REGISTRY_TABLE=neural_model_registry,BQ_NEURAL_GATE_DECISIONS_TABLE=neural_gate_decisions,BQ_LOCATION=us-east1
+          - name: neural_eod_predictions
+            entry_point: neural_eod_predictions
+            source: functions/neural_eod_predictions
+            service_account: sa-neural-evolution-orchestrator@ingestaokraken.iam.gserviceaccount.com
+            memory: 2Gi
+            timeout: 1800s
+            env: BQ_INTRADAY_DATASET=cotacao_intraday,BQ_DAILY_TABLE=cotacao_ohlcv_diario,BQ_NEURAL_EOD_PREDICTIONS_TABLE=neural_eod_predictions,BQ_NEURAL_MODEL_REGISTRY_TABLE=neural_model_registry,BQ_HOLIDAYS_TABLE=feriados_b3,BQ_LOCATION=us-east1,NEURAL_MODEL_STATUSES=approved
     steps:
       - uses: actions/checkout@v4
       - name: Auth GCP
