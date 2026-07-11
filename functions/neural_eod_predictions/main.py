@@ -258,9 +258,10 @@ def _load_holidays(
     client: bigquery.Client, start: dt.date, end: dt.date
 ) -> set[dt.date]:
     query = f"""
-        SELECT data AS holiday_date
+        SELECT data_feriado AS holiday_date
         FROM `{_table_ref(HOLIDAYS_TABLE_ID)}`
-        WHERE data BETWEEN @start_date AND @end_date
+        WHERE data_feriado BETWEEN @start_date AND @end_date
+          AND COALESCE(ativo, TRUE)
     """
     job_config = bigquery.QueryJobConfig(
         query_parameters=[
