@@ -123,3 +123,10 @@
 - Corrigi `functions/neural_eod_predictions/main.py` para normalizar os registros antes de `insert_rows_json`, convertendo `date`/`datetime` para ISO string, valores nulos pandas para `None` e escalares numpy via `.item()`.
 - Próximo passo: redeployar `neural_eod_predictions` novamente e repetir a chamada do Apolo; se `rows > 0`, chamar `eod_signals` neural para `2026-07-10`.
 - Comandos usados: `curl` para `neural_eod_predictions`, MCP HTTP/JSON-RPC `cloud_run_function_logs`, edição via `apply_patch`, `python -m black`, `python -m py_compile`, teste local de `_json_ready` e `git diff --check`.
+
+## 2026-07-11 — Apolo processado para o próximo pregão sem sinais acionáveis
+- Após novo deploy, chamei `neural_eod_predictions` para `date_ref=2026-07-10` com `job_run_id=manual-apolo-20260710-20260711-r3`. A função retornou HTTP 200, `status=ok`, `rows=150`, `valid_for=2026-07-13`, `model_id=neural_eod_tabular_bottleneck_mlp` e o `model_version` aprovado do Apolo NEV.
+- Em seguida chamei `eod_signals` com `signal_source=neural`, `force=true` e `date_ref=2026-07-10`. A função retornou HTTP 200, mas `generated=0`, `stored=0`, `signals=[]`, `valid_for=2026-07-13` e `model_version=neural:<model_version_do_Apolo>`.
+- Validei a tela/API `GET http://34.194.252.70/api/ops/neural/champion-monitoring`: agora há 100 predições recentes exibidas para o champion e 0 sinais. As maiores confidências retornadas pela API estão como `HOLD` (por exemplo FRAS3, ONCO3, MGLU3, AMBP3), abaixo do threshold direcional operacional; portanto o resultado correto desta rodada é não emitir BUY/SELL para o próximo pregão.
+- Conclusão operacional: o Apolo processou o pregão de 2026-07-10 e materializou predições para o próximo pregão, 2026-07-13, mas não gerou sinais acionáveis porque as predições ficaram neutras/HOLD sob a regra atual de confiança. Não houve falha técnica nesta etapa; houve abstenção do modelo.
+- Comandos usados: `curl` para `neural_eod_predictions`, `curl` para `eod_signals`, `curl` para `http://34.194.252.70/api/ops/neural/champion-monitoring` e parse local com Python.
