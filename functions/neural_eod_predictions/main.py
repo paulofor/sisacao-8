@@ -284,9 +284,21 @@ def _load_holidays(
 def _insert_predictions(client: bigquery.Client, predictions: pd.DataFrame) -> int:
     if predictions.empty:
         return 0
-    errors = client.insert_rows_json(
-        _table_ref(PREDICTIONS_TABLE_ID), predictions.to_dict("records")
-    )
+    rows = [
+        {key: _json_ready(value) for key, value in row.items()}
+        for row in predictions.to_dict("records")
+    ]
+    errors = client.insert_rows_json(_table_ref(PREDICTIONS_TABLE_ID), rows)
     if errors:
         raise RuntimeError(f"BigQuery insert_rows_json failed: {errors}")
     return int(len(predictions))
+
+
+def _json_ready(value: Any) -> Any:
+    if isinstance(value, (dt.datetime, dt.date)):
+        return value.isoformat()
+    if pd.isna(value):
+        return None
+    if hasattr(value, "item"):
+        return value.item()
+    return value

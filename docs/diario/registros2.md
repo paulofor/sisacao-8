@@ -116,3 +116,10 @@
 - Os logs também mostraram aviso anterior na leitura de feriados: `Unrecognized name: data`. Validei o schema de `feriados_b3` via BigQuery (`data_feriado`, `nome_feriado`, `mercado`, `ativo`, `atualizado_em`) e corrigi `_load_holidays` para consultar `data_feriado` com `COALESCE(ativo, TRUE)`.
 - Após essas correções, a função precisa ser redeployada. Só depois repetir a sequência: chamar `neural_eod_predictions` para `2026-07-10`; se retornar `rows > 0`, chamar `eod_signals` com `signal_source=neural` para a mesma data.
 - Comandos usados: `curl` para `neural_eod_predictions`, MCP HTTP/JSON-RPC `cloud_run_function_logs`, MCP `bigquery_query` em `INFORMATION_SCHEMA.COLUMNS` de `feriados_b3`, edição local de `requirements.txt` e `functions/neural_eod_predictions/main.py`, `python -m black`, `python -m py_compile`, teste de import em pacote temporário vendorizado e `git diff --check`.
+
+## 2026-07-11 — Segunda tentativa do Apolo e serialização JSON para BigQuery
+- Após o deploy, tentei novamente gerar predições do Apolo para `date_ref=2026-07-10` com `job_run_id=manual-apolo-20260710-20260711-r2`; o endpoint respondeu HTTP 500 e os sinais ainda não foram gerados.
+- Consultei logs via MCP `cloud_run_function_logs` e confirmei nova causa: `TypeError: Object of type date is not JSON serializable` durante `insert_rows_json` em `_insert_predictions`. A inferência chegou até a etapa de inserção, mas as colunas `reference_date`/`valid_for` estavam como objetos `date` Python.
+- Corrigi `functions/neural_eod_predictions/main.py` para normalizar os registros antes de `insert_rows_json`, convertendo `date`/`datetime` para ISO string, valores nulos pandas para `None` e escalares numpy via `.item()`.
+- Próximo passo: redeployar `neural_eod_predictions` novamente e repetir a chamada do Apolo; se `rows > 0`, chamar `eod_signals` neural para `2026-07-10`.
+- Comandos usados: `curl` para `neural_eod_predictions`, MCP HTTP/JSON-RPC `cloud_run_function_logs`, edição via `apply_patch`, `python -m black`, `python -m py_compile`, teste local de `_json_ready` e `git diff --check`.
