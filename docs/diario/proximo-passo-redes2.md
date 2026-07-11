@@ -1,13 +1,23 @@
 # Próximo passo operacional das redes neurais — parte 2
 
-## 2026-07-10 — Champion neural NEV aprovado manualmente
+## 2026-07-11 — Materializar predições e sinais do champion NEV
 
-O usuário autorizou explicitamente a aprovação. Foi executado o fluxo governado `neural_champion_approval` para o melhor candidato individual da família NEV aprovada no Gate MUEN, escolhido pelo maior `score_total` entre os três modelos da rodada `grid3`: `neural_eod_nev_shadow_p48m05_block3_grid3_20260710_tabular_bottleneck_mlp_p48_m05_t50_bt3_798488_nev_b4f5a5_seed20290717_03`.
+O champion neural NEV `Apolo NEV` está aprovado no registry, mas a tela dedicada mostrou `predictions=[]` e `signals=[]` no endpoint produtivo `GET http://34.194.252.70/api/ops/neural/champion-monitoring`. Isso não indica que o champion foi perdido; indica que o pipeline pós-aprovação ainda não materializou linhas nas tabelas operacionais consumidas pela tela.
 
-A aprovação foi feita com `decision_id=gate_f5731a86e7bdf41656987e46b7224780`, `approved_by=user_manual_request` e `approval_ticket=manual-approval-20260710-nev-block3-grid3`. O dry-run de `approve_if_passed` retornou `approved=true`, `failed_checks=[]`, `warnings=[]` e `update_allowed=true`; a chamada efetiva com `dry_run=false` retornou HTTP 200 e atualizou o `neural_model_registry.status` do modelo para `approved`. A auditoria `audit_current_champion` retornou `approved_count=1` e sem warnings.
+Causa operacional atualizada: os schedulers foram criados posteriormente, mas o endpoint `neural_eod_predictions` ainda retornou HTTP 404 no teste manual de 2026-07-11. Sem a função de predições publicada e sem linhas em `neural_eod_predictions`, `eod_signals` com `signal_source=neural` retorna vazio e não cria sinais em `sinais_eod`.
 
-Próximo passo operacional atualizado: disponibilizar uma tela dedicada para o usuário acompanhar somente o modelo campeão NEV aprovado, seus sinais e seus resultados recentes, sem misturar com as telas gerais de redes neurais. O champion aprovado recebeu o nome fantasia `Apolo NEV`, inspirado em Apolo (deus greco-romano associado à profecia, clareza e precisão), mas a tela deve manter visível o `model_version` técnico completo. O backend/frontend devem consumir apenas o champion `status=approved`, exibir a decisão Gate MUEN que suportou a aprovação e destacar se qualquer sinal/predição envolver tickers bloqueados (`ONCO3`, `VVEO3`, `AMBP3`).
+Próximo passo imediato:
 
-Schedulers necessários para completar a operação controlada: criar `neural-eod-predictions-daily` para chamar `neural_eod_predictions` às 18:10 BRT em dias úteis, e criar `neural-eod-signals-daily` para chamar `eod_signals` com `signal_source=neural` às 18:20 BRT em dias úteis. O job `neural-champion-audit-daily` já existe e deve permanecer habilitado para auditoria diária. A tentativa de criação via MCP falhou por IAM (`cloudscheduler.jobs.create` ausente para `codex-openai@ingestaokraken.iam.gserviceaccount.com`); portanto o próximo operador com permissão deve criar esses dois schedulers sem OIDC enquanto as funções permanecerem públicas, ou conceder permissão de Scheduler antes de repetir a automação.
+1. Publicar primeiro a Cloud Function `neural_eod_predictions`; o teste manual de 2026-07-11 retornou HTTP 404 para esse endpoint, então a cadeia neural ainda não consegue materializar predições.
+2. Depois do deploy, com uma conta autorizada, executar manualmente a cadeia EOD neural para a última data de pregão válida:
+   - chamar `https://us-east1-ingestaokraken.cloudfunctions.net/neural_eod_predictions` com `force=true` e `date_ref=<último pregão>`;
+   - em seguida chamar `https://us-east1-ingestaokraken.cloudfunctions.net/eod_signals` com `force=true`, `signal_source=neural` e a mesma `date_ref` se necessário.
+3. Validar na API `/api/ops/neural/champion-monitoring` que as tabelas da tela passaram a retornar predições e sinais.
+4. Ajustar, ou pedir a um operador com permissão para ajustar, os schedulers recorrentes para depois da ingestão diária oficial (`get_stock_data` às 20:00 BRT), porque a rede lê `cotacao_ohlcv_diario`:
+   - `neural-eod-predictions-daily`: preferencialmente `10 23 * * 1-5`, `America/Sao_Paulo`, POST para `neural_eod_predictions`;
+   - `neural-eod-signals-daily`: preferencialmente `20 23 * * 1-5` ou depois, `America/Sao_Paulo`, POST para `eod_signals` com `{"signal_source":"neural","force":false}`.
+5. Enquanto as funções estiverem públicas, criar/atualizar os jobs sem OIDC; só incluir OIDC após validar service account, papel invoker e permissão `iam.serviceAccountUser` conforme o runbook do projeto.
+6. Se for necessário rodar antes das 20:00, adicionar antes uma validação de frescor: `cotacao_ohlcv_diario` precisa ter linhas para o `date_ref` do último pregão; caso contrário, não processar sinais neurais.
+7. Depois da materialização, monitorar pelo menos 5 pregões na aba `Champion NEV` antes de discutir qualquer uso com capital real.
 
-Após deploy e criação dos schedulers: acompanhar a nova aba `Champion NEV` por pelo menos 5 pregões, comparar `neural_eod_predictions`, `sinais_eod`, `neural_daily_returns` e incidentes, e só discutir uso com capital real depois dessa janela de observação e de nova autorização explícita.
+Observação de diagnóstico: o MCP HTTP/JSON-RPC em `http://mcpserversisacao.shop/mcp` apresentou `503`/timeouts durante a tentativa de consulta BigQuery/logs, então a confirmação desta etapa usou a API backend produtiva. Manter a regra de não usar HTTPS para o MCP.
