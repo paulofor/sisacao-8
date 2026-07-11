@@ -92,6 +92,13 @@ jobs:
             memory: 512Mi
             timeout: 600s
             env: BQ_INTRADAY_DATASET=cotacao_intraday,BQ_NEURAL_MODEL_REGISTRY_TABLE=neural_model_registry,BQ_NEURAL_GATE_DECISIONS_TABLE=neural_gate_decisions,BQ_LOCATION=us-east1
+          - name: neural_eod_predictions
+            entry_point: neural_eod_predictions
+            source: functions/neural_eod_predictions
+            service_account: sa-neural-evolution-orchestrator@ingestaokraken.iam.gserviceaccount.com
+            memory: 2Gi
+            timeout: 1800s
+            env: BQ_INTRADAY_DATASET=cotacao_intraday,BQ_DAILY_TABLE=cotacao_ohlcv_diario,BQ_NEURAL_EOD_PREDICTIONS_TABLE=neural_eod_predictions,BQ_NEURAL_MODEL_REGISTRY_TABLE=neural_model_registry,BQ_HOLIDAYS_TABLE=feriados_b3,BQ_LOCATION=us-east1,NEURAL_MODEL_STATUSES=approved
     steps:
       - uses: actions/checkout@v4
       - name: Auth GCP
@@ -163,6 +170,18 @@ jobs:
           if [ ! -d "${source_dir}" ]; then
             echo "Source directory ${source_dir} does not exist." >&2
             exit 1
+          fi
+
+          if [ "${{ matrix.name }}" = "neural_eod_predictions" ]; then
+            echo "Vendoring minimal sisacao8 inference package into ${source_dir}."
+            rm -rf "${source_dir}/sisacao8"
+            mkdir -p "${source_dir}/sisacao8"
+            printf '"""Vendored minimal sisacao8 package for neural_eod_predictions."""\n' > "${source_dir}/sisacao8/__init__.py"
+            cp sisacao8/neural_inference.py "${source_dir}/sisacao8/neural_inference.py"
+            cp sisacao8/neural_dataset.py "${source_dir}/sisacao8/neural_dataset.py"
+            cp sisacao8/neural_training.py "${source_dir}/sisacao8/neural_training.py"
+            cp sisacao8/neural_muen.py "${source_dir}/sisacao8/neural_muen.py"
+            cp sisacao8/trade_engine.py "${source_dir}/sisacao8/trade_engine.py"
           fi
 
           source_fingerprint=$(find "${source_dir}" -type f -print0 \
