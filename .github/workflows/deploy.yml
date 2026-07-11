@@ -172,6 +172,18 @@ jobs:
             exit 1
           fi
 
+          if [ "${{ matrix.name }}" = "neural_eod_predictions" ]; then
+            echo "Vendoring minimal sisacao8 inference package into ${source_dir}."
+            rm -rf "${source_dir}/sisacao8"
+            mkdir -p "${source_dir}/sisacao8"
+            printf '"""Vendored minimal sisacao8 package for neural_eod_predictions."""\n' > "${source_dir}/sisacao8/__init__.py"
+            cp sisacao8/neural_inference.py "${source_dir}/sisacao8/neural_inference.py"
+            cp sisacao8/neural_dataset.py "${source_dir}/sisacao8/neural_dataset.py"
+            cp sisacao8/neural_training.py "${source_dir}/sisacao8/neural_training.py"
+            cp sisacao8/neural_muen.py "${source_dir}/sisacao8/neural_muen.py"
+            cp sisacao8/trade_engine.py "${source_dir}/sisacao8/trade_engine.py"
+          fi
+
           source_fingerprint=$(find "${source_dir}" -type f -print0 \
             | sort -z \
             | xargs -0 sha256sum \
