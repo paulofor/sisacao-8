@@ -78,3 +78,14 @@ PY
 ```
 
 Se esses filtros retornarem vazio logo após alterar/criar o Scheduler, isso não é necessariamente erro: primeiro confirme que o Scheduler disparou e que o `neural_evolution_orchestrator` registrou candidatos; depois verifique `training-runs` e `gate-decisions`. A melhoria recomendada para a próxima evolução de backend é criar um endpoint dedicado, por exemplo `GET /ops/neural/challenger-shadow?strategy=apolo_challenger_shadow`, agregando em uma única resposta champion atual, últimas rodadas, candidatos, decisões MUEN e deltas contra o Apolo.
+
+### Acompanhamento da Trilha B pelo frontend
+
+Correção operacional: para acompanhar pela interface web, abrir `http://34.194.252.70/` e usar o menu lateral **Redes neurais**. A leitura recomendada é:
+
+1. **Champion NEV** — acompanhar o Apolo aprovado: Gate MUEN, predições recentes, sinais gerados e alerta de abstenção quando há predições sem BUY/SELL.
+2. **Evolução** — acompanhar a Trilha B propriamente dita: seção **Últimas tentativas MUEN** para ver decisões `Aprovado`/`Rejeitado`, critérios reprovados, folds, seeds, delta de expectancy, drawdown, trades e data; depois conferir **Famílias e leaderboard** para ranking das famílias/candidatas.
+3. **Treinos** — confirmar se o Scheduler realmente criou/treinou novas redes, observar o gráfico diário de redes criadas x testadas, status de cada modelo e métricas de treino/validação/teste.
+4. **Visão geral** — leitura executiva para saber se existe candidata em estoque, melhor índice de pesquisa e próximos passos, sem tratar score como aprovação.
+
+Para a Trilha B, a ordem prática na tela é: clicar **Atualizar**, abrir **Evolução**, procurar uma tentativa MUEN recente gerada depois do horário do Scheduler, verificar se alguma veio `Aprovado`; se sim, abrir **Treinos** para auditar o modelo e, por fim, comparar com **Champion NEV**. Se aparecer tudo vazio logo após a mudança do Scheduler, aguardar a próxima janela de execução e confirmar em **Treinos** se algum artefato novo foi criado.
