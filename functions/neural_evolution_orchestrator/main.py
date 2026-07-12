@@ -100,7 +100,9 @@ APOLO_CHALLENGER_FAMILY_SPACE: tuple[dict[str, Any], ...] = (
         "neutral_event_min_financial_volume_z20": 3.5,
         "neutral_event_min_volume_ratio_20d": 7.5,
         "neutral_event_min_volatility_20d": 0.05,
-        "candidate_family_hash": "neural_eod_apolo_challenger_tabular_bt_p46_m05_t50_nev_block3",
+        "candidate_family_hash": (
+            "neural_eod_apolo_challenger_tabular_bt_p46_m05_t50_nev_block3"
+        ),
     },
     {
         "architecture_type": "wide_deep_mlp",
@@ -119,7 +121,9 @@ APOLO_CHALLENGER_FAMILY_SPACE: tuple[dict[str, Any], ...] = (
         "neutral_event_min_financial_volume_z20": 3.5,
         "neutral_event_min_volume_ratio_20d": 7.5,
         "neutral_event_min_volatility_20d": 0.05,
-        "candidate_family_hash": "neural_eod_apolo_challenger_wide_deep_p48_m06_t45_nev_block3",
+        "candidate_family_hash": (
+            "neural_eod_apolo_challenger_wide_deep_p48_m06_t45_nev_block3"
+        ),
     },
 )
 

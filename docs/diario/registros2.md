@@ -171,3 +171,8 @@
 - Roteiro documentado: menu lateral `Redes neurais` → `Champion NEV` para baseline Apolo e abstenção; `Evolução` para `Últimas tentativas MUEN`, famílias e leaderboard; `Treinos` para verificar artefatos criados/treinados e gráfico de redes criadas x testadas; `Visão geral` para leitura executiva.
 - Também registrei a ordem prática: clicar `Atualizar`, abrir `Evolução`, procurar decisões MUEN recentes após o Scheduler, validar se alguma veio aprovada, auditar em `Treinos` e comparar com `Champion NEV` antes de qualquer decisão manual.
 - Comandos usados: `rg` para localizar abas/hooks no frontend; `sed` para revisar `App.tsx`, `NeuralEvolutionTab.tsx`, `NeuralTrainingRunsTab.tsx` e `NeuralChampionTab.tsx`; heredoc para atualizar documentação.
+
+## 2026-07-12 — Correção flake8 E501 na estratégia Apolo challenger
+- O usuário informou falha do CI em `python -m flake8` por `E501 line too long` nas linhas 103 e 122 de `functions/neural_evolution_orchestrator/main.py`, causada pelos hashes longos das famílias `apolo_challenger_shadow`.
+- Corrigi os dois valores `candidate_family_hash` quebrando as strings em expressão parentizada, preservando exatamente os mesmos identificadores operacionais e evitando alterar o espaço de busca.
+- Comandos usados: `nl -ba functions/neural_evolution_orchestrator/main.py | sed -n '80,135p'`, edição via `apply_patch`, `python -m flake8 functions/neural_evolution_orchestrator/main.py`, `python -m flake8`, `python -m pytest tests/test_neural_evolution_orchestrator_function.py::test_orchestrator_apolo_challenger_shadow_dry_run_is_governed -q` e `git diff --check`.
