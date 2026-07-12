@@ -44,3 +44,37 @@ Cron sugerido, se criado por operador autorizado: `30 2 * * 2-6` em `America/Sao
 - Toda troca de champion deve continuar governada: Gate MUEN aprovado, auditoria, aprovação manual explícita e registro no diário.
 
 Critério de parada/decisão: depois de 5 pregões de observação, revisar taxa de abstenção, sinais gerados, retornos realizados, incidentes e qualidade dos challengers. Se o Apolo apenas abstiver sem gerar valor operacional, focar em melhorar dataset/features/thresholds calibrados; se surgirem sinais bons e estáveis, manter shadow por mais pregões antes de discutir qualquer uso com capital real.
+
+### Acompanhamento da Trilha B pelo backend
+
+Enquanto não houver uma tela dedicada para `apolo_challenger_shadow`, acompanhar a Trilha B pelo backend usando estes endpoints publicados:
+
+1. `GET http://34.194.252.70/api/ops/neural/champion-monitoring` — baseline do Apolo: champion aprovado, decisão MUEN, predições recentes, sinais e eventual abstenção.
+2. `GET http://34.194.252.70/api/ops/neural/evolution/leaderboard` — ranking das candidatas geradas pelo orquestrador; filtrar no payload por `strategy == "apolo_challenger_shadow"` e comparar `scoreTotal`, `scoreDirectionalPrecision`, `scoreCoverage`, `scoreStability` e `decision`.
+3. `GET http://34.194.252.70/api/ops/neural/gate-decisions` — auditoria MUEN das candidatas; procurar `candidateFamilyHash` das famílias da Trilha B e verificar `passed`, `failedCriteria`, `medianDeltaExpectancyVsChampion`, `maxDrawdown`, `totalTrades` e estabilidade por seeds/folds.
+4. `GET http://34.194.252.70/api/ops/neural/training-runs` — registry/treinos; confirmar se as candidatas `apolo_challenger_shadow` chegaram a treinar, status (`candidate`, `approved`, `rejected`) e métricas fora da amostra.
+
+Comandos rápidos para operador:
+
+```bash
+curl -sS 'http://34.194.252.70/api/ops/neural/evolution/leaderboard' \
+  | python3 - <<'PY'
+import json, sys
+rows = json.load(sys.stdin)
+for r in rows:
+    if r.get('strategy') == 'apolo_challenger_shadow':
+        print(r.get('createdAt'), r.get('modelVersion'), r.get('scoreTotal'), r.get('decision'))
+PY
+
+curl -sS 'http://34.194.252.70/api/ops/neural/gate-decisions' \
+  | python3 - <<'PY'
+import json, sys
+rows = json.load(sys.stdin)
+for r in rows[:50]:
+    h = (r.get('candidateFamilyHash') or '').lower()
+    if 'apolo' in h or 'challenger' in h or 'tabular_bottleneck' in h or 'wide_deep' in h:
+        print(r.get('decidedAt'), r.get('candidateFamilyHash'), r.get('passed'), r.get('failedCriteria'))
+PY
+```
+
+Se esses filtros retornarem vazio logo após alterar/criar o Scheduler, isso não é necessariamente erro: primeiro confirme que o Scheduler disparou e que o `neural_evolution_orchestrator` registrou candidatos; depois verifique `training-runs` e `gate-decisions`. A melhoria recomendada para a próxima evolução de backend é criar um endpoint dedicado, por exemplo `GET /ops/neural/challenger-shadow?strategy=apolo_challenger_shadow`, agregando em uma única resposta champion atual, últimas rodadas, candidatos, decisões MUEN e deltas contra o Apolo.
