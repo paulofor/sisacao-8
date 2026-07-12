@@ -718,6 +718,56 @@ def test_aggregate_muen_rows_by_family_consolidates_distinct_seeds():
     )
 
 
+def test_orchestrator_apolo_challenger_shadow_dry_run_is_governed(monkeypatch):
+    fake_client = _FakeClient()
+    monkeypatch.setattr(module, "_BQ_CLIENT", fake_client)
+
+    response, status = module.neural_evolution_orchestrator(
+        _Request(
+            {
+                "dry_run": True,
+                "strategy": "apolo_challenger_shadow",
+                "budget": {"max_trials": 2, "random_seed": 17},
+            }
+        )
+    )
+
+    assert status == 200
+    assert response["strategy"] == "apolo_challenger_shadow"
+    assert response["candidate_count"] == 2
+    assert response["candidate_sources"] == ["phase3_family"]
+    details = response["candidate_details"]
+    assert {detail["architecture_type"] for detail in details} <= {
+        "tabular_bottleneck_mlp",
+        "wide_deep_mlp",
+    }
+
+    candidates = module._generate_candidates_for_strategy(
+        client=fake_client,
+        strategy="apolo_challenger_shadow",
+        evolution_run_id="run-apolo-challenger",
+        dataset_snapshot="snapshot_2026",
+        budget=module.EvolutionBudget(max_trials=2, random_seed=17),
+        existing_hashes=set(),
+        model_version_prefix="apolo_challenger_test",
+        payload={},
+    )
+
+    assert len(candidates) == 2
+    assert all(
+        candidate.training_request["blocked_tickers"] == ("AMBP3", "ONCO3", "VVEO3")
+        for candidate in candidates
+    )
+    assert all(
+        candidate.training_request["neutral_event_min_abs_return_5d"] == 0.18
+        for candidate in candidates
+    )
+    assert all(
+        "apolo_challenger" in candidate.training_request["candidate_family_hash"]
+        for candidate in candidates
+    )
+
+
 def test_orchestrator_phase3_multiseed_focus_generates_tabular_t35_repeats(monkeypatch):
     fake_client = _FakeClient()
     monkeypatch.setattr(module, "_BQ_CLIENT", fake_client)

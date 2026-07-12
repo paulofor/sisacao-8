@@ -81,6 +81,51 @@ DEFAULT_MAX_TRIALS = int(os.environ.get("NEURAL_EVOLUTION_MAX_TRIALS", "10"))
 DEFAULT_TRAINING_TIMEOUT_SECONDS = int(
     os.environ.get("NEURAL_EVOLUTION_TRAINING_TIMEOUT_SECONDS", "3600")
 )
+APOLO_CHALLENGER_STRATEGY = "apolo_challenger_shadow"
+APOLO_CHALLENGER_FAMILY_SPACE: tuple[dict[str, Any], ...] = (
+    {
+        "architecture_type": "tabular_bottleneck_mlp",
+        "model_id": "neural_eod_tabular_bottleneck_mlp",
+        "hidden_units": [256, 64, 16],
+        "dropout_rate": 0.22,
+        "learning_rate": 0.00025,
+        "batch_size": 256,
+        "epochs": 90,
+        "class_weight": "balanced",
+        "min_directional_probability": 0.46,
+        "min_directional_margin": 0.05,
+        "max_trades_per_fold": 50,
+        "blocked_tickers": ["ONCO3", "VVEO3", "AMBP3"],
+        "neutral_event_min_abs_return_5d": 0.18,
+        "neutral_event_min_financial_volume_z20": 3.5,
+        "neutral_event_min_volume_ratio_20d": 7.5,
+        "neutral_event_min_volatility_20d": 0.05,
+        "candidate_family_hash": (
+            "neural_eod_apolo_challenger_tabular_bt_p46_m05_t50_nev_block3"
+        ),
+    },
+    {
+        "architecture_type": "wide_deep_mlp",
+        "model_id": "neural_eod_wide_deep_mlp",
+        "hidden_units": [192, 96, 24],
+        "dropout_rate": 0.18,
+        "learning_rate": 0.0003,
+        "batch_size": 256,
+        "epochs": 80,
+        "class_weight": "balanced",
+        "min_directional_probability": 0.48,
+        "min_directional_margin": 0.06,
+        "max_trades_per_fold": 45,
+        "blocked_tickers": ["ONCO3", "VVEO3", "AMBP3"],
+        "neutral_event_min_abs_return_5d": 0.18,
+        "neutral_event_min_financial_volume_z20": 3.5,
+        "neutral_event_min_volume_ratio_20d": 7.5,
+        "neutral_event_min_volatility_20d": 0.05,
+        "candidate_family_hash": (
+            "neural_eod_apolo_challenger_wide_deep_p48_m06_t45_nev_block3"
+        ),
+    },
+)
 
 _BQ_CLIENT: bigquery.Client | None = None
 
@@ -393,6 +438,7 @@ def _is_phase3_strategy(strategy: str) -> bool:
         "phase3",
         "new_families",
         "phase3_multiseed_focus",
+        APOLO_CHALLENGER_STRATEGY,
     }
 
 
@@ -442,6 +488,8 @@ def _generate_phase3_candidates(
     kwargs: dict[str, Any] = {}
     if isinstance(family_space, list):
         kwargs["family_space"] = family_space
+    if strategy.lower() == APOLO_CHALLENGER_STRATEGY:
+        kwargs["family_space"] = APOLO_CHALLENGER_FAMILY_SPACE
     if strategy.lower() == "phase3_multiseed_focus":
         kwargs["family_space"] = [
             {
