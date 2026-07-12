@@ -154,3 +154,8 @@
 - Controles recomendados: orçamento diário/semanal limitado, `max_trials` baixo, seeds múltiplas apenas quando a primeira evidência justificar, bloqueio dos tickers problemáticos já identificados, comparação obrigatória contra o champion aprovado, registro de taxa de abstenção e validação por pelo menos 5 pregões antes de qualquer uso com capital real.
 - Comandos usados: registro em diário via heredoc local.
 - Implementação aplicada no código: adicionei a estratégia `apolo_challenger_shadow` ao `neural_evolution_orchestrator`, com espaço de busca controlado para challengers tabulares/wide-deep, tickers bloqueados, guarda NEV e orçamento baixo. Também adicionei teste de dry-run garantindo que a estratégia gera candidatos governados sem promoção automática.
+
+## 2026-07-12 — Comando para alterar Scheduler da Trilha B
+- Atendendo ao pedido do usuário, preparei o comando `gcloud scheduler jobs update http` para apontar o Scheduler recorrente de evolução neural para a estratégia `apolo_challenger_shadow`, com cron `30 2 * * 2-6` em `America/Sao_Paulo`, endpoint `neural_evolution_orchestrator`, método `POST`, `--update-headers='Content-Type=application/json'`, payload com `max_trials=1` e sem OIDC enquanto a função permanecer pública.
+- Reforcei que, se o operador preferir manter o Scheduler atual de evolução intacto, deve criar um job separado; mas para "alterar o scheduler" o comando base usa `neural-evolution-daily` como alvo.
+- Comandos usados: registro em diário via heredoc local e `git diff --check`.
