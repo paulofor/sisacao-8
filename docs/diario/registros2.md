@@ -141,3 +141,33 @@
 - Atendendo ao pedido do usuário, adicionei na aba `Champion NEV` um alerta informativo quando existem predições recentes do champion, mas nenhum sinal operacional foi gravado. A mensagem explica que houve abstenção operacional, mostra a data de referência e validade das predições e diferencia o caso em que todas ficaram `HOLD`/neutral do caso em que predições direcionais foram filtradas antes de virar sinal.
 - Essa mensagem cobre o caso observado do Apolo para `date_ref=2026-07-10` e `valid_for=2026-07-13`: o pipeline gerou predições, mas `eod_signals` gravou 0 sinais porque não houve BUY/SELL acionável sob os thresholds atuais.
 - Comandos usados: edição via `apply_patch`, `npm --prefix frontend/app run lint` e `npm --prefix frontend/app run build`.
+
+## 2026-07-12 — Próximo passo após aprovação do Apolo NEV
+- O usuário perguntou se, agora que há um modelo aprovado, o melhor próximo passo é observar o champion atual e simultaneamente buscar um modelo melhor. A recomendação operacional é sim: manter o Apolo NEV em observação controlada/shadow por pelo menos 5 pregões, sem capital real, enquanto a evolução neural continua buscando challengers melhores contra o Apolo como novo benchmark.
+- Critérios de observação sugeridos: confirmar execução diária de `neural_eod_predictions` e `eod_signals`, taxa de abstenção/HOLD, quantidade de sinais BUY/SELL quando surgirem, ausência de sinais em tickers bloqueados, comparação das predições com retornos realizados, incidentes de DQ e estabilidade operacional dos schedulers.
+- Critérios para buscar challenger: não afrouxar thresholds apenas para produzir sinais; priorizar melhoria real de edge/calibração, redução de abstenção improdutiva, robustez por folds/seeds e comparação MUEN contra o champion aprovado. Qualquer substituição do champion deve continuar manual/governada via Gate MUEN e aprovação explícita.
+- Comandos usados: `cat`/heredoc para registro no diário.
+
+## 2026-07-12 — Estratégia para buscar rede melhor que o Apolo
+- O usuário perguntou se a busca por uma rede melhor que o Apolo precisa ser feita manualmente aqui ou se podemos criar rotina automatizada. A recomendação é automatizar a busca de challengers em shadow, mantendo governança manual para promoção de champion.
+- Proposta operacional: criar/ajustar uma rotina recorrente de evolução neural fora do horário crítico de mercado para gerar poucos candidatos por rodada, treinar, avaliar pelo Gate MUEN contra o Apolo como benchmark, persistir resultados e apenas alertar quando um challenger passar. A rotina não deve executar `approve_if_passed` automaticamente nem trocar o champion sem autorização explícita.
+- Controles recomendados: orçamento diário/semanal limitado, `max_trials` baixo, seeds múltiplas apenas quando a primeira evidência justificar, bloqueio dos tickers problemáticos já identificados, comparação obrigatória contra o champion aprovado, registro de taxa de abstenção e validação por pelo menos 5 pregões antes de qualquer uso com capital real.
+- Comandos usados: registro em diário via heredoc local.
+- Implementação aplicada no código: adicionei a estratégia `apolo_challenger_shadow` ao `neural_evolution_orchestrator`, com espaço de busca controlado para challengers tabulares/wide-deep, tickers bloqueados, guarda NEV e orçamento baixo. Também adicionei teste de dry-run garantindo que a estratégia gera candidatos governados sem promoção automática.
+
+## 2026-07-12 — Comando para alterar Scheduler da Trilha B
+- Atendendo ao pedido do usuário, preparei o comando `gcloud scheduler jobs update http` para apontar o Scheduler recorrente de evolução neural para a estratégia `apolo_challenger_shadow`, com cron `30 2 * * 2-6` em `America/Sao_Paulo`, endpoint `neural_evolution_orchestrator`, método `POST`, `--update-headers='Content-Type=application/json'`, payload com `max_trials=1` e sem OIDC enquanto a função permanecer pública.
+- Reforcei que, se o operador preferir manter o Scheduler atual de evolução intacto, deve criar um job separado; mas para "alterar o scheduler" o comando base usa `neural-evolution-daily` como alvo.
+- Comandos usados: registro em diário via heredoc local e `git diff --check`.
+
+## 2026-07-12 — Como acompanhar a Trilha B pelo backend
+- Respondi à dúvida operacional sobre acompanhamento da rotina `apolo_challenger_shadow` pelo backend. Documentei no próximo passo operacional que, no estado atual, o acompanhamento deve combinar os endpoints publicados `/api/ops/neural/champion-monitoring`, `/api/ops/neural/evolution/leaderboard`, `/api/ops/neural/gate-decisions` e `/api/ops/neural/training-runs`.
+- Validei os endpoints produtivos disponíveis: `champion-monitoring` retornou o payload do Apolo, `gate-decisions` retornou lista com 984 decisões, `evolution/leaderboard` retornou 100 entradas, e `training-runs` apresentou timeout nesta tentativa pontual, devendo ser reconsultado quando a API/BigQuery estiver responsiva.
+- Também registrei comandos `curl` com filtros Python para localizar candidatas da estratégia `apolo_challenger_shadow` no leaderboard e nas decisões MUEN, além da melhoria futura recomendada: criar endpoint backend dedicado `/ops/neural/challenger-shadow` agregando champion, rodadas, candidatos, decisões e deltas contra o Apolo.
+- Comandos usados: `rg` para localizar endpoints no backend e docs; `sed`/`tail` para leitura de `OpsController`, `OpsService`, `BigQueryOpsClient` e diários; Python `urllib.request` para consultar `http://34.194.252.70/api/ops/neural/champion-monitoring`, `/training-runs`, `/gate-decisions` e `/evolution/leaderboard`; heredoc para atualizar documentação.
+
+## 2026-07-12 — Correção: acompanhamento da Trilha B pelo frontend
+- O usuário corrigiu a pergunta anterior: queria saber como acompanhar a Trilha B pelo frontend, não pelo backend. Atualizei o próximo passo operacional com o roteiro de uso da interface publicada em `http://34.194.252.70/`.
+- Roteiro documentado: menu lateral `Redes neurais` → `Champion NEV` para baseline Apolo e abstenção; `Evolução` para `Últimas tentativas MUEN`, famílias e leaderboard; `Treinos` para verificar artefatos criados/treinados e gráfico de redes criadas x testadas; `Visão geral` para leitura executiva.
+- Também registrei a ordem prática: clicar `Atualizar`, abrir `Evolução`, procurar decisões MUEN recentes após o Scheduler, validar se alguma veio aprovada, auditar em `Treinos` e comparar com `Champion NEV` antes de qualquer decisão manual.
+- Comandos usados: `rg` para localizar abas/hooks no frontend; `sed` para revisar `App.tsx`, `NeuralEvolutionTab.tsx`, `NeuralTrainingRunsTab.tsx` e `NeuralChampionTab.tsx`; heredoc para atualizar documentação.
