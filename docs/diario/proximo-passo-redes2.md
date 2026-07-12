@@ -1,13 +1,46 @@
 # Próximo passo operacional das redes neurais — parte 2
 
-## 2026-07-10 — Champion neural NEV aprovado manualmente
+## 2026-07-12 — Automatizar busca de challenger mantendo Apolo em observação
 
-O usuário autorizou explicitamente a aprovação. Foi executado o fluxo governado `neural_champion_approval` para o melhor candidato individual da família NEV aprovada no Gate MUEN, escolhido pelo maior `score_total` entre os três modelos da rodada `grid3`: `neural_eod_nev_shadow_p48m05_block3_grid3_20260710_tabular_bottleneck_mlp_p48_m05_t50_bt3_798488_nev_b4f5a5_seed20290717_03`.
+Agora que existe um champion aprovado (`Apolo NEV`) e o pipeline `neural_eod_predictions`/`eod_signals` já materializa predições, o próximo passo recomendado é **não depender de execução manual aqui no chat**. O melhor caminho é criar/ajustar uma rotina automatizada de busca de challengers em shadow, mantendo a promoção final manual e governada.
 
-A aprovação foi feita com `decision_id=gate_f5731a86e7bdf41656987e46b7224780`, `approved_by=user_manual_request` e `approval_ticket=manual-approval-20260710-nev-block3-grid3`. O dry-run de `approve_if_passed` retornou `approved=true`, `failed_checks=[]`, `warnings=[]` e `update_allowed=true`; a chamada efetiva com `dry_run=false` retornou HTTP 200 e atualizou o `neural_model_registry.status` do modelo para `approved`. A auditoria `audit_current_champion` retornou `approved_count=1` e sem warnings.
+### Trilha A — observar o Apolo NEV
 
-Próximo passo operacional atualizado: disponibilizar uma tela dedicada para o usuário acompanhar somente o modelo campeão NEV aprovado, seus sinais e seus resultados recentes, sem misturar com as telas gerais de redes neurais. O champion aprovado recebeu o nome fantasia `Apolo NEV`, inspirado em Apolo (deus greco-romano associado à profecia, clareza e precisão), mas a tela deve manter visível o `model_version` técnico completo. O backend/frontend devem consumir apenas o champion `status=approved`, exibir a decisão Gate MUEN que suportou a aprovação e destacar se qualquer sinal/predição envolver tickers bloqueados (`ONCO3`, `VVEO3`, `AMBP3`).
+Manter o Apolo NEV em shadow/operacional controlado por pelo menos 5 pregões, sem capital real:
 
-Schedulers necessários para completar a operação controlada: criar `neural-eod-predictions-daily` para chamar `neural_eod_predictions` às 18:10 BRT em dias úteis, e criar `neural-eod-signals-daily` para chamar `eod_signals` com `signal_source=neural` às 18:20 BRT em dias úteis. O job `neural-champion-audit-daily` já existe e deve permanecer habilitado para auditoria diária. A tentativa de criação via MCP falhou por IAM (`cloudscheduler.jobs.create` ausente para `codex-openai@ingestaokraken.iam.gserviceaccount.com`); portanto o próximo operador com permissão deve criar esses dois schedulers sem OIDC enquanto as funções permanecerem públicas, ou conceder permissão de Scheduler antes de repetir a automação.
+- confirmar diariamente se `neural_eod_predictions` gravou predições para o último pregão e `valid_for` correto;
+- confirmar se `eod_signals` gerou sinais ou se houve abstenção (`HOLD`/sem BUY/SELL);
+- monitorar a aba `Champion NEV`, especialmente o alerta de abstenção, sinais em tickers bloqueados (`ONCO3`, `VVEO3`, `AMBP3`), incidentes e falhas de scheduler;
+- comparar as predições/sinais com retornos realizados no pregão seguinte para avaliar se o comportamento em produção está coerente com o Gate MUEN.
 
-Após deploy e criação dos schedulers: acompanhar a nova aba `Champion NEV` por pelo menos 5 pregões, comparar `neural_eod_predictions`, `sinais_eod`, `neural_daily_returns` e incidentes, e só discutir uso com capital real depois dessa janela de observação e de nova autorização explícita.
+### Trilha B — automatizar busca de challenger
+
+Criar ou ajustar uma rotina recorrente de evolução neural para buscar redes melhores que o Apolo:
+
+1. Rodar fora do horário crítico de ingestão/sinais, por exemplo madrugada ou janela de baixa carga.
+2. Gerar poucos candidatos por rodada (`max_trials` baixo) para evitar custo e ruído operacional.
+3. Avaliar cada candidato contra o Apolo como benchmark, não contra um baseline antigo.
+4. Persistir métricas MUEN, taxa de abstenção, coverage, drawdown, trades e estabilidade por seed/fold.
+5. Alertar quando um challenger passar no Gate MUEN, mas **não promover automaticamente**.
+6. Exigir aprovação manual explícita para substituir o champion.
+
+Payload recomendado para a rotina recorrente:
+
+```json
+{
+  "strategy": "apolo_challenger_shadow",
+  "budget": {"max_trials": 1, "random_seed": 20260712},
+  "train_candidates": true,
+  "reason": "scheduled-apolo-challenger-shadow"
+}
+```
+
+Cron sugerido, se criado por operador autorizado: `30 2 * * 2-6` em `America/Sao_Paulo`, para rodar de terça a sábado de madrugada após a materialização EOD do pregão anterior.
+
+### Critérios para aceitar um challenger
+
+- Não afrouxar thresholds apenas para forçar sinais; a abstenção é aceitável quando a confiança direcional não passa na régua operacional.
+- Priorizar edge econômico superior, menor abstenção improdutiva, boa calibração, robustez por folds/seeds e drawdown controlado.
+- Toda troca de champion deve continuar governada: Gate MUEN aprovado, auditoria, aprovação manual explícita e registro no diário.
+
+Critério de parada/decisão: depois de 5 pregões de observação, revisar taxa de abstenção, sinais gerados, retornos realizados, incidentes e qualidade dos challengers. Se o Apolo apenas abstiver sem gerar valor operacional, focar em melhorar dataset/features/thresholds calibrados; se surgirem sinais bons e estáveis, manter shadow por mais pregões antes de discutir qualquer uso com capital real.
