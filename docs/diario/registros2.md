@@ -136,3 +136,8 @@
 - Reexecutei `eod_signals` com `signal_source=neural`, `force=true`, `date_ref=2026-07-10` e `reason=manual-apolo-20260710-20260711-r4`. A função retornou HTTP 200, mas novamente `generated=0`, `stored=0` e `signals=[]`.
 - Conclusão operacional mantida: o pipeline técnico está funcionando e materializa predições para o próximo pregão (`2026-07-13`), mas o Apolo permaneceu sem sinais acionáveis sob os thresholds atuais; a saída operacional correta continua sendo abstenção/HOLD, não erro.
 - Comandos usados: `curl` para `neural_eod_predictions` e `curl` para `eod_signals`.
+
+## 2026-07-11 — Mensagem de abstenção no frontend do Champion NEV
+- Atendendo ao pedido do usuário, adicionei na aba `Champion NEV` um alerta informativo quando existem predições recentes do champion, mas nenhum sinal operacional foi gravado. A mensagem explica que houve abstenção operacional, mostra a data de referência e validade das predições e diferencia o caso em que todas ficaram `HOLD`/neutral do caso em que predições direcionais foram filtradas antes de virar sinal.
+- Essa mensagem cobre o caso observado do Apolo para `date_ref=2026-07-10` e `valid_for=2026-07-13`: o pipeline gerou predições, mas `eod_signals` gravou 0 sinais porque não houve BUY/SELL acionável sob os thresholds atuais.
+- Comandos usados: edição via `apply_patch`, `npm --prefix frontend/app run lint` e `npm --prefix frontend/app run build`.

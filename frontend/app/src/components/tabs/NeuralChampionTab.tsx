@@ -58,6 +58,11 @@ const NeuralChampionTab: FC<NeuralChampionTabProps> = ({ data, isLoading, error 
   const blockedTickers = new Set(['ONCO3', 'VVEO3', 'AMBP3'])
   const blockedPredictionCount = predictions.filter((prediction) => blockedTickers.has(prediction.ticker)).length
   const blockedSignalCount = signals.filter((signal) => blockedTickers.has(signal.ticker)).length
+  const directionalPredictionCount = predictions.filter(
+    (prediction) => !['HOLD', 'NEUTRAL', ''].includes((prediction.suggestedAction ?? '').toUpperCase()),
+  ).length
+  const latestPrediction = predictions[0] ?? null
+  const showAbstentionNotice = predictions.length > 0 && signals.length === 0
 
   if (isLoading) {
     return <LinearProgress />
@@ -125,6 +130,12 @@ const NeuralChampionTab: FC<NeuralChampionTabProps> = ({ data, isLoading, error 
       <Alert severity={blockedPredictionCount || blockedSignalCount ? 'error' : 'success'}>
         Tickers bloqueados monitorados: ONCO3, VVEO3 e AMBP3. Predições bloqueadas encontradas: {blockedPredictionCount}; sinais bloqueados encontrados: {blockedSignalCount}.
       </Alert>
+
+      {showAbstentionNotice ? (
+        <Alert severity="info">
+          Abstenção operacional do champion: há {predictions.length} predições para {formatDate(latestPrediction?.referenceDate)} válidas em {formatDate(latestPrediction?.validFor)}, mas nenhum sinal BUY/SELL foi gravado. {directionalPredictionCount === 0 ? 'Todas as predições recentes ficaram em HOLD/neutral sob os thresholds atuais.' : `${directionalPredictionCount} predição(ões) direcional(is) apareceram, mas nenhuma passou pelos filtros operacionais de sinal.`}
+        </Alert>
+      ) : null}
 
       <Paper sx={{ p: 3 }}>
         <Typography variant="h6" gutterBottom>Predições mais recentes do champion</Typography>
