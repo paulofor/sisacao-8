@@ -172,3 +172,11 @@ Próximo passo operacional:
 2. Em uma próxima falha de B3/candle, confirmar nos logs se apareceu a chamada automática de recuperação antes do retorno `empty`.
 3. Se a operação preferir defesa em profundidade, criar por conta autorizada um Scheduler separado de retry de `get_stock_data` antes de `neural_eod_predictions`; a tentativa via MCP falhou por falta de permissão `cloudscheduler.jobs.create`.
 4. Manter a regra: se a recuperação ainda não encontrar candles da `reference_date`, a função não deve inferir com dado defasado; deve retornar vazio e registrar a falha de dados.
+
+## 2026-07-15 — Frequência da evolução do Apolo
+
+Estado confirmado: a trilha do Apolo não está em agendamento horário. O job ativo `neural-evolution-daily` roda uma vez por dia útil operacional (`30 2 * * 2-6`) com `max_trials=1`, por isso somente uma rede/challenger foi analisado em `2026-07-15`.
+
+O job `neural-evolution-phase3-30m` roda a cada 30 minutos, mas é outra estratégia (`phase3_new_families`) e aparece com `status.code=13`; ele não é a Trilha B do Apolo nem o refinamento novo.
+
+Próximo passo se quisermos evolução hora em hora: criar ou alterar Scheduler com cron horário, payload `strategy=apolo_challenger_refinement`, orçamento baixo (`max_trials=1` ou `2`) e sem promoção automática. Essa ação precisa de conta com permissão de Cloud Scheduler, pois a tentativa via MCP falhou por `cloudscheduler.jobs.create`.
