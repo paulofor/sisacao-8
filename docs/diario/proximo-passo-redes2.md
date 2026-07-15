@@ -180,3 +180,25 @@ Estado confirmado: a trilha do Apolo não está em agendamento horário. O job a
 O job `neural-evolution-phase3-30m` roda a cada 30 minutos, mas é outra estratégia (`phase3_new_families`) e aparece com `status.code=13`; ele não é a Trilha B do Apolo nem o refinamento novo.
 
 Próximo passo se quisermos evolução hora em hora: criar ou alterar Scheduler com cron horário, payload `strategy=apolo_challenger_refinement`, orçamento baixo (`max_trials=1` ou `2`) e sem promoção automática. Essa ação precisa de conta com permissão de Cloud Scheduler, pois a tentativa via MCP falhou por `cloudscheduler.jobs.create`.
+
+## 2026-07-15 — Scheduler horário criado; validar primeira execução real
+
+Estado confirmado: o Scheduler `neural-evolution-apolo-refinement-hourly` existe, está `ENABLED`, roda em `0 * * * *` no timezone `America/Sao_Paulo` e chama `neural_evolution_orchestrator` com payload `strategy=apolo_challenger_refinement`, `max_trials=1` e `train_candidates=true`.
+
+Também foi validado por `dry_run` produtivo que o deploy reconhece a estratégia e gera 1 candidata em modo seco. Porém, nas últimas 6 horas ainda não há run/candidate/gate persistidos no BigQuery para uma execução real do Scheduler horário.
+
+Próximo passo operacional:
+1. Aguardar a próxima virada de hora ou executar manualmente `gcloud scheduler jobs run neural-evolution-apolo-refinement-hourly --project=ingestaokraken --location=us-east1`.
+2. Depois da tentativa, verificar `neural_evolution_runs`, `neural_candidate_configs` e `neural_gate_decisions` para confirmar gravação de nova candidata.
+3. Separadamente, investigar o job antigo `neural-evolution-phase3-30m`, que continua falhando com `No neural evolution candidates were generated` e não deve ser confundido com o refinamento do Apolo.
+
+## 2026-07-15 — Primeira execução real do refinamento concluída
+
+Estado confirmado: o Scheduler `neural-evolution-apolo-refinement-hourly` executou às `2026-07-15T18:00:00Z` e a run `neural_evolution_20260715_180004_6a223366` foi concluída com `strategy=apolo_challenger_refinement`, gerando, treinando e avaliando 1 candidata.
+
+Resultado do Gate: a família `neural_eod_apolo_refine_tabular_bt_p50_m08_t35_dd16_block5` foi rejeitada com `passed=false` por `trades_insuficientes` e `seeds_instaveis`. Isso confirma que o fluxo horário está operacional, mas ainda não há nova rede aprovada além da Apolo.
+
+Próximo passo operacional:
+1. Manter o Scheduler horário de refinamento ativo e acompanhar as próximas execuções em `neural_evolution_runs`, `neural_candidate_configs` e `neural_gate_decisions`.
+2. Não promover nenhuma candidata até aparecer `passed=true` com estabilidade de seeds/folds e drawdown aceitável.
+3. Investigar separadamente o job antigo `neural-evolution-phase3-30m`, que continua produzindo erro `No neural evolution candidates were generated` no mesmo endpoint e pode confundir a leitura dos logs.
