@@ -223,3 +223,59 @@ def test_fetch_neural_predictions_uses_reference_and_valid_for(monkeypatch):
         "valid_for": dt.date(2026, 6, 19),
     }
     assert df["ticker"].tolist() == ["PETR4"]
+
+
+def test_recover_daily_candles_posts_reference_date(monkeypatch):
+    module = import_eod_module(monkeypatch)
+    captured = {}
+
+    def fake_post_json(url, payload, *, timeout):
+        captured["url"] = url
+        captured["payload"] = payload
+        captured["timeout"] = timeout
+        return "Success"
+
+    monkeypatch.setattr(module, "_post_json", fake_post_json)
+    monkeypatch.setattr(module, "DAILY_CANDLES_RECOVERY_URL", "https://daily.example")
+    monkeypatch.setattr(module, "UPSTREAM_RECOVERY_TIMEOUT_SECONDS", 33)
+
+    module._recover_daily_candles(dt.date(2026, 7, 14), force=False)
+
+    assert captured == {
+        "url": "https://daily.example",
+        "payload": {
+            "date_ref": "2026-07-14",
+            "force": False,
+            "reason": "auto-recover-before-eod-signals",
+        },
+        "timeout": 33,
+    }
+
+
+def test_recover_neural_predictions_posts_reference_date(monkeypatch):
+    module = import_eod_module(monkeypatch)
+    captured = {}
+
+    def fake_post_json(url, payload, *, timeout):
+        captured["url"] = url
+        captured["payload"] = payload
+        captured["timeout"] = timeout
+        return '{"status":"ok"}'
+
+    monkeypatch.setattr(module, "_post_json", fake_post_json)
+    monkeypatch.setattr(
+        module, "NEURAL_PREDICTIONS_RECOVERY_URL", "https://predictions.example"
+    )
+    monkeypatch.setattr(module, "UPSTREAM_RECOVERY_TIMEOUT_SECONDS", 44)
+
+    module._recover_neural_predictions(dt.date(2026, 7, 14), force=True)
+
+    assert captured == {
+        "url": "https://predictions.example",
+        "payload": {
+            "date_ref": "2026-07-14",
+            "force": True,
+            "reason": "auto-recover-before-eod-signals",
+        },
+        "timeout": 44,
+    }

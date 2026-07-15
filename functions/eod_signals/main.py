@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import datetime as dt
+import json
 import logging
 import os
+import urllib.error
+import urllib.request
 from dataclasses import dataclass
 from typing import Any, Dict, List, Mapping
 
@@ -82,6 +85,20 @@ STRATEGY_CONFIG_TABLE_ID = os.environ.get(
 STRATEGY_CONFIG_ID = os.environ.get("STRATEGY_CONFIG_ID", "signals_v1")
 JOB_NAME = os.environ.get("JOB_NAME", "eod_signals")
 DEFAULT_BQ_LOCATION = "us-east1"
+ENABLE_DAILY_CANDLES_RECOVERY = (
+    os.environ.get("ENABLE_DAILY_CANDLES_RECOVERY", "true").lower() == "true"
+)
+DAILY_CANDLES_RECOVERY_URL = os.environ.get(
+    "DAILY_CANDLES_RECOVERY_URL",
+    "https://us-east1-ingestaokraken.cloudfunctions.net/get_stock_data",
+)
+NEURAL_PREDICTIONS_RECOVERY_URL = os.environ.get(
+    "NEURAL_PREDICTIONS_RECOVERY_URL",
+    "https://us-east1-ingestaokraken.cloudfunctions.net/neural_eod_predictions",
+)
+UPSTREAM_RECOVERY_TIMEOUT_SECONDS = int(
+    os.environ.get("UPSTREAM_RECOVERY_TIMEOUT_SECONDS", "240")
+)
 
 
 def _normalize_bq_location(
@@ -424,6 +441,72 @@ def _fetch_neural_predictions(
     return df
 
 
+def _post_json(url: str, payload: Mapping[str, Any], *, timeout: int) -> str:
+    body = json.dumps(payload).encode("utf-8")
+    request = urllib.request.Request(
+        url,
+        data=body,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        response_body = response.read().decode("utf-8", errors="replace")
+        logging.warning(
+            "Recovery call returned HTTP %s from %s: %s",
+            getattr(response, "status", "unknown"),
+            url,
+            response_body[:500],
+        )
+        return response_body
+
+
+def _recover_daily_candles(reference_date: dt.date, *, force: bool) -> None:
+    if not ENABLE_DAILY_CANDLES_RECOVERY:
+        logging.warning(
+            "Daily candles recovery disabled for %s", reference_date.isoformat()
+        )
+        return
+    payload = {
+        "date_ref": reference_date.isoformat(),
+        "force": force,
+        "reason": "auto-recover-before-eod-signals",
+    }
+    try:
+        _post_json(
+            DAILY_CANDLES_RECOVERY_URL,
+            payload,
+            timeout=UPSTREAM_RECOVERY_TIMEOUT_SECONDS,
+        )
+    except urllib.error.URLError as exc:
+        logging.warning(
+            "Daily candles recovery failed for %s: %s",
+            reference_date.isoformat(),
+            exc,
+            exc_info=True,
+        )
+
+
+def _recover_neural_predictions(reference_date: dt.date, *, force: bool) -> None:
+    payload = {
+        "date_ref": reference_date.isoformat(),
+        "force": force,
+        "reason": "auto-recover-before-eod-signals",
+    }
+    try:
+        _post_json(
+            NEURAL_PREDICTIONS_RECOVERY_URL,
+            payload,
+            timeout=UPSTREAM_RECOVERY_TIMEOUT_SECONDS,
+        )
+    except urllib.error.URLError as exc:
+        logging.warning(
+            "Neural predictions recovery failed for %s: %s",
+            reference_date.isoformat(),
+            exc,
+            exc_info=True,
+        )
+
+
 def _fetch_latest_metrics() -> pd.DataFrame:
     table = _metrics_table()
     query = f"""
@@ -607,6 +690,10 @@ def generate_eod_signals(request: Any) -> Dict[str, Any]:
     frame = _fetch_daily_frame(reference_date)
     initial_rows = len(frame)
     if frame.empty:
+        _recover_daily_candles(reference_date, force=force)
+        frame = _fetch_daily_frame(reference_date)
+        initial_rows = len(frame)
+    if frame.empty:
         message = f"Sem candles disponíveis para {reference_date}"
         run_logger.warn(message, reason="empty_daily_frame")
         logging.warning(message)
@@ -658,6 +745,9 @@ def generate_eod_signals(request: Any) -> Dict[str, Any]:
         )
     else:
         predictions = _fetch_neural_predictions(reference_date, valid_for)
+        if predictions.empty:
+            _recover_neural_predictions(reference_date, force=force)
+            predictions = _fetch_neural_predictions(reference_date, valid_for)
         if predictions.empty:
             message = f"Sem predições neurais disponíveis para {reference_date}"
             run_logger.warn(message, reason="empty_neural_predictions")
