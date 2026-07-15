@@ -792,6 +792,62 @@ def test_orchestrator_phase3_multiseed_focus_generates_tabular_t35_repeats(monke
     assert all("p50_m08_t35" in candidate for candidate in response["candidates"])
 
 
+def test_orchestrator_apolo_challenger_refinement_is_risk_controlled(monkeypatch):
+    fake_client = _FakeClient()
+    monkeypatch.setattr(module, "_BQ_CLIENT", fake_client)
+
+    response, status = module.neural_evolution_orchestrator(
+        _Request(
+            {
+                "dry_run": True,
+                "strategy": "apolo_challenger_refinement",
+                "budget": {"max_trials": 3, "random_seed": 88},
+            }
+        )
+    )
+
+    assert status == 200
+    assert response["strategy"] == "apolo_challenger_refinement"
+    assert response["candidate_count"] == 3
+    assert response["candidate_sources"] == ["phase3_family"]
+    assert set(response["architecture_types"]) == {
+        "mlp",
+        "tabular_bottleneck_mlp",
+        "wide_deep_mlp",
+    }
+    assert all("dd" in candidate for candidate in response["candidates"])
+
+    candidates = module._generate_candidates_for_strategy(
+        client=fake_client,
+        strategy="apolo_challenger_refinement",
+        evolution_run_id="run-apolo-refine",
+        dataset_snapshot="snapshot_2026",
+        budget=module.EvolutionBudget(max_trials=3, random_seed=88),
+        existing_hashes=set(),
+        model_version_prefix="apolo_refine_test",
+        payload={},
+    )
+
+    assert len(candidates) == 3
+    assert all(
+        candidate.training_request["blocked_tickers"]
+        == ("AMBP3", "GFSA3", "MGLU3", "ONCO3", "VVEO3")
+        for candidate in candidates
+    )
+    assert all(
+        candidate.training_request["max_fold_drawdown_stop"] <= 0.16
+        for candidate in candidates
+    )
+    assert all(
+        candidate.training_request["max_trades_per_fold"] <= 35
+        for candidate in candidates
+    )
+    assert all(
+        "apolo_refine" in candidate.training_request["candidate_family_hash"]
+        for candidate in candidates
+    )
+
+
 def test_orchestrator_phase4_recurrent_shadow_dry_run_generates_sequence_candidates(
     monkeypatch,
 ):
