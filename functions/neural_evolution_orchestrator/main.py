@@ -583,7 +583,7 @@ def _generate_phase3_candidates(
             }
         ]
         kwargs["seed_repeats_only"] = True
-    return generate_phase3_family_candidates(
+    candidates = generate_phase3_family_candidates(
         evolution_run_id=evolution_run_id,
         dataset_snapshot=dataset_snapshot,
         budget=budget,
@@ -591,6 +591,34 @@ def _generate_phase3_candidates(
         model_version_prefix=model_version_prefix,
         **kwargs,
     )
+    if candidates or strategy.lower() != "phase3_new_families":
+        return candidates
+
+    fallback_seed = _phase3_fallback_seed(budget.random_seed, evolution_run_id)
+    logging.warning(
+        "Phase-3 candidate grid exhausted for seed %s; retrying with "
+        "fallback seed %s",
+        budget.random_seed,
+        fallback_seed,
+    )
+    fallback_budget = replace(budget, random_seed=fallback_seed)
+    return generate_phase3_family_candidates(
+        evolution_run_id=evolution_run_id,
+        dataset_snapshot=dataset_snapshot,
+        budget=fallback_budget,
+        existing_hashes=existing_hashes,
+        model_version_prefix=f"{model_version_prefix}_reseed{fallback_seed}",
+        **kwargs,
+    )
+
+
+def _phase3_fallback_seed(original_seed: int, evolution_run_id: str) -> int:
+    """Return a stable alternate seed when a fixed Phase-3 schedule is exhausted."""
+
+    seed_material = sum(
+        (index + 1) * ord(char) for index, char in enumerate(evolution_run_id)
+    )
+    return int(original_seed) + 100_000 + seed_material % 900_000
 
 
 def _generate_phase2_candidates(

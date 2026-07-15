@@ -202,3 +202,24 @@ Próximo passo operacional:
 1. Manter o Scheduler horário de refinamento ativo e acompanhar as próximas execuções em `neural_evolution_runs`, `neural_candidate_configs` e `neural_gate_decisions`.
 2. Não promover nenhuma candidata até aparecer `passed=true` com estabilidade de seeds/folds e drawdown aceitável.
 3. Investigar separadamente o job antigo `neural-evolution-phase3-30m`, que continua produzindo erro `No neural evolution candidates were generated` no mesmo endpoint e pode confundir a leitura dos logs.
+
+## 2026-07-15 — Phase3 antigo não está gerando redes
+
+Estado confirmado: o job `neural-evolution-phase3-30m` está ativo e executa a cada 30 minutos, mas não está gerando redes. Nas últimas 24 horas não há runs/configs/gates de `strategy=phase3_new_families` no BigQuery, e os logs mostram `No neural evolution candidates were generated` a cada tentativa.
+
+Interpretação: os POST 200 vistos nos minutos cheios pertencem ao refinamento horário do Apolo (`apolo_challenger_refinement`), não ao `phase3_new_families`. O phase3 antigo continua falhando com HTTP 500.
+
+Próximo passo operacional:
+1. Prioridade: manter o `neural-evolution-apolo-refinement-hourly`, que está gerando e avaliando candidatas.
+2. Para o `neural-evolution-phase3-30m`, escolher entre corrigir o espaço de busca/payload da estratégia `phase3_new_families` ou desabilitar o Scheduler para reduzir ruído de erro.
+3. Se a intenção for manter exploração broad-phase, executar primeiro um `dry_run` corrigido até retornar `candidate_count>0`; só depois reabilitar/continuar o Scheduler de 30 minutos.
+
+## 2026-07-15 — Correção preparada para o phase3 de 30 minutos
+
+Foi preparada correção no `neural_evolution_orchestrator` para o caso em que `phase3_new_families` não gera candidatas por esgotamento do conjunto deduplicado com seed fixa. Agora, se a primeira geração voltar vazia, somente essa estratégia tenta uma segunda geração com seed fallback estável derivada do `evolution_run_id` e prefixo `reseed`.
+
+Próximo passo operacional após deploy:
+1. Fazer deploy do `neural_evolution_orchestrator` corrigido.
+2. Executar um `dry_run` produtivo com o payload atual do `neural-evolution-phase3-30m` e confirmar `candidate_count>0`.
+3. Aguardar ou disparar o Scheduler `neural-evolution-phase3-30m` e confirmar nova linha em `neural_evolution_runs` com `strategy=phase3_new_families`.
+4. Se a estratégia voltar a gerar, manter monitoramento separado do refinamento Apolo para não confundir POST 200/500 no mesmo endpoint.
