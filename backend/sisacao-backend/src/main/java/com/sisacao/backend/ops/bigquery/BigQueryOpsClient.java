@@ -320,6 +320,9 @@ public class BigQueryOpsClient {
                 + "WHERE model_version = @modelVersion "
                 + "AND reference_date = (SELECT MAX(reference_date) FROM " + predictionsTable
                 + " WHERE model_version = @modelVersion) "
+                + "QUALIFY ROW_NUMBER() OVER ("
+                + "PARTITION BY reference_date, valid_for, ticker, model_version "
+                + "ORDER BY created_at DESC) = 1 "
                 + "ORDER BY confidence DESC, ticker ASC LIMIT 100";
         TableResult result;
         try {

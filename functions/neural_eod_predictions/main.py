@@ -75,6 +75,34 @@ def neural_eod_predictions(request: Any) -> tuple[Dict[str, Any], int]:
     valid_for = _next_trading_day(bq_client, reference_date)
     job_run_id = str(payload.get("job_run_id") or uuid4())
     registry = _load_registry_entry(bq_client, payload)
+    model_version = str(registry.get("model_version") or MODEL_VERSION or "manual")
+    existing_predictions = _count_existing_predictions(
+        bq_client, reference_date, valid_for, model_version
+    )
+    if existing_predictions > 0 and not force:
+        logging.info(
+            "[run_id=%s] skipping neural_eod_predictions for %s/%s/%s; "
+            "already has %s rows",
+            job_run_id,
+            reference_date.isoformat(),
+            valid_for.isoformat(),
+            model_version,
+            existing_predictions,
+        )
+        return {
+            "status": "ok",
+            "reason": "existing_predictions",
+            "job_run_id": job_run_id,
+            "reference_date": reference_date.isoformat(),
+            "valid_for": valid_for.isoformat(),
+            "rows": existing_predictions,
+            "model_version": model_version,
+            "inserted": 0,
+        }, 200
+    if existing_predictions > 0 and force:
+        _delete_existing_predictions(
+            bq_client, reference_date, valid_for, model_version
+        )
     artifact_dir = _materialize_artifact(registry["artifact_uri"])
     try:
         manifest = _load_manifest(artifact_dir)
@@ -355,6 +383,63 @@ def _load_holidays(
             "Could not load holidays; using weekend-only calendar", exc_info=True
         )
         return set()
+
+
+def _count_existing_predictions(
+    client: bigquery.Client,
+    reference_date: dt.date,
+    valid_for: dt.date,
+    model_version: str,
+) -> int:
+    query = f"""
+        SELECT COUNT(*) AS row_count
+        FROM `{_table_ref(PREDICTIONS_TABLE_ID)}`
+        WHERE reference_date = @reference_date
+          AND valid_for = @valid_for
+          AND model_version = @model_version
+    """
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ScalarQueryParameter("reference_date", "DATE", reference_date),
+            bigquery.ScalarQueryParameter("valid_for", "DATE", valid_for),
+            bigquery.ScalarQueryParameter("model_version", "STRING", model_version),
+        ]
+    )
+    try:
+        rows = list(client.query(query, job_config=job_config).result())
+    except Exception:  # noqa: BLE001 - table may not exist before first deploy.
+        logging.warning("Could not check existing neural predictions", exc_info=True)
+        return 0
+    if not rows:
+        return 0
+    row = rows[0]
+    if hasattr(row, "get"):
+        value = row.get("row_count", 0)
+    else:
+        value = getattr(row, "row_count", 0)
+    return int(value or 0)
+
+
+def _delete_existing_predictions(
+    client: bigquery.Client,
+    reference_date: dt.date,
+    valid_for: dt.date,
+    model_version: str,
+) -> None:
+    query = f"""
+        DELETE FROM `{_table_ref(PREDICTIONS_TABLE_ID)}`
+        WHERE reference_date = @reference_date
+          AND valid_for = @valid_for
+          AND model_version = @model_version
+    """
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ScalarQueryParameter("reference_date", "DATE", reference_date),
+            bigquery.ScalarQueryParameter("valid_for", "DATE", valid_for),
+            bigquery.ScalarQueryParameter("model_version", "STRING", model_version),
+        ]
+    )
+    client.query(query, job_config=job_config).result()
 
 
 def _insert_predictions(client: bigquery.Client, predictions: pd.DataFrame) -> int:

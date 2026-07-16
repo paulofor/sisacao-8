@@ -11,6 +11,19 @@ def import_predictions_module(monkeypatch):
     fake_bigquery = types.ModuleType("bigquery")
     fake_bigquery.Client = lambda *args, **kwargs: None
 
+    class FakeQueryJobConfig:
+        def __init__(self, query_parameters=None):
+            self.query_parameters = query_parameters or []
+
+    class FakeScalarQueryParameter:
+        def __init__(self, name, type_, value):
+            self.name = name
+            self.type_ = type_
+            self.value = value
+
+    fake_bigquery.QueryJobConfig = FakeQueryJobConfig
+    fake_bigquery.ScalarQueryParameter = FakeScalarQueryParameter
+
     fake_storage = types.ModuleType("storage")
     fake_storage.Client = lambda *args, **kwargs: None
 
@@ -84,3 +97,117 @@ def test_recover_daily_candles_posts_reference_date(monkeypatch):
         ),
         "timeout": 55,
     }
+
+
+def test_count_existing_predictions_uses_model_and_dates(monkeypatch):
+    module = import_predictions_module(monkeypatch)
+    monkeypatch.setattr(module, "_table_ref", lambda table: f"project.dataset.{table}")
+
+    class FakeJob:
+        def result(self):
+            return [{"row_count": 150}]
+
+    class FakeClient:
+        def __init__(self):
+            self.query_text = None
+            self.job_config = None
+
+        def query(self, query, job_config=None):
+            self.query_text = query
+            self.job_config = job_config
+            return FakeJob()
+
+    client = FakeClient()
+    count = module._count_existing_predictions(
+        client,
+        dt.date(2026, 7, 15),
+        dt.date(2026, 7, 16),
+        "apolo-v1",
+    )
+
+    assert count == 150
+    assert "reference_date = @reference_date" in client.query_text
+    assert "valid_for = @valid_for" in client.query_text
+    assert "model_version = @model_version" in client.query_text
+    params = {param.name: param.value for param in client.job_config.query_parameters}
+    assert params == {
+        "reference_date": dt.date(2026, 7, 15),
+        "valid_for": dt.date(2026, 7, 16),
+        "model_version": "apolo-v1",
+    }
+
+
+def test_delete_existing_predictions_uses_model_and_dates(monkeypatch):
+    module = import_predictions_module(monkeypatch)
+    monkeypatch.setattr(module, "_table_ref", lambda table: f"project.dataset.{table}")
+
+    class FakeJob:
+        def result(self):
+            return []
+
+    class FakeClient:
+        def __init__(self):
+            self.query_text = None
+            self.job_config = None
+
+        def query(self, query, job_config=None):
+            self.query_text = query
+            self.job_config = job_config
+            return FakeJob()
+
+    client = FakeClient()
+    module._delete_existing_predictions(
+        client,
+        dt.date(2026, 7, 15),
+        dt.date(2026, 7, 16),
+        "apolo-v1",
+    )
+
+    assert "DELETE FROM `project.dataset.neural_eod_predictions`" in client.query_text
+    assert "reference_date = @reference_date" in client.query_text
+    assert "valid_for = @valid_for" in client.query_text
+    assert "model_version = @model_version" in client.query_text
+    params = {param.name: param.value for param in client.job_config.query_parameters}
+    assert params == {
+        "reference_date": dt.date(2026, 7, 15),
+        "valid_for": dt.date(2026, 7, 16),
+        "model_version": "apolo-v1",
+    }
+
+
+def test_neural_eod_predictions_skips_existing_rows_without_force(monkeypatch):
+    module = import_predictions_module(monkeypatch)
+
+    class Request:
+        def get_json(self, silent=True):
+            return {"date_ref": "2026-07-15"}
+
+    fake_client = object()
+    monkeypatch.setattr(module, "_ensure_after_cutoff", lambda force: True)
+    monkeypatch.setattr(module, "_get_client", lambda: fake_client)
+    monkeypatch.setattr(
+        module, "_next_trading_day", lambda client, date: dt.date(2026, 7, 16)
+    )
+    monkeypatch.setattr(
+        module,
+        "_load_registry_entry",
+        lambda client, payload: {
+            "artifact_uri": "gs://bucket/model",
+            "model_version": "apolo-v1",
+        },
+    )
+    monkeypatch.setattr(module, "_count_existing_predictions", lambda *args: 150)
+
+    def fail_if_called(*args, **kwargs):  # pragma: no cover - should not be called.
+        raise AssertionError("artifact should not be loaded when predictions exist")
+
+    monkeypatch.setattr(module, "_materialize_artifact", fail_if_called)
+
+    response, status = module.neural_eod_predictions(Request())
+
+    assert status == 200
+    assert response["status"] == "ok"
+    assert response["reason"] == "existing_predictions"
+    assert response["rows"] == 150
+    assert response["inserted"] == 0
+    assert response["model_version"] == "apolo-v1"

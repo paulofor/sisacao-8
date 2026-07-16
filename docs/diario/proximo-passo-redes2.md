@@ -223,3 +223,13 @@ Próximo passo operacional após deploy:
 2. Executar um `dry_run` produtivo com o payload atual do `neural-evolution-phase3-30m` e confirmar `candidate_count>0`.
 3. Aguardar ou disparar o Scheduler `neural-evolution-phase3-30m` e confirmar nova linha em `neural_evolution_runs` com `strategy=phase3_new_families`.
 4. Se a estratégia voltar a gerar, manter monitoramento separado do refinamento Apolo para não confundir POST 200/500 no mesmo endpoint.
+
+## 2026-07-16 — Idempotência das previsões do Apolo
+
+Foi preparada correção para impedir novas triplicações em `neural_eod_predictions`: a função passa a tratar predições existentes como sucesso idempotente quando `force=false`, e só substitui linhas existentes quando houver execução explícita com `force=true`.
+
+Próximo passo operacional após deploy:
+1. Fazer deploy de `neural_eod_predictions`, `eod_signals` e backend com a deduplicação de monitoramento.
+2. Reabrir o painel do champion e confirmar que cada ticker aparece uma vez para `reference_date=2026-07-15`/`valid_for=2026-07-16`.
+3. Manter o Scheduler normal; novas coletas/predições automáticas devem ocorrer apenas quando as predições estiverem ausentes ou quando houver `force=true` operacional.
+4. Opcionalmente limpar duplicatas históricas em BigQuery com uma rotina controlada, mas a visualização e o consumo operacional já passam a selecionar a linha mais recente por ticker/modelo.

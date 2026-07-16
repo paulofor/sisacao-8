@@ -411,13 +411,17 @@ def _fetch_neural_predictions(
         "confidence",
         "source_snapshot",
         "job_run_id",
+        "created_at",
     ]
     query = (
         "SELECT ticker, model_id, model_version, feature_version, prob_up, "
         "prob_down, prob_neutral, suggested_action, confidence, "
-        "source_snapshot, job_run_id "
+        "source_snapshot, job_run_id, created_at "
         f"FROM `{_table_ref(NEURAL_PREDICTIONS_TABLE_ID)}` "
-        "WHERE reference_date = @ref_date AND valid_for = @valid_for"
+        "WHERE reference_date = @ref_date AND valid_for = @valid_for "
+        "QUALIFY ROW_NUMBER() OVER ("
+        "PARTITION BY reference_date, valid_for, ticker, model_version "
+        "ORDER BY created_at DESC) = 1"
     )
     job_config = bigquery.QueryJobConfig(
         query_parameters=[
