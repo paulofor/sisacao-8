@@ -891,6 +891,57 @@ def test_orchestrator_apolo_challenger_refinement_is_risk_controlled(monkeypatch
     )
 
 
+def test_orchestrator_apolo_challenger_stability_targets_promising_families(
+    monkeypatch,
+):
+    fake_client = _FakeClient()
+    monkeypatch.setattr(module, "_BQ_CLIENT", fake_client)
+
+    response, status = module.neural_evolution_orchestrator(
+        _Request(
+            {
+                "dry_run": True,
+                "strategy": "apolo_challenger_stability",
+                "budget": {"max_trials": 2, "random_seed": 99},
+            }
+        )
+    )
+
+    assert status == 200
+    assert response["strategy"] == "apolo_challenger_stability"
+    assert response["candidate_count"] == 2
+    assert set(response["architecture_types"]) == {
+        "tabular_bottleneck_mlp",
+        "wide_deep_mlp",
+    }
+
+    candidates = module._generate_candidates_for_strategy(
+        client=fake_client,
+        strategy="apolo_challenger_stability",
+        evolution_run_id="run-apolo-stability",
+        dataset_snapshot="snapshot_2026",
+        budget=module.EvolutionBudget(max_trials=2, random_seed=99),
+        existing_hashes=set(),
+        model_version_prefix="apolo_stability_test",
+        payload={},
+    )
+
+    assert len(candidates) == 2
+    assert all(
+        candidate.training_request["blocked_tickers"]
+        == ("AMBP3", "GFSA3", "MGLU3", "ONCO3", "VVEO3")
+        for candidate in candidates
+    )
+    assert all(
+        candidate.training_request["max_fold_drawdown_stop"] <= 0.15
+        for candidate in candidates
+    )
+    assert all(
+        "apolo_stability" in candidate.training_request["candidate_family_hash"]
+        for candidate in candidates
+    )
+
+
 def test_orchestrator_phase4_recurrent_shadow_dry_run_generates_sequence_candidates(
     monkeypatch,
 ):

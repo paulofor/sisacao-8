@@ -233,3 +233,24 @@ Próximo passo operacional após deploy:
 2. Reabrir o painel do champion e confirmar que cada ticker aparece uma vez para `reference_date=2026-07-15`/`valid_for=2026-07-16`.
 3. Manter o Scheduler normal; novas coletas/predições automáticas devem ocorrer apenas quando as predições estiverem ausentes ou quando houver `force=true` operacional.
 4. Opcionalmente limpar duplicatas históricas em BigQuery com uma rotina controlada, mas a visualização e o consumo operacional já passam a selecionar a linha mais recente por ticker/modelo.
+
+## 2026-07-16 — Fluxo de geração ativo, sem nova aprovada
+
+Estado confirmado: o fluxo de geração de redes está ativo. Nas últimas 24 horas houve runs concluídas de `phase3_new_families`, `apolo_challenger_refinement` e `apolo_challenger_shadow`, todas gerando, treinando, avaliando e gravando decisões de gate.
+
+Ainda não existe rede aprovada além da Apolo: o Gate MUEN segue com apenas 1 `passed=true` em 1040 decisões totais. As candidatas recentes têm alguns deltas positivos, mas falham por `seeds_instaveis`, folds positivos insuficientes, trades insuficientes e/ou drawdown excessivo.
+
+Próximo passo operacional:
+1. Manter `neural-evolution-apolo-refinement-hourly` e `neural-evolution-phase3-30m` ativos, pois ambos voltaram a produzir evidência.
+2. Monitorar principalmente candidatas com delta positivo e drawdown aceitável, mas não promover sem `passed=true`.
+3. Se muitas rodadas continuarem falhando por `seeds_instaveis`, ajustar a estratégia de refinamento para priorizar estabilidade de seeds antes de ampliar arquitetura.
+
+## 2026-07-16 — Novo fluxo de estabilidade para candidatas promissoras
+
+Foi criado o fluxo `apolo_challenger_stability`, direcionado às famílias que já apresentaram delta de expectancy positivo (`wide_deep_mlp` e `tabular_bottleneck_mlp`), mas que foram bloqueadas principalmente por instabilidade entre seeds, poucos trades ou drawdown. Ele não promove modelos automaticamente: executa repetições multi-seed somente nessas duas famílias, com menos variação estrutural, limiares direcionais moderados para não reduzir excessivamente a amostra de trades e `max_fold_drawdown_stop=0.15`.
+
+Próximo passo operacional:
+1. Fazer deploy do `neural_evolution_orchestrator` com a estratégia nova.
+2. Validar com `dry_run` usando `{"strategy":"apolo_challenger_stability","dry_run":true,"budget":{"max_trials":2,"random_seed":20260716}}`.
+3. Se o retorno tiver `candidate_count=2`, criar um Scheduler separado (por exemplo, horário) para essa estratégia; manter o refinamento atual e o phase3 ativos enquanto se compara a taxa de `passed=true`.
+4. Promover somente se o Gate MUEN retornar `passed=true`; delta positivo isolado continua insuficiente.
