@@ -24,6 +24,7 @@ class _FakeClient:
         self.queries = []
         self.registry_by_version = {}
         self.leaderboard_rows = []
+        self.existing_hashes = []
 
     def query(self, query, job_config=None):
         self.queries.append((query, job_config))
@@ -34,7 +35,9 @@ class _FakeClient:
         if "ANY_VALUE(label_version)" in query:
             return _FakeQueryJob([{"value": "label_eod_barrier_v2"}])
         if "SELECT dedupe_hash" in query:
-            return _FakeQueryJob([])
+            return _FakeQueryJob(
+                [{"dedupe_hash": item} for item in self.existing_hashes]
+            )
         if (
             "FROM `ingestaokraken.cotacao_intraday.vw_neural_evolution_leaderboard`"
             in query
@@ -168,6 +171,46 @@ def test_orchestrator_can_persist_candidate_configs_without_training(monkeypatch
         "ingestaokraken.cotacao_intraday.neural_candidate_evaluations"
         not in loaded_tables
     )
+
+
+def test_orchestrator_phase3_reseeds_when_fixed_schedule_is_exhausted(monkeypatch):
+    fake_client = _FakeClient()
+    exhausted_budget = module.EvolutionBudget(max_trials=90, random_seed=20260629)
+    exhausted_candidates = module.generate_phase3_family_candidates(
+        evolution_run_id="previous-phase3",
+        dataset_snapshot="snapshot_2026",
+        budget=exhausted_budget,
+        existing_hashes=set(),
+        model_version_prefix="neural_eod_phase3_20260715",
+    )
+    fake_client.existing_hashes = [
+        candidate.dedupe_hash for candidate in exhausted_candidates
+    ]
+    monkeypatch.setattr(module, "_BQ_CLIENT", fake_client)
+
+    response, status = module.neural_evolution_orchestrator(
+        _Request(
+            {
+                "evolution_run_id": "run-phase3-reseed",
+                "strategy": "phase3_new_families",
+                "dry_run": True,
+                "budget": {
+                    "max_trials": 1,
+                    "max_runtime_minutes": 120,
+                    "max_parameter_count": 150000,
+                    "max_layers": 4,
+                    "random_seed": 20260629,
+                },
+            }
+        )
+    )
+
+    assert status == 200
+    assert response["status"] == "ok"
+    assert response["strategy"] == "phase3_new_families"
+    assert response["candidate_count"] == 1
+    assert "reseed" in response["candidates"][0]
+    assert response["candidate_details"][0]["candidate_source"] == "phase3_family"
 
 
 def test_orchestrator_phase2_uses_kept_leaderboard_candidates(monkeypatch):
@@ -790,6 +833,62 @@ def test_orchestrator_phase3_multiseed_focus_generates_tabular_t35_repeats(monke
         "tabular_bottleneck_mlp"
     }
     assert all("p50_m08_t35" in candidate for candidate in response["candidates"])
+
+
+def test_orchestrator_apolo_challenger_refinement_is_risk_controlled(monkeypatch):
+    fake_client = _FakeClient()
+    monkeypatch.setattr(module, "_BQ_CLIENT", fake_client)
+
+    response, status = module.neural_evolution_orchestrator(
+        _Request(
+            {
+                "dry_run": True,
+                "strategy": "apolo_challenger_refinement",
+                "budget": {"max_trials": 3, "random_seed": 88},
+            }
+        )
+    )
+
+    assert status == 200
+    assert response["strategy"] == "apolo_challenger_refinement"
+    assert response["candidate_count"] == 3
+    assert response["candidate_sources"] == ["phase3_family"]
+    assert set(response["architecture_types"]) == {
+        "mlp",
+        "tabular_bottleneck_mlp",
+        "wide_deep_mlp",
+    }
+    assert all("dd" in candidate for candidate in response["candidates"])
+
+    candidates = module._generate_candidates_for_strategy(
+        client=fake_client,
+        strategy="apolo_challenger_refinement",
+        evolution_run_id="run-apolo-refine",
+        dataset_snapshot="snapshot_2026",
+        budget=module.EvolutionBudget(max_trials=3, random_seed=88),
+        existing_hashes=set(),
+        model_version_prefix="apolo_refine_test",
+        payload={},
+    )
+
+    assert len(candidates) == 3
+    assert all(
+        candidate.training_request["blocked_tickers"]
+        == ("AMBP3", "GFSA3", "MGLU3", "ONCO3", "VVEO3")
+        for candidate in candidates
+    )
+    assert all(
+        candidate.training_request["max_fold_drawdown_stop"] <= 0.16
+        for candidate in candidates
+    )
+    assert all(
+        candidate.training_request["max_trades_per_fold"] <= 35
+        for candidate in candidates
+    )
+    assert all(
+        "apolo_refine" in candidate.training_request["candidate_family_hash"]
+        for candidate in candidates
+    )
 
 
 def test_orchestrator_phase4_recurrent_shadow_dry_run_generates_sequence_candidates(

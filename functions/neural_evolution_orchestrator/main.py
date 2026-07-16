@@ -82,6 +82,7 @@ DEFAULT_TRAINING_TIMEOUT_SECONDS = int(
     os.environ.get("NEURAL_EVOLUTION_TRAINING_TIMEOUT_SECONDS", "3600")
 )
 APOLO_CHALLENGER_STRATEGY = "apolo_challenger_shadow"
+APOLO_REFINEMENT_STRATEGY = "apolo_challenger_refinement"
 APOLO_CHALLENGER_FAMILY_SPACE: tuple[dict[str, Any], ...] = (
     {
         "architecture_type": "tabular_bottleneck_mlp",
@@ -123,6 +124,74 @@ APOLO_CHALLENGER_FAMILY_SPACE: tuple[dict[str, Any], ...] = (
         "neutral_event_min_volatility_20d": 0.05,
         "candidate_family_hash": (
             "neural_eod_apolo_challenger_wide_deep_p48_m06_t45_nev_block3"
+        ),
+    },
+)
+APOLO_REFINEMENT_FAMILY_SPACE: tuple[dict[str, Any], ...] = (
+    {
+        "architecture_type": "wide_deep_mlp",
+        "model_id": "neural_eod_wide_deep_mlp",
+        "hidden_units": [192, 96, 24],
+        "dropout_rate": 0.22,
+        "learning_rate": 0.00025,
+        "batch_size": 256,
+        "epochs": 90,
+        "class_weight": "balanced",
+        "min_directional_probability": 0.52,
+        "min_directional_margin": 0.08,
+        "max_trades_per_fold": 30,
+        "max_fold_drawdown_stop": 0.16,
+        "blocked_tickers": ["ONCO3", "VVEO3", "AMBP3", "GFSA3", "MGLU3"],
+        "neutral_event_min_abs_return_5d": 0.18,
+        "neutral_event_min_financial_volume_z20": 3.5,
+        "neutral_event_min_volume_ratio_20d": 7.5,
+        "neutral_event_min_volatility_20d": 0.05,
+        "candidate_family_hash": (
+            "neural_eod_apolo_refine_wide_deep_p52_m08_t30_dd16_block5"
+        ),
+    },
+    {
+        "architecture_type": "tabular_bottleneck_mlp",
+        "model_id": "neural_eod_tabular_bottleneck_mlp",
+        "hidden_units": [256, 64, 16],
+        "dropout_rate": 0.28,
+        "learning_rate": 0.00025,
+        "batch_size": 256,
+        "epochs": 90,
+        "class_weight": "balanced",
+        "min_directional_probability": 0.50,
+        "min_directional_margin": 0.08,
+        "max_trades_per_fold": 35,
+        "max_fold_drawdown_stop": 0.16,
+        "blocked_tickers": ["ONCO3", "VVEO3", "AMBP3", "GFSA3", "MGLU3"],
+        "neutral_event_min_abs_return_5d": 0.18,
+        "neutral_event_min_financial_volume_z20": 3.5,
+        "neutral_event_min_volume_ratio_20d": 7.5,
+        "neutral_event_min_volatility_20d": 0.05,
+        "candidate_family_hash": (
+            "neural_eod_apolo_refine_tabular_bt_p50_m08_t35_dd16_block5"
+        ),
+    },
+    {
+        "architecture_type": "mlp",
+        "model_id": "neural_eod_mlp",
+        "hidden_units": [64, 32],
+        "dropout_rate": 0.35,
+        "learning_rate": 0.0003,
+        "batch_size": 128,
+        "epochs": 100,
+        "class_weight": "directional",
+        "min_directional_probability": 0.54,
+        "min_directional_margin": 0.09,
+        "max_trades_per_fold": 25,
+        "max_fold_drawdown_stop": 0.14,
+        "blocked_tickers": ["ONCO3", "VVEO3", "AMBP3", "GFSA3", "MGLU3"],
+        "neutral_event_min_abs_return_5d": 0.18,
+        "neutral_event_min_financial_volume_z20": 3.5,
+        "neutral_event_min_volume_ratio_20d": 7.5,
+        "neutral_event_min_volatility_20d": 0.05,
+        "candidate_family_hash": (
+            "neural_eod_apolo_refine_diversity_mlp_p54_m09_t25_dd14_block5"
         ),
     },
 )
@@ -439,6 +508,7 @@ def _is_phase3_strategy(strategy: str) -> bool:
         "new_families",
         "phase3_multiseed_focus",
         APOLO_CHALLENGER_STRATEGY,
+        APOLO_REFINEMENT_STRATEGY,
     }
 
 
@@ -490,6 +560,9 @@ def _generate_phase3_candidates(
         kwargs["family_space"] = family_space
     if strategy.lower() == APOLO_CHALLENGER_STRATEGY:
         kwargs["family_space"] = APOLO_CHALLENGER_FAMILY_SPACE
+    if strategy.lower() == APOLO_REFINEMENT_STRATEGY:
+        kwargs["family_space"] = APOLO_REFINEMENT_FAMILY_SPACE
+        kwargs["seed_repeats_only"] = True
     if strategy.lower() == "phase3_multiseed_focus":
         kwargs["family_space"] = [
             {
@@ -510,7 +583,7 @@ def _generate_phase3_candidates(
             }
         ]
         kwargs["seed_repeats_only"] = True
-    return generate_phase3_family_candidates(
+    candidates = generate_phase3_family_candidates(
         evolution_run_id=evolution_run_id,
         dataset_snapshot=dataset_snapshot,
         budget=budget,
@@ -518,6 +591,34 @@ def _generate_phase3_candidates(
         model_version_prefix=model_version_prefix,
         **kwargs,
     )
+    if candidates or strategy.lower() != "phase3_new_families":
+        return candidates
+
+    fallback_seed = _phase3_fallback_seed(budget.random_seed, evolution_run_id)
+    logging.warning(
+        "Phase-3 candidate grid exhausted for seed %s; retrying with "
+        "fallback seed %s",
+        budget.random_seed,
+        fallback_seed,
+    )
+    fallback_budget = replace(budget, random_seed=fallback_seed)
+    return generate_phase3_family_candidates(
+        evolution_run_id=evolution_run_id,
+        dataset_snapshot=dataset_snapshot,
+        budget=fallback_budget,
+        existing_hashes=existing_hashes,
+        model_version_prefix=f"{model_version_prefix}_reseed{fallback_seed}",
+        **kwargs,
+    )
+
+
+def _phase3_fallback_seed(original_seed: int, evolution_run_id: str) -> int:
+    """Return a stable alternate seed when a fixed Phase-3 schedule is exhausted."""
+
+    seed_material = sum(
+        (index + 1) * ord(char) for index, char in enumerate(evolution_run_id)
+    )
+    return int(original_seed) + 100_000 + seed_material % 900_000
 
 
 def _generate_phase2_candidates(
