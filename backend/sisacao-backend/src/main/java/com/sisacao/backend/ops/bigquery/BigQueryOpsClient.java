@@ -14,6 +14,7 @@ import com.sisacao.backend.ops.OpsIncident;
 import com.sisacao.backend.ops.NeuralTrainingDataAllocation;
 import com.sisacao.backend.ops.NeuralTrainingRun;
 import com.sisacao.backend.ops.NeuralEvolutionLeaderboardEntry;
+import com.sisacao.backend.ops.NeuralEvolutionActivity;
 import com.sisacao.backend.ops.NeuralChampionMonitoring;
 import com.sisacao.backend.ops.NeuralChampionPrediction;
 import com.sisacao.backend.ops.NeuralGateDecisionAttempt;
@@ -141,6 +142,33 @@ public class BigQueryOpsClient {
         List<NeuralEvolutionLeaderboardEntry> rows = new ArrayList<>();
         for (FieldValueList row : result.iterateAll()) {
             rows.add(toNeuralEvolutionLeaderboardEntry(row));
+        }
+        return Collections.unmodifiableList(rows);
+    }
+
+    public List<NeuralEvolutionActivity> fetchNeuralEvolutionActivity() {
+        String sql = "SELECT DATE(started_at) AS activity_date, strategy, "
+                + "COUNT(*) AS runs_count, "
+                + "COUNTIF(LOWER(status) = 'completed') AS completed_runs_count, "
+                + "COUNTIF(LOWER(status) NOT IN ('completed')) AS failed_runs_count, "
+                + "SUM(COALESCE(SAFE_CAST(JSON_VALUE(summary_json, '$.candidate_count') AS INT64), 0)) AS candidates_count, "
+                + "SUM(COALESCE(SAFE_CAST(JSON_VALUE(summary_json, '$.trained_count') AS INT64), 0)) AS trained_count, "
+                + "SUM(COALESCE(SAFE_CAST(JSON_VALUE(summary_json, '$.gate_decision_count') AS INT64), 0)) AS gate_decisions_count "
+                + "FROM " + qualifiedQuantView(properties.getNeuralEvolutionRunsTable()) + " "
+                + "WHERE started_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 DAY) "
+                + "GROUP BY activity_date, strategy ORDER BY activity_date ASC, strategy ASC";
+        TableResult result = runQuery(sql, Map.of());
+        List<NeuralEvolutionActivity> rows = new ArrayList<>();
+        for (FieldValueList row : result.iterateAll()) {
+            rows.add(new NeuralEvolutionActivity(
+                    getString(row, "activity_date", "activityDate"),
+                    getString(row, "strategy"),
+                    getLong(row, "runs_count", "runsCount"),
+                    getLong(row, "completed_runs_count", "completedRunsCount"),
+                    getLong(row, "failed_runs_count", "failedRunsCount"),
+                    getLong(row, "candidates_count", "candidatesCount"),
+                    getLong(row, "trained_count", "trainedCount"),
+                    getLong(row, "gate_decisions_count", "gateDecisionsCount")));
         }
         return Collections.unmodifiableList(rows);
     }

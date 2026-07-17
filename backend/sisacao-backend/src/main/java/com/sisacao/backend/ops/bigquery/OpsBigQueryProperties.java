@@ -42,6 +42,7 @@ public class OpsBigQueryProperties {
     private String neuralEvolutionLeaderboardView = "vw_neural_evolution_leaderboard";
     private String neuralGateDecisionsTable = "neural_gate_decisions";
     private String neuralFamilyEvaluationsTable = "neural_family_evaluations";
+    private String neuralEvolutionRunsTable = "neural_evolution_runs";
 
     public boolean isEnabled() {
         return enabled;
@@ -382,6 +383,16 @@ public class OpsBigQueryProperties {
     public void setNeuralFamilyEvaluationsTable(String neuralFamilyEvaluationsTable) {
         if (neuralFamilyEvaluationsTable != null && !neuralFamilyEvaluationsTable.isBlank()) {
             this.neuralFamilyEvaluationsTable = neuralFamilyEvaluationsTable;
+        }
+    }
+
+    public String getNeuralEvolutionRunsTable() {
+        return neuralEvolutionRunsTable;
+    }
+
+    public void setNeuralEvolutionRunsTable(String neuralEvolutionRunsTable) {
+        if (neuralEvolutionRunsTable != null && !neuralEvolutionRunsTable.isBlank()) {
+            this.neuralEvolutionRunsTable = neuralEvolutionRunsTable;
         }
     }
 

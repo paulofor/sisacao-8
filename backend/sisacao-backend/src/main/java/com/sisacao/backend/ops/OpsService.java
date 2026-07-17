@@ -47,6 +47,10 @@ public class OpsService {
         return bigQueryOpsClient.fetchNeuralEvolutionLeaderboard();
     }
 
+    public List<NeuralEvolutionActivity> getNeuralEvolutionActivity() {
+        return bigQueryOpsClient.fetchNeuralEvolutionActivity();
+    }
+
     public List<NeuralGateDecisionAttempt> getNeuralGateDecisions() {
         return bigQueryOpsClient.fetchNeuralGateDecisions();
     }

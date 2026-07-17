@@ -139,6 +139,17 @@ export interface NeuralEvolutionLeaderboardEntry {
   createdAt: string | null
 }
 
+export interface NeuralEvolutionActivity {
+  activityDate: string | null
+  strategy: string | null
+  runsCount: number
+  completedRunsCount: number
+  failedRunsCount: number
+  candidatesCount: number
+  trainedCount: number
+  gateDecisionsCount: number
+}
+
 export interface NeuralGateDecisionAttempt {
   decisionId: string
   protocolVersion: string | null
@@ -651,6 +662,25 @@ export const fetchNeuralEvolutionLeaderboard = async (): Promise<NeuralEvolution
       decisionReasonsJson: asNullableString(record.decisionReasonsJson ?? record.decision_reasons_json),
       rankInRun: toNumber(record.rankInRun ?? record.rank_in_run),
       createdAt: toIsoDateTime(record.createdAt ?? record.created_at),
+    }
+  })
+}
+
+export const fetchNeuralEvolutionActivity = async (): Promise<NeuralEvolutionActivity[]> => {
+  const response = await apiClient.get<unknown>('/ops/neural/evolution/activity')
+  const items = Array.isArray(response.data) ? response.data : []
+
+  return items.map((item) => {
+    const record = item as Record<string, unknown>
+    return {
+      activityDate: toIsoDate(record.activityDate ?? record.activity_date),
+      strategy: asNullableString(record.strategy),
+      runsCount: toInteger(record.runsCount ?? record.runs_count),
+      completedRunsCount: toInteger(record.completedRunsCount ?? record.completed_runs_count),
+      failedRunsCount: toInteger(record.failedRunsCount ?? record.failed_runs_count),
+      candidatesCount: toInteger(record.candidatesCount ?? record.candidates_count),
+      trainedCount: toInteger(record.trainedCount ?? record.trained_count),
+      gateDecisionsCount: toInteger(record.gateDecisionsCount ?? record.gate_decisions_count),
     }
   })
 }
