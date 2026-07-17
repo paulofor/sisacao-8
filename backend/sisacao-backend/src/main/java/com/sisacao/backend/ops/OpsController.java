@@ -51,6 +51,11 @@ public class OpsController {
         return opsService.getNeuralEvolutionLeaderboard();
     }
 
+    @GetMapping("/neural/evolution/activity")
+    public List<NeuralEvolutionActivity> getNeuralEvolutionActivity() {
+        return opsService.getNeuralEvolutionActivity();
+    }
+
     @GetMapping("/neural/gate-decisions")
     public List<NeuralGateDecisionAttempt> getNeuralGateDecisions() {
         return opsService.getNeuralGateDecisions();
