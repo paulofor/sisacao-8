@@ -28,8 +28,8 @@ const formatStrategy = (strategy: string | null) => strategyLabels[strategy ?? '
 const strategyColor = (strategy: string | null) => strategyColors[strategy ?? ''] ?? '#607d8b'
 
 const NeuralCreationActivityTab: FC<NeuralCreationActivityTabProps> = ({ activity, error, loading }) => {
-  const ordered = [...activity].sort((left, right) => (left.activityDate ?? '').localeCompare(right.activityDate ?? ''))
-  const latestDate = ordered.at(-1)?.activityDate ?? null
+  const ordered = [...activity].sort((left, right) => (right.activityDate ?? '').localeCompare(left.activityDate ?? ''))
+  const latestDate = ordered[0]?.activityDate ?? null
   const latest = ordered.filter((item) => item.activityDate === latestDate)
   const totals = latest.reduce(
     (result, item) => ({
@@ -41,6 +41,18 @@ const NeuralCreationActivityTab: FC<NeuralCreationActivityTabProps> = ({ activit
     { runs: 0, trained: 0, candidates: 0, failures: 0 },
   )
   const maxRuns = Math.max(1, ...ordered.map((item) => item.runsCount))
+  const activityByDay = ordered.reduce<Array<{ date: string | null; entries: NeuralEvolutionActivity[] }>>(
+    (groups, entry) => {
+      const current = groups.at(-1)
+      if (current?.date === entry.activityDate) {
+        current.entries.push(entry)
+      } else {
+        groups.push({ date: entry.activityDate, entries: [entry] })
+      }
+      return groups
+    },
+    [],
+  )
 
   return (
     <Stack spacing={3}>
@@ -75,21 +87,32 @@ const NeuralCreationActivityTab: FC<NeuralCreationActivityTabProps> = ({ activit
           <Stack spacing={2}>
             <Stack spacing={0.5}>
               <Typography variant="h6" fontWeight={800}>Execuções por dia e estratégia</Typography>
-              <Typography variant="body2" color="text.secondary">Cada barra representa as execuções concluídas por estratégia no respectivo dia.</Typography>
+              <Typography variant="body2" color="text.secondary">Dias mais recentes aparecem primeiro. Cada grupo separa visualmente as estratégias executadas naquela data.</Typography>
             </Stack>
-            <Stack spacing={1.25}>
-              {ordered.map((item) => (
-                <Box key={`${item.activityDate}-${item.strategy}`} sx={{ display: 'grid', gridTemplateColumns: { xs: '88px 1fr 74px', sm: '105px 1fr 145px' }, gap: 1, alignItems: 'center' }}>
-                  <Typography variant="caption" color="text.secondary">{item.activityDate ? dayjs(item.activityDate).format('DD/MM') : '—'}</Typography>
-                  <Box sx={{ height: 28, bgcolor: 'action.hover', borderRadius: 1, overflow: 'hidden' }}>
-                    <Box sx={{ width: `${Math.max(4, item.runsCount / maxRuns * 100)}%`, height: '100%', bgcolor: strategyColor(item.strategy), borderRadius: 1, display: 'flex', alignItems: 'center', px: 1, minWidth: 34 }}>
-                      <Typography variant="caption" sx={{ color: 'common.white', fontWeight: 800 }}>{item.runsCount}</Typography>
+            <Stack spacing={2}>
+              {activityByDay.map((day) => {
+                const dayRuns = day.entries.reduce((total, item) => total + item.runsCount, 0)
+                return (
+                  <Box key={day.date ?? 'unknown-date'} sx={{ border: '1px solid', borderColor: 'divider', borderLeft: '4px solid', borderLeftColor: 'primary.light', borderRadius: 2, overflow: 'hidden' }}>
+                    <Box sx={{ px: 2, py: 1, bgcolor: 'action.hover', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2 }}>
+                      <Typography variant="subtitle2" fontWeight={800}>{day.date ? dayjs(day.date).format('DD/MM/YYYY') : 'Data indisponível'}</Typography>
+                      <Chip size="small" label={`${dayRuns} execuções`} />
                     </Box>
+                    <Stack spacing={1.25} sx={{ p: 2 }}>
+                      {day.entries.map((item) => (
+                        <Box key={`${item.activityDate}-${item.strategy}`} sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 64px', sm: '1fr 145px' }, gap: 1, alignItems: 'center' }}>
+                          <Box sx={{ height: 28, bgcolor: 'action.hover', borderRadius: 1, overflow: 'hidden' }}>
+                            <Box sx={{ width: `${Math.max(4, item.runsCount / maxRuns * 100)}%`, height: '100%', bgcolor: strategyColor(item.strategy), borderRadius: 1, display: 'flex', alignItems: 'center', px: 1, minWidth: 34 }}>
+                              <Typography variant="caption" sx={{ color: 'common.white', fontWeight: 800 }}>{item.runsCount}</Typography>
+                            </Box>
+                          </Box>
+                          <Typography variant="caption" color="text.secondary" sx={{ textAlign: 'right' }}>{formatStrategy(item.strategy)}</Typography>
+                        </Box>
+                      ))}
+                    </Stack>
                   </Box>
-                  <Typography variant="caption" color="text.secondary" sx={{ display: { xs: 'none', sm: 'block' } }}>{formatStrategy(item.strategy)}</Typography>
-                  <Typography variant="caption" color="text.secondary" sx={{ display: { xs: 'block', sm: 'none' } }}>{item.runsCount} runs</Typography>
-                </Box>
-              ))}
+                )
+              })}
             </Stack>
           </Stack>
         </Paper>

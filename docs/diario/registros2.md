@@ -378,3 +378,8 @@
 - Foi criado o endpoint `GET /ops/neural/evolution/activity`, que agrega os últimos 30 dias de `neural_evolution_runs` por data e estratégia. A consulta entrega as quatro estratégias de criação em operação, permitindo que o gráfico reflita dados reais em vez de números estáticos.
 - A tela atualiza os dados automaticamente a cada minuto e preserva a regra operacional: execução concluída não significa aprovação; a decisão de promoção continua dependente do Gate MUEN e da aprovação manual.
 - Comandos de validação: `cd frontend/app && npm run lint && npm run build`; `cd backend/sisacao-backend && ./mvnw test`; `python -m flake8`; `python -m pytest -q`.
+
+## 2026-07-17 — Melhoria visual da tela de criação neural
+- Ajustei o gráfico em **Redes neurais > Criação de redes** para ordenar os dias da data mais recente para a mais antiga.
+- As barras agora são agrupadas em cartões diários com cabeçalho de data, total de execuções, fundo suave e borda lateral colorida. A separação permite identificar de imediato quais estratégias pertencem ao mesmo dia, sem repetir a data em cada barra.
+- Comandos de validação: `cd frontend/app && npm run lint && npm run build`; `python -m flake8`; `python -m pytest -q`.

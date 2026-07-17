@@ -270,3 +270,7 @@ Próximo passo operacional:
 A nova tela **Redes neurais > Criação de redes** passa a mostrar diariamente as execuções por estratégia e os totais de candidatas, treinos, decisões de gate e falhas, a partir de `neural_evolution_runs`.
 
 Próximo passo operacional: usar o gráfico para acompanhar continuidade das estratégias e investigar qualquer barra/falha fora do padrão; manter como critério de promoção exclusivamente um novo `passed=true` no Gate MUEN e a aprovação manual.
+
+## 2026-07-17 — Leitura diária da criação neural aprimorada
+
+A tela **Criação de redes** agora apresenta a atividade do dia mais recente primeiro e agrupa visualmente todas as estratégias de uma mesma data. Próximo passo operacional mantido: acompanhar falhas e continuidade pelo grupo diário; promoção só ocorre após `passed=true` no Gate MUEN e aprovação manual.
