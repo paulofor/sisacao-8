@@ -254,3 +254,23 @@ Próximo passo operacional:
 2. Validar com `dry_run` usando `{"strategy":"apolo_challenger_stability","dry_run":true,"budget":{"max_trials":2,"random_seed":20260716}}`.
 3. Se o retorno tiver `candidate_count=2`, criar um Scheduler separado (por exemplo, horário) para essa estratégia; manter o refinamento atual e o phase3 ativos enquanto se compara a taxa de `passed=true`.
 4. Promover somente se o Gate MUEN retornar `passed=true`; delta positivo isolado continua insuficiente.
+## 2026-07-17 — Estado atual: processo ativo; nenhuma nova aprovada
+
+O processo de criação, validação e melhoria está ativo em produção: nas últimas 24 horas foram concluídas 48 runs de `phase3_new_families`, 24 de `apolo_challenger_refinement`, 23 de `apolo_challenger_stability` e 1 de `apolo_challenger_shadow`. As rodadas recentes geraram candidatas, treinaram e registraram as decisões MUEN.
+
+Ainda não há segunda rede aprovada. Das 1.159 decisões MUEN registradas, apenas uma tem `passed=true`: a família do Apolo NEV, que permanece o champion aprovado. As candidatas com delta de expectativa positivo continuam bloqueadas principalmente por instabilidade entre seeds; drawdown excessivo, folds positivos insuficientes e poucos trades também ocorrem em parte das tentativas.
+
+Próximo passo operacional:
+1. Manter as três trilhas de criação ativas e observar se as próximas rodadas mantêm `failed_count=0` nas runs.
+2. Priorizar o refinamento das famílias `wide_deep_mlp` e `tabular_bottleneck_mlp` para reduzir `seeds_instaveis`, sem relaxar os gates de drawdown, folds e trades.
+3. Só considerar uma nova aprovação quando uma candidata aparecer em `neural_gate_decisions` com `passed=true`; em seguida, comparar com o Apolo e exigir aprovação manual para qualquer promoção.
+
+## 2026-07-17 — Acompanhamento visual da criação neural disponível
+
+A nova tela **Redes neurais > Criação de redes** passa a mostrar diariamente as execuções por estratégia e os totais de candidatas, treinos, decisões de gate e falhas, a partir de `neural_evolution_runs`.
+
+Próximo passo operacional: usar o gráfico para acompanhar continuidade das estratégias e investigar qualquer barra/falha fora do padrão; manter como critério de promoção exclusivamente um novo `passed=true` no Gate MUEN e a aprovação manual.
+
+## 2026-07-17 — Leitura diária da criação neural aprimorada
+
+A tela **Criação de redes** agora apresenta a atividade do dia mais recente primeiro e agrupa visualmente todas as estratégias de uma mesma data. Próximo passo operacional mantido: acompanhar falhas e continuidade pelo grupo diário; promoção só ocorre após `passed=true` no Gate MUEN e aprovação manual.

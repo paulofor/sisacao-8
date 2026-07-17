@@ -43,6 +43,7 @@ import NeuralChampionTab from './components/tabs/NeuralChampionTab'
 import NeuralOverviewTab from './components/tabs/NeuralOverviewTab'
 import NeuralTrainingDataTab from './components/tabs/NeuralTrainingDataTab'
 import NeuralEvolutionTab from './components/tabs/NeuralEvolutionTab'
+import NeuralCreationActivityTab from './components/tabs/NeuralCreationActivityTab'
 import NeuralTrainingRunsTab from './components/tabs/NeuralTrainingRunsTab'
 import QuantRoadmapTab, { type QuantRoadmapKey } from './components/tabs/QuantRoadmapTab'
 import SinaisTab from './components/tabs/SinaisTab'
@@ -59,6 +60,7 @@ import { useOpsOverview } from './hooks/useOpsOverview'
 import { useOpsPipeline } from './hooks/useOpsPipeline'
 import { useNeuralTrainingDataAllocation } from './hooks/useNeuralTrainingDataAllocation'
 import { useNeuralEvolutionLeaderboard } from './hooks/useNeuralEvolutionLeaderboard'
+import { useNeuralEvolutionActivity } from './hooks/useNeuralEvolutionActivity'
 import { useNeuralGateDecisions } from './hooks/useNeuralGateDecisions'
 import { useNeuralChampionMonitoring } from './hooks/useNeuralChampionMonitoring'
 import { useNeuralTrainingRuns } from './hooks/useNeuralTrainingRuns'
@@ -112,6 +114,7 @@ type TabValue =
   | 'neural-training-data'
   | 'neural-training-runs'
   | 'neural-evolution'
+  | 'neural-creation-activity'
   | 'neural-champion'
   | 'ai-advisor'
 
@@ -140,6 +143,7 @@ const menuGroups: Array<{ title: string; items: MenuItem[] }> = [
       { label: 'Dados de treino', value: 'neural-training-data', icon: ScienceIcon },
       { label: 'Treinos', value: 'neural-training-runs', icon: ModelTrainingIcon },
       { label: 'Evolução', value: 'neural-evolution', icon: TimelineIcon },
+      { label: 'Criação de redes', value: 'neural-creation-activity', icon: BarChartIcon },
       { label: 'Champion NEV', value: 'neural-champion', icon: EmojiEventsIcon },
       { label: 'Advisor IA Gemini', value: 'ai-advisor', icon: AutoAwesomeIcon },
     ],
@@ -186,6 +190,7 @@ function App() {
   const neuralTrainingDataAllocationQuery = useNeuralTrainingDataAllocation()
   const neuralTrainingRunsQuery = useNeuralTrainingRuns()
   const neuralEvolutionLeaderboardQuery = useNeuralEvolutionLeaderboard()
+  const neuralEvolutionActivityQuery = useNeuralEvolutionActivity()
   const neuralGateDecisionsQuery = useNeuralGateDecisions()
   const neuralChampionMonitoringQuery = useNeuralChampionMonitoring()
   const quantTickerCoverageQuery = useQuantTickerCoverage(150)
@@ -225,6 +230,7 @@ function App() {
     'neural-training-data': [neuralTrainingDataAllocationQuery] as QueryResult[],
     'neural-training-runs': [neuralTrainingRunsQuery, neuralGateDecisionsQuery] as QueryResult[],
     'neural-evolution': [neuralEvolutionLeaderboardQuery] as QueryResult[],
+    'neural-creation-activity': [neuralEvolutionActivityQuery] as QueryResult[],
     'neural-champion': [neuralChampionMonitoringQuery] as QueryResult[],
     'ai-advisor': [neuralEvolutionLeaderboardQuery] as QueryResult[],
     sinais: [opsSignalsNextQuery] as QueryResult[],
@@ -459,6 +465,14 @@ function App() {
             gateDecisionsError={neuralGateDecisionsQuery.error}
             gateDecisionsLoading={neuralGateDecisionsQuery.isLoading && (neuralGateDecisionsQuery.data ?? []).length === 0}
             trainingRuns={neuralTrainingRunsQuery.data ?? []}
+          />
+        ) : null}
+
+        {activeTab === 'neural-creation-activity' ? (
+          <NeuralCreationActivityTab
+            activity={neuralEvolutionActivityQuery.data ?? []}
+            error={neuralEvolutionActivityQuery.error}
+            loading={neuralEvolutionActivityQuery.isLoading && (neuralEvolutionActivityQuery.data ?? []).length === 0}
           />
         ) : null}
 
