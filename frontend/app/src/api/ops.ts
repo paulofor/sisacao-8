@@ -148,6 +148,7 @@ export interface NeuralEvolutionActivity {
   candidatesCount: number
   trainedCount: number
   gateDecisionsCount: number
+  approvedGateDecisionsCount: number
 }
 
 export interface NeuralGateDecisionAttempt {
@@ -681,6 +682,7 @@ export const fetchNeuralEvolutionActivity = async (): Promise<NeuralEvolutionAct
       candidatesCount: toInteger(record.candidatesCount ?? record.candidates_count),
       trainedCount: toInteger(record.trainedCount ?? record.trained_count),
       gateDecisionsCount: toInteger(record.gateDecisionsCount ?? record.gate_decisions_count),
+      approvedGateDecisionsCount: toInteger(record.approvedGateDecisionsCount ?? record.approved_gate_decisions_count),
     }
   })
 }

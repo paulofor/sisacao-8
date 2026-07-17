@@ -147,16 +147,25 @@ public class BigQueryOpsClient {
     }
 
     public List<NeuralEvolutionActivity> fetchNeuralEvolutionActivity() {
-        String sql = "SELECT DATE(started_at) AS activity_date, strategy, "
+        String sql = "WITH gate_decisions_by_run AS ("
+                + "SELECT config.evolution_run_id, COUNT(DISTINCT decision.decision_id) AS gate_decisions_count, "
+                + "COUNT(DISTINCT IF(decision.passed, decision.decision_id, NULL)) AS approved_gate_decisions_count "
+                + "FROM " + qualifiedQuantView("neural_candidate_configs") + " config "
+                + "JOIN " + qualifiedQuantView(properties.getNeuralGateDecisionsTable()) + " decision "
+                + "ON LOWER(decision.candidate_family_hash) = LOWER(config.dedupe_hash) "
+                + "GROUP BY config.evolution_run_id) "
+                + "SELECT DATE(run.started_at) AS activity_date, run.strategy, "
                 + "COUNT(*) AS runs_count, "
-                + "COUNTIF(LOWER(status) = 'completed') AS completed_runs_count, "
-                + "COUNTIF(LOWER(status) NOT IN ('completed')) AS failed_runs_count, "
-                + "SUM(COALESCE(SAFE_CAST(JSON_VALUE(summary_json, '$.candidate_count') AS INT64), 0)) AS candidates_count, "
-                + "SUM(COALESCE(SAFE_CAST(JSON_VALUE(summary_json, '$.trained_count') AS INT64), 0)) AS trained_count, "
-                + "SUM(COALESCE(SAFE_CAST(JSON_VALUE(summary_json, '$.gate_decision_count') AS INT64), 0)) AS gate_decisions_count "
-                + "FROM " + qualifiedQuantView(properties.getNeuralEvolutionRunsTable()) + " "
-                + "WHERE started_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 DAY) "
-                + "GROUP BY activity_date, strategy ORDER BY activity_date ASC, strategy ASC";
+                + "COUNTIF(LOWER(run.status) = 'completed') AS completed_runs_count, "
+                + "COUNTIF(LOWER(run.status) NOT IN ('completed')) AS failed_runs_count, "
+                + "SUM(COALESCE(SAFE_CAST(JSON_VALUE(run.summary_json, '$.candidate_count') AS INT64), 0)) AS candidates_count, "
+                + "SUM(COALESCE(SAFE_CAST(JSON_VALUE(run.summary_json, '$.trained_count') AS INT64), 0)) AS trained_count, "
+                + "SUM(COALESCE(gate.gate_decisions_count, SAFE_CAST(JSON_VALUE(run.summary_json, '$.gate_decision_count') AS INT64), 0)) AS gate_decisions_count, "
+                + "SUM(COALESCE(gate.approved_gate_decisions_count, 0)) AS approved_gate_decisions_count "
+                + "FROM " + qualifiedQuantView(properties.getNeuralEvolutionRunsTable()) + " run "
+                + "LEFT JOIN gate_decisions_by_run gate USING (evolution_run_id) "
+                + "WHERE run.started_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 DAY) "
+                + "GROUP BY activity_date, run.strategy ORDER BY activity_date ASC, run.strategy ASC";
         TableResult result = runQuery(sql, Map.of());
         List<NeuralEvolutionActivity> rows = new ArrayList<>();
         for (FieldValueList row : result.iterateAll()) {
@@ -168,7 +177,8 @@ public class BigQueryOpsClient {
                     getLong(row, "failed_runs_count", "failedRunsCount"),
                     getLong(row, "candidates_count", "candidatesCount"),
                     getLong(row, "trained_count", "trainedCount"),
-                    getLong(row, "gate_decisions_count", "gateDecisionsCount")));
+                    getLong(row, "gate_decisions_count", "gateDecisionsCount"),
+                    getLong(row, "approved_gate_decisions_count", "approvedGateDecisionsCount")));
         }
         return Collections.unmodifiableList(rows);
     }

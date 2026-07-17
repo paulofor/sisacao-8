@@ -8,5 +8,6 @@ public record NeuralEvolutionActivity(
         long failedRunsCount,
         long candidatesCount,
         long trainedCount,
-        long gateDecisionsCount) {
+        long gateDecisionsCount,
+        long approvedGateDecisionsCount) {
 }

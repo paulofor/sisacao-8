@@ -274,3 +274,7 @@ Próximo passo operacional: usar o gráfico para acompanhar continuidade das est
 ## 2026-07-17 — Leitura diária da criação neural aprimorada
 
 A tela **Criação de redes** agora apresenta a atividade do dia mais recente primeiro e agrupa visualmente todas as estratégias de uma mesma data. Próximo passo operacional mantido: acompanhar falhas e continuidade pelo grupo diário; promoção só ocorre após `passed=true` no Gate MUEN e aprovação manual.
+
+## 2026-07-17 — Próximo passo após incluir qualidade e aprovações na tela
+
+Usar **Redes neurais > Criação de redes** para acompanhar, por dia, as candidatas geradas, treinadas, testadas na qualidade e aprovadas no Gate MUEN. Se a contagem de aprovadas ficar acima de zero, conferir a decisão correspondente em **Evolução** e comparar a candidata com o Apolo antes de qualquer promoção; `passed=true` é apenas o pré-requisito técnico e a aprovação manual continua obrigatória. Se houver candidatas treinadas sem testes de qualidade após uma janela operacional razoável, investigar as runs e o Gate MUEN antes de alterar as estratégias.
