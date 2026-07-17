@@ -35,10 +35,12 @@ const NeuralCreationActivityTab: FC<NeuralCreationActivityTabProps> = ({ activit
     (result, item) => ({
       runs: result.runs + item.runsCount,
       trained: result.trained + item.trainedCount,
+      qualityTested: result.qualityTested + item.gateDecisionsCount,
+      approved: result.approved + item.approvedGateDecisionsCount,
       candidates: result.candidates + item.candidatesCount,
       failures: result.failures + item.failedRunsCount,
     }),
-    { runs: 0, trained: 0, candidates: 0, failures: 0 },
+    { runs: 0, trained: 0, qualityTested: 0, approved: 0, candidates: 0, failures: 0 },
   )
   const maxRuns = Math.max(1, ...ordered.map((item) => item.runsCount))
   const activityByDay = ordered.reduce<Array<{ date: string | null; entries: NeuralEvolutionActivity[] }>>(
@@ -78,6 +80,8 @@ const NeuralCreationActivityTab: FC<NeuralCreationActivityTabProps> = ({ activit
               <Chip color="primary" label={`${totals.runs} execuções`} />
               <Chip color="success" label={`${totals.candidates} candidatas geradas`} />
               <Chip color="success" variant="outlined" label={`${totals.trained} treinadas`} />
+              <Chip color="info" label={`${totals.qualityTested} testadas na qualidade`} />
+              <Chip color="success" variant="outlined" label={`${totals.approved} aprovadas no Gate MUEN`} />
               <Chip color={totals.failures === 0 ? 'success' : 'error'} label={`${totals.failures} falhas`} />
             </Stack>
           </Stack>
@@ -122,7 +126,7 @@ const NeuralCreationActivityTab: FC<NeuralCreationActivityTabProps> = ({ activit
           <Stack spacing={1}>
             {latest.map((item) => <Box key={item.strategy} sx={{ display: 'flex', justifyContent: 'space-between', gap: 2, py: 1, borderBottom: '1px solid', borderColor: 'divider' }}>
               <Typography variant="body2" fontWeight={700}>{formatStrategy(item.strategy)}</Typography>
-              <Typography variant="body2" color="text.secondary">{item.runsCount} runs · {item.candidatesCount} candidatas · {item.trainedCount} treinadas · {item.gateDecisionsCount} gates</Typography>
+              <Typography variant="body2" color="text.secondary">{item.runsCount} runs · {item.candidatesCount} candidatas · {item.trainedCount} treinadas · {item.gateDecisionsCount} testadas na qualidade · {item.approvedGateDecisionsCount} aprovadas no Gate MUEN</Typography>
             </Box>)}
           </Stack>
         </Paper>

@@ -82,6 +82,32 @@ class BigQueryOpsClientTest {
     }
 
     @Test
+    void shouldQueryEvolutionActivityWithQualityTestAndGateApprovalTotals() throws Exception {
+        BigQuery bigQuery = mock(BigQuery.class);
+        TableResult tableResult = mock(TableResult.class);
+        doReturn(List.of()).when(tableResult).iterateAll();
+        doReturn(tableResult).when(bigQuery).query(any(QueryJobConfiguration.class));
+
+        OpsBigQueryProperties properties = new OpsBigQueryProperties();
+        properties.setProjectId("ingestaokraken");
+        properties.setQuantDataset("cotacao_intraday");
+
+        BigQueryOpsClient client = new BigQueryOpsClient(bigQuery, properties);
+        client.fetchNeuralEvolutionActivity();
+
+        ArgumentCaptor<QueryJobConfiguration> queryCaptor = ArgumentCaptor.forClass(QueryJobConfiguration.class);
+        verify(bigQuery).query(queryCaptor.capture());
+
+        assertThat(queryCaptor.getValue().getQuery())
+                .contains("WITH gate_decisions_by_run AS")
+                .contains("FROM `ingestaokraken.cotacao_intraday.neural_candidate_configs` config")
+                .contains("LOWER(decision.candidate_family_hash) = LOWER(config.dedupe_hash)")
+                .contains("AS gate_decisions_count")
+                .contains("AS approved_gate_decisions_count")
+                .contains("LEFT JOIN gate_decisions_by_run gate USING (evolution_run_id)");
+    }
+
+    @Test
     void shouldQueryNeuralGateDecisionsWithFamilyMetrics() throws Exception {
         BigQuery bigQuery = mock(BigQuery.class);
         TableResult tableResult = mock(TableResult.class);

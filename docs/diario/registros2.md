@@ -383,3 +383,9 @@
 - Ajustei o gráfico em **Redes neurais > Criação de redes** para ordenar os dias da data mais recente para a mais antiga.
 - As barras agora são agrupadas em cartões diários com cabeçalho de data, total de execuções, fundo suave e borda lateral colorida. A separação permite identificar de imediato quais estratégias pertencem ao mesmo dia, sem repetir a data em cada barra.
 - Comandos de validação: `cd frontend/app && npm run lint && npm run build`; `python -m flake8`; `python -m pytest -q`.
+
+## 2026-07-17 — Contagens de qualidade e aprovação na criação de redes
+- A tela **Redes neurais > Criação de redes** passou a exibir no resumo do último dia e no detalhe por estratégia quantas candidatas foram testadas na qualidade (decisões do Gate MUEN) e quantas foram aprovadas pelo gate.
+- A API correlaciona `neural_candidate_configs.dedupe_hash` com `neural_gate_decisions.candidate_family_hash`, somando decisões e `passed=true` por `evolution_run_id`; quando não houver correlação histórica, mantém a contagem de testes registrada no `summary_json` da run.
+- A aprovação exibida significa aprovação técnica no Gate MUEN e não altera a exigência de aprovação manual para promoção.
+- Validação aplicada: teste unitário Java confirma que a consulta agrega decisões e aprovações por run; também foram executados os checks locais obrigatórios de frontend, backend, `flake8` e `pytest` antes da abertura do PR.
