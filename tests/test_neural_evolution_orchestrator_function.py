@@ -835,6 +835,56 @@ def test_orchestrator_phase3_multiseed_focus_generates_tabular_t35_repeats(monke
     assert all("p50_m08_t35" in candidate for candidate in response["candidates"])
 
 
+def test_orchestrator_phase3_custom_space_honors_seed_repeats_only(monkeypatch):
+    fake_client = _FakeClient()
+    monkeypatch.setattr(module, "_BQ_CLIENT", fake_client)
+    family = {
+        "architecture_type": "tabular_bottleneck_mlp",
+        "model_id": "neural_eod_tabular_bottleneck_mlp",
+        "hidden_units": [256, 64, 16],
+        "dropout_rate": 0.22,
+        "learning_rate": 0.00025,
+        "batch_size": 256,
+        "epochs": 90,
+        "class_weight": "balanced",
+        "candidate_family_hash": "atena_validation_family",
+    }
+
+    candidates = module._generate_candidates_for_strategy(
+        client=fake_client,
+        strategy="phase3",
+        evolution_run_id="run-atena-validation",
+        dataset_snapshot="snapshot_2026",
+        budget=module.EvolutionBudget(max_trials=3, random_seed=20260727),
+        existing_hashes=set(),
+        model_version_prefix="atena_validation",
+        payload={
+            "phase3": {
+                "family_space": [family],
+                "seed_repeats_only": True,
+            }
+        },
+    )
+
+    assert len(candidates) == 3
+    controlled_keys = {
+        "dropout_rate",
+        "learning_rate",
+        "batch_size",
+        "epochs",
+        "class_weight",
+    }
+    controlled_configs = [
+        {key: candidate.training_request[key] for key in controlled_keys}
+        for candidate in candidates
+    ]
+    assert controlled_configs == [controlled_configs[0]] * 3
+    assert (
+        len({candidate.training_request["random_seed"] for candidate in candidates})
+        == 3
+    )
+
+
 def test_orchestrator_apolo_challenger_refinement_is_risk_controlled(monkeypatch):
     fake_client = _FakeClient()
     monkeypatch.setattr(module, "_BQ_CLIENT", fake_client)
