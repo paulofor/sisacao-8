@@ -606,6 +606,8 @@ def _generate_phase3_candidates(
     kwargs: dict[str, Any] = {}
     if isinstance(family_space, list):
         kwargs["family_space"] = family_space
+    if bool(phase3_options.get("seed_repeats_only", False)):
+        kwargs["seed_repeats_only"] = True
     if strategy.lower() == APOLO_CHALLENGER_STRATEGY:
         kwargs["family_space"] = APOLO_CHALLENGER_FAMILY_SPACE
     if strategy.lower() == APOLO_REFINEMENT_STRATEGY:

@@ -278,3 +278,23 @@ A tela **Criação de redes** agora apresenta a atividade do dia mais recente pr
 ## 2026-07-17 — Próximo passo após incluir qualidade e aprovações na tela
 
 Usar **Redes neurais > Criação de redes** para acompanhar, por dia, as candidatas geradas, treinadas, testadas na qualidade e aprovadas no Gate MUEN. Se a contagem de aprovadas ficar acima de zero, conferir a decisão correspondente em **Evolução** e comparar a candidata com o Apolo antes de qualquer promoção; `passed=true` é apenas o pré-requisito técnico e a aprovação manual continua obrigatória. Se houver candidatas treinadas sem testes de qualidade após uma janela operacional razoável, investigar as runs e o Gate MUEN antes de alterar as estratégias.
+
+## 2026-07-27 — Priorizar estabilidade da challenger recente
+
+Estado atual: nenhuma candidata recebeu `passed=true` nos últimos 10 dias; o Apolo NEV continua sendo a única rede aprovada. A candidata `neural_eod_apolo_challenger_tabular_bt_p46_m05_t50_nev_block3` é o melhor sinal recente: repetiu delta mediano de expectativa de aproximadamente `+0,035`, folds positivos em todas as avaliações e 30–32 trades em 2026-07-23 e 2026-07-25, mas falhou por instabilidade entre seeds.
+
+Próximo passo operacional:
+1. Executar novas repetições multi-seed dessa configuração, preservando arquitetura, limiares e bloqueios, para isolar a variância causada pelas seeds.
+2. Comparar a distribuição por seed e fold das rodadas de 2026-07-23 e 2026-07-25 com o Apolo, sem relaxar os gates de estabilidade ou drawdown.
+3. Não promover enquanto `passed=false`; discutir aprovação manual somente se uma repetição produzir `passed=true` com estabilidade e drawdown aceitável.
+4. Manter o `phase3_new_families` sob monitoramento, pois segue gerando candidatas, mas registrar e investigar recorrência da falha isolada observada em 2026-07-20 se ela voltar a ocorrer.
+
+## 2026-07-27 — Deploy da correção e nova validação controlada
+
+Estado após execução: a rodada produtiva de três seeds foi rejeitada por drawdown excessivo e instabilidade, portanto não houve promoção nem ativação diária. A análise também confirmou que o deploy atual ignorou `phase3.seed_repeats_only` na estratégia genérica e variou outros hiperparâmetros; a correção está preparada no repositório, mas não pôde ser implantada deste ambiente porque o binário `gcloud` não está disponível.
+
+Próximo passo operacional:
+1. Fazer deploy da versão corrigida de `neural_evolution_orchestrator`.
+2. Repetir a validação com a mesma família, `phase3.seed_repeats_only=true`, três seeds novas e hiperparâmetros fixos; confirmar em `neural_candidate_configs.hyperparameters_json` que somente `random_seed` muda.
+3. Manter bloqueada qualquer promoção se o novo Gate MUEN continuar com `passed=false`.
+4. Se — e somente se — a validação controlada produzir `passed=true`, aprovar manualmente o artefato vencedor com o nome operacional mitológico **Atena** e configurar uma execução diária em shadow, paralela ao Apolo, antes de considerar troca de champion.
