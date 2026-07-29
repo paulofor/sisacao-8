@@ -41,7 +41,12 @@ def test_google_finance_price_success(monkeypatch):
     monkeypatch.setitem(sys.modules, "google.cloud.bigquery", fake_bigquery)
     module = importlib.import_module("functions.google_finance_price.main")
 
-    prices = {"YDUQ3": 11.11, "PETR4": 22.22}
+    prices = {
+        "YDUQ3": 11.11,
+        "PETR4": 22.22,
+        "IBOV": 135000.0,
+        "BOVA11": 130.0,
+    }
 
     def mock_fetch(ticker: str, exchange: str = "BVMF", session=None) -> float:
         return prices[ticker]
@@ -59,8 +64,8 @@ def test_google_finance_price_success(monkeypatch):
     response = module.google_finance_price(request)
     assert response.status_code == 200
     body = json.loads(response.get_data(as_text=True))
-    assert body["tickers"] == ["YDUQ3", "PETR4"]
-    assert body["processed"] == 2
+    assert body["tickers"] == ["YDUQ3", "PETR4", "IBOV", "BOVA11"]
+    assert body["processed"] == 4
     expected_table_id = f"{FakeClient.project}.{module.DATASET_ID}.acao_bovespa"
     expected_query = (
         "SELECT ticker FROM " f"`{expected_table_id}` " "WHERE ativo = TRUE"
@@ -78,8 +83,12 @@ def test_google_finance_price_success(monkeypatch):
         "fonte",
         "job_run_id",
     ]
-    assert list(df["ticker"]) == ["YDUQ3", "PETR4"]
-    assert list(df["valor"]) == [pytest.approx(11.11), pytest.approx(22.22)]
+    collected_prices = dict(zip(df["ticker"], df["valor"]))
+    assert set(collected_prices) == {"YDUQ3", "PETR4", "IBOV", "BOVA11"}
+    assert collected_prices["YDUQ3"] == pytest.approx(11.11)
+    assert collected_prices["PETR4"] == pytest.approx(22.22)
+    assert collected_prices["IBOV"] == pytest.approx(135000.0)
+    assert collected_prices["BOVA11"] == pytest.approx(130.0)
     assert all(
         getattr(value, "tzinfo", None) is None for value in df["data_hora_atual"]
     )
@@ -160,7 +169,12 @@ def test_google_finance_price_uses_fallback_when_bigquery_unavailable(monkeypatc
     monkeypatch.delenv("MAX_INTRADAY_TICKERS", raising=False)
 
     def mock_fetch(ticker: str, exchange: str = "BVMF", session=None) -> float:
-        return {"PETR4": 10.0, "VALE3": 21.5}[ticker]
+        return {
+            "PETR4": 10.0,
+            "VALE3": 21.5,
+            "IBOV": 135000.0,
+            "BOVA11": 130.0,
+        }[ticker]
 
     monkeypatch.setattr(module, "fetch_google_finance_price", mock_fetch)
 
@@ -176,11 +190,43 @@ def test_google_finance_price_uses_fallback_when_bigquery_unavailable(monkeypatc
     response = module.google_finance_price(request)
     assert response.status_code == 200
     body = json.loads(response.get_data(as_text=True))
-    assert body["tickers"] == ["PETR4", "VALE3"]
-    assert body["processed"] == 2
-    assert captured["tickers"] == ["PETR4", "VALE3"]
-    assert captured["valor"][0] == pytest.approx(10.0)
-    assert captured["valor"][1] == pytest.approx(21.5)
+    assert body["tickers"] == ["PETR4", "VALE3", "IBOV", "BOVA11"]
+    assert body["processed"] == 4
+    assert set(captured["tickers"]) == {"PETR4", "VALE3", "IBOV", "BOVA11"}
+    captured_prices = dict(zip(captured["tickers"], captured["valor"]))
+    assert captured_prices["PETR4"] == pytest.approx(10.0)
+    assert captured_prices["VALE3"] == pytest.approx(21.5)
+    assert captured_prices["IBOV"] == pytest.approx(135000.0)
+    assert captured_prices["BOVA11"] == pytest.approx(130.0)
+
+
+def test_fetch_active_tickers_reserves_capacity_for_benchmarks(monkeypatch):
+    module = importlib.import_module("functions.google_finance_price.main")
+    monkeypatch.setenv("MAX_INTRADAY_TICKERS", "4")
+    monkeypatch.delenv("BENCHMARK_TICKERS", raising=False)
+    monkeypatch.setattr(
+        module,
+        "_query_bigquery",
+        lambda query: SimpleNamespace(
+            to_dataframe=lambda: pd.DataFrame(
+                {"ticker": ["PETR4", "VALE3", "ITUB4", "BBDC4"]}
+            )
+        ),
+    )
+
+    assert module.fetch_active_tickers() == ["PETR4", "VALE3", "IBOV", "BOVA11"]
+
+
+def test_benchmark_tickers_can_be_overridden(monkeypatch):
+    module = importlib.import_module("functions.google_finance_price.main")
+    monkeypatch.setenv("MAX_INTRADAY_TICKERS", "3")
+    monkeypatch.setenv("BENCHMARK_TICKERS", "IBOV;BOVA11;SMAL11")
+
+    assert module._with_benchmark_tickers(["PETR4", "VALE3"]) == [
+        "IBOV",
+        "BOVA11",
+        "SMAL11",
+    ]
 
 
 def test_append_dataframe_without_pandas(monkeypatch):

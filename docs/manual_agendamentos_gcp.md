@@ -63,10 +63,44 @@ Os exemplos acima já utilizam o projeto `ingestaokraken` na região `us-east1`.
 ## 4. Agendamento do serviço `google_finance_price`
 
 1. Implante a função como serviço HTTP no Cloud Run (outra opção é mantê-la como Cloud Function HTTP).
-2. Crie um job no Cloud Scheduler com frequência `0,30 10-18 * * 1-5` para rodar de segunda a sexta a cada 30 minutos.
+2. Crie um job no Cloud Scheduler com frequência `0,15,30,45 10-18 * * 1-5` para rodar de segunda a sexta a cada 15 minutos. Para materializar as tabelas derivadas durante o pregão, agende `intraday_candles` cinco minutos depois, em `5,20,35,50 10-18 * * 1-5`.
 3. Configure o método `POST` e o payload esperado (ex.: `{ "limit": 50 }`).
 4. Caso utilize Cloud Run, selecione **Add OIDC token** e aponte para o serviço (`--oidc-token-audience=https://google_finance_price-<hash>-<region>-a.run.app`).
 5. Verifique nos logs do Cloud Run se há retorno `200 OK` e registros novos na tabela `cotacao_b3`.
+
+> A fonte registra uma cotação por execução. Portanto, com cadência de 15 minutos, cada candle de 15m continua sendo um snapshot (`SINGLE_QUOTE_BUCKET`), não um OHLC formado por múltiplos negócios. Não remova esse indicador de qualidade. Para OHLC intrabucket real, seria necessário coletar em frequência inferior a 15 minutos e reavaliar custo, latência e limites da fonte.
+
+### Ajuste dos jobs produtivos atuais
+
+Os jobs validados em produção estão em duas regiões. Enquanto os endpoints permanecerem públicos, atualize sem OIDC:
+
+```bash
+gcloud scheduler jobs update http intraday-novo \
+  --project=ingestaokraken \
+  --location=us-east1 \
+  --schedule='0,15,30,45 10-18 * * 1-5' \
+  --time-zone='America/Sao_Paulo' \
+  --uri='https://google-finance-price-848907685710.us-east1.run.app/' \
+  --http-method=POST \
+  --attempt-deadline=180s \
+  --update-headers='Content-Type=application/json'
+
+gcloud scheduler jobs update http intraday-candles-30m \
+  --project=ingestaokraken \
+  --location=us-central1 \
+  --schedule='5,20,35,50 10-18 * * 1-5' \
+  --time-zone='America/Sao_Paulo' \
+  --uri='https://us-east1-ingestaokraken.cloudfunctions.net/intraday_candles' \
+  --http-method=POST \
+  --attempt-deadline=180s \
+  --update-headers='Content-Type=application/json'
+
+gcloud scheduler jobs pause Intraday \
+  --project=ingestaokraken \
+  --location=us-central1
+```
+
+Antes e depois, execute `gcloud scheduler jobs describe` em cada região. Se a função deixar de ser pública, não reutilize esses comandos: configure OIDC somente depois de validar a service account invocadora, `roles/run.invoker` e `roles/iam.serviceAccountUser`.
 
 ## 5. Agendamento da função `eod_signals`
 
