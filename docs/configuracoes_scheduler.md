@@ -41,7 +41,7 @@ Este documento consolida as configurações necessárias para que todos os jobs 
 | Payload | `{ "limit": 50 }` (ajuste conforme parâmetros aceitos) |
 | Cron | `0,15,30,45 10-18 * * 1-5` |
 | Time zone | `America/Sao_Paulo` |
-| Autenticação | OIDC token com a conta `agendamentos-sisacao@<projeto>.iam.gserviceaccount.com` e `--oidc-token-audience` apontando para o endpoint do serviço |
+| Autenticação | Sem OIDC enquanto o endpoint validado permanecer público. Se a invocação for protegida, validar previamente a service account existente, `roles/run.invoker` e permissão `roles/iam.serviceAccountUser`. |
 | Logs esperados | Registros novos na tabela `cotacao_intraday.cotacao_b3` |
 | Observações | A cadência de 15 minutos é necessária para que a série rotulada como 15m tenha um fechamento por janela. Cada bucket ainda é um snapshot com uma cotação e deve conservar `SINGLE_QUOTE_BUCKET`; OHLC intrabucket real exigiria coleta mais frequente. Monitore latência, falhas do scraper e limites do Google Finance. |
 
@@ -54,7 +54,7 @@ Este documento consolida as configurações necessárias para que todos os jobs 
 | Método HTTP | `POST` (body vazio ou `{ "date": "YYYY-MM-DD" }`) |
 | Cron | `5,20,35,50 10-18 * * 1-5` |
 | Time zone | `America/Sao_Paulo` |
-| Autenticação | OIDC token com a conta `agendamentos-sisacao@<projeto>.iam.gserviceaccount.com` |
+| Autenticação | Sem OIDC enquanto a função validada permanecer pública; usar OIDC apenas após validar identidade e permissões da service account invocadora. |
 | Logs esperados | Inserções nas tabelas `candles_intraday_15m` e `candles_intraday_1h` |
 | Observações | Execute cinco minutos após cada coleta para reconstruir idempotentemente a partição do dia. Reprocessamentos também podem ser feitos enviando o parâmetro `date`. |
 

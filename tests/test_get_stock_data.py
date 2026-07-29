@@ -145,7 +145,34 @@ def test_load_configured_tickers_uses_google(monkeypatch):
     tickers = module.load_configured_tickers()
     assert calls.get("imported") == module.GOOGLE_FINANCE_MODULE
     assert calls.get("fetched") is True
-    assert tickers == ["YDUQ3", "PETR4"]
+    assert tickers == ["YDUQ3", "PETR4", "IBOV", "BOVA11"]
+
+
+def test_load_configured_tickers_adds_benchmarks_to_bigquery_fallback(monkeypatch):
+    module = import_get_stock_module(monkeypatch)
+    monkeypatch.setattr(module, "_env_tickers_path", None, raising=False)
+    monkeypatch.setattr(
+        module,
+        "load_tickers_from_google_finance",
+        lambda: (_ for _ in ()).throw(ModuleNotFoundError("unavailable")),
+    )
+    monkeypatch.setattr(module, "load_tickers_from_bigquery", lambda: ["PETR4"])
+
+    assert module.load_configured_tickers() == ["PETR4", "IBOV", "BOVA11"]
+
+
+def test_load_configured_tickers_honors_benchmark_override(monkeypatch, tmp_path):
+    module = import_get_stock_module(monkeypatch)
+    monkeypatch.setenv("BENCHMARK_TICKERS", "IBOV;BOVA11;SMAL11")
+    tickers_file = tmp_path / "tickers.txt"
+    tickers_file.write_text("PETR4\nIBOV\n", encoding="utf-8")
+
+    assert module.load_configured_tickers(tickers_file) == [
+        "PETR4",
+        "IBOV",
+        "BOVA11",
+        "SMAL11",
+    ]
 
 
 def test_load_tickers_from_google_finance_uses_fallback_module(monkeypatch):
@@ -187,7 +214,7 @@ def test_load_configured_tickers_fallbacks_to_file(monkeypatch):
         lambda path=None: ["YDUQ3"],
     )
     tickers = module.load_configured_tickers()
-    assert tickers == ["YDUQ3"]
+    assert tickers == ["YDUQ3", "IBOV", "BOVA11"]
 
 
 def test_load_configured_tickers_uses_bigquery_before_file(monkeypatch):
@@ -207,7 +234,7 @@ def test_load_configured_tickers_uses_bigquery_before_file(monkeypatch):
 
     tickers = module.load_configured_tickers()
 
-    assert tickers == ["VALE3", "ITUB4"]
+    assert tickers == ["VALE3", "ITUB4", "IBOV", "BOVA11"]
 
 
 def test_append_dataframe_to_bigquery_without_pandas(monkeypatch):

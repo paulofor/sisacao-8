@@ -370,3 +370,7 @@ Próximo passo operacional, por conta com permissão de Cloud Scheduler:
 3. No primeiro pregão completo, validar snapshots, benchmarks, gaps, erros do scraper e agregações antes de considerar a coleta estabilizada.
 4. Em paralelo, publicar/repetir a validação multi-seed corrigida usando o dataset EOD existente.
 5. Manter novos datasets suspensos até os gatilhos de 120/252 pregões completos.
+
+## 2026-07-29 — Resultado da auditoria de cumprimento
+
+Código e runbooks corrigidos: tanto a coleta intraday quanto `get_stock_data` agora preservam `IBOV`/`BOVA11` em todos os caminhos de seleção; a documentação não recomenda mais OIDC sem validação. Pendência exclusivamente operacional: merge/deploy, updates dos dois Schedulers, pausa do legado e validação do primeiro pregão completo por uma conta autorizada.

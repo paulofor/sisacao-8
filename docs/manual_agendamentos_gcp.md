@@ -65,7 +65,7 @@ Os exemplos acima já utilizam o projeto `ingestaokraken` na região `us-east1`.
 1. Implante a função como serviço HTTP no Cloud Run (outra opção é mantê-la como Cloud Function HTTP).
 2. Crie um job no Cloud Scheduler com frequência `0,15,30,45 10-18 * * 1-5` para rodar de segunda a sexta a cada 15 minutos. Para materializar as tabelas derivadas durante o pregão, agende `intraday_candles` cinco minutos depois, em `5,20,35,50 10-18 * * 1-5`.
 3. Configure o método `POST` e o payload esperado (ex.: `{ "limit": 50 }`).
-4. Caso utilize Cloud Run, selecione **Add OIDC token** e aponte para o serviço (`--oidc-token-audience=https://google_finance_price-<hash>-<region>-a.run.app`).
+4. Para o endpoint produtivo atualmente público, mantenha o job sem OIDC. Se o serviço for protegido futuramente, configure OIDC somente após validar a service account, `roles/run.invoker`, `roles/iam.serviceAccountUser` e a audiência exata do serviço.
 5. Verifique nos logs do Cloud Run se há retorno `200 OK` e registros novos na tabela `cotacao_b3`.
 
 > A fonte registra uma cotação por execução. Portanto, com cadência de 15 minutos, cada candle de 15m continua sendo um snapshot (`SINGLE_QUOTE_BUCKET`), não um OHLC formado por múltiplos negócios. Não remova esse indicador de qualidade. Para OHLC intrabucket real, seria necessário coletar em frequência inferior a 15 minutos e reavaliar custo, latência e limites da fonte.
