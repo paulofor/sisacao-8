@@ -298,3 +298,36 @@ Próximo passo operacional:
 2. Repetir a validação com a mesma família, `phase3.seed_repeats_only=true`, três seeds novas e hiperparâmetros fixos; confirmar em `neural_candidate_configs.hyperparameters_json` que somente `random_seed` muda.
 3. Manter bloqueada qualquer promoção se o novo Gate MUEN continuar com `passed=false`.
 4. Se — e somente se — a validação controlada produzir `passed=true`, aprovar manualmente o artefato vencedor com o nome operacional mitológico **Atena** e configurar uma execução diária em shadow, paralela ao Apolo, antes de considerar troca de champion.
+
+## 2026-07-29 — Abrir trilha experimental de dataset híbrido diário/intraday
+
+O dataset EOD v3 permanece como baseline e não deve ser substituído. A amostra do snapshot mais recente ainda cobre apenas `2026-03-30` a `2026-07-07`; o intraday disponível cobre período semelhante e somente 47 tickers, contra 152 no diário. Assim, mais linhas intraday não equivalem automaticamente a mais amostras independentes nem justificam promoção.
+
+Próximo passo operacional em paralelo à validação multi-seed já pendente:
+1. Auditar completude por ticker/sessão, timezone, horário de fechamento, duplicidade e conteúdo de `data_quality_flags` nas tabelas de 15 minutos e 1 hora.
+2. Especificar `feature_eod_hybrid_v1` como agregações point-in-time do intraday de D unidas às 30 features diárias, com alvo operacional D+1 e sem usar qualquer barra posterior ao corte de decisão.
+3. Criar primeiro um piloto somente na interseção de 47 tickers/datas completas, preservando o v3 e o Apolo como controle congelado.
+4. Comparar `daily-only` e `daily+intraday` nos mesmos folds, seeds, custos e universo, com ablação por grupo de features e métricas de expectativa líquida, precisão, cobertura, drawdown, estabilidade, calibração e turnover.
+5. Não publicar sinais híbridos nem promover modelo até o novo dataset passar pelos checks de qualidade e produzir ganho robusto no Gate MUEN; se o piloto não superar o controle, manter o diário e investigar primeiro histórico maior e fatores de mercado/setor.
+
+## 2026-07-29 — Priorizar benchmark Ibovespa e força relativa
+
+Diagnóstico atual: existe histórico antigo e curto de `IBOV` em `cotacao_bovespa` (`2025-09-03` a `2025-09-26`), mas não existe `IBOV`/`BOVA11` contínuo e alinhado ao dataset neural de 2026 nas tabelas diária, 15 minutos ou 1 hora. Logo, ainda não se deve preencher features de mercado com essa série incompleta.
+
+Próximo passo anterior ao piloto intraday completo:
+1. Restaurar e monitorar a coleta diária canônica do `IBOV`, registrando fonte, timezone, calendário e completude; manter `BOVA11` somente como proxy/fallback identificado explicitamente.
+2. Fazer backfill suficiente para cobrir todo o período dos snapshots neurais e validar alinhamento 1:1 por `reference_date`.
+3. Especificar um grupo `market_relative_v1` com retornos/regime do índice, excesso de retorno do ticker, beta, correlação, alpha/resíduo, volatilidade relativa e divergência ticker-mercado, todos point-in-time até D.
+4. Rodar ablação controlada no mesmo universo/folds/seeds/custos: `EOD v3` versus `EOD v3 + market_relative_v1`.
+5. Somente se o grupo relativo melhorar resultados robustos, incorporá-lo ao futuro `feature_eod_hybrid_v1` junto ao intraday; não alterar o Apolo nem publicar sinais antes do Gate MUEN.
+
+## 2026-07-29 — Publicar e confirmar a coleta dos benchmarks
+
+Estado do código: `google_finance_price` agora reserva vagas para `IBOV` e `BOVA11` em toda coleta, e `get_stock_data/tickers.txt` inclui ambos. O ambiente atual não possui credenciais/ferramentas para fazer deploy, portanto produção ainda executa a revisão anterior.
+
+Próximo passo operacional imediato:
+1. Publicar `google_finance_price` e `get_stock_data` pelo workflow de deploy do projeto.
+2. Disparar/aguardar uma execução de `google_finance_price` e confirmar linhas atuais de `IBOV` e `BOVA11` em `cotacao_b3`.
+3. Executar `intraday_candles` após haver amostras suficientes e confirmar ambos em `candles_intraday_15m` e `candles_intraday_1h`.
+4. Após o fechamento, confirmar `BOVA11` em `cotacao_ohlcv_diario`; tratar `IBOV` diário por benchmark canônico separado, pois o índice não é um ativo do COTAHIST como o ETF.
+5. Só então iniciar backfill e construção de `market_relative_v1`, preservando o controle point-in-time e a ablação definida anteriormente.

@@ -379,7 +379,10 @@ DEFAULT_FALLBACK_TICKERS = [
     "BBDC4",
     "BBAS3",
     "IBOV",
+    "BOVA11",
 ]
+DEFAULT_BENCHMARK_TICKERS = ("IBOV", "BOVA11")
+BENCHMARK_TICKERS_ENV = "BENCHMARK_TICKERS"
 FALLBACK_TICKERS_ENV = "FALLBACK_TICKERS"
 FALLBACK_TICKERS_FILE_ENV = "FALLBACK_TICKERS_FILE"
 MAX_INTRADAY_TICKERS_ENV = "MAX_INTRADAY_TICKERS"
@@ -497,6 +500,32 @@ def _normalize_ticker_list(values: Iterable[Any]) -> List[str]:
         if ticker and ticker not in tickers:
             tickers.append(ticker)
     return tickers
+
+
+def _benchmark_tickers() -> List[str]:
+    """Return market benchmarks that must be present in every collection run."""
+
+    configured = os.environ.get(BENCHMARK_TICKERS_ENV)
+    if configured:
+        tickers = _normalize_ticker_list(configured.replace(";", ",").split(","))
+        if tickers:
+            return tickers
+    return list(DEFAULT_BENCHMARK_TICKERS)
+
+
+def _with_benchmark_tickers(tickers: Iterable[Any]) -> List[str]:
+    """Reserve collection capacity for benchmarks and append them once."""
+
+    max_items = _max_intraday_tickers()
+    benchmarks = _benchmark_tickers()[:max_items]
+    benchmark_set = set(benchmarks)
+    active = [
+        ticker
+        for ticker in _normalize_ticker_list(tickers)
+        if ticker not in benchmark_set
+    ]
+    active_limit = max(0, max_items - len(benchmarks))
+    return active[:active_limit] + benchmarks
 
 
 def _load_tickers_from_file(path: Path) -> List[str]:
@@ -712,7 +741,7 @@ def _append_rows(rows: List[Dict[str, Any]]) -> None:
 
 
 def fetch_active_tickers() -> List[str]:
-    """Return list of active tickers from ``acao_bovespa`` table."""
+    """Return active equities plus the mandatory market benchmarks."""
     table_id = f"{_project_id()}.{DATASET_ID}.acao_bovespa"
     query = f"SELECT ticker FROM `{table_id}` WHERE ativo = TRUE"
     logger.warning("Fetching active tickers using query table %s", table_id)
@@ -741,7 +770,7 @@ def fetch_active_tickers() -> List[str]:
                     len(tickers),
                     max_items,
                 )
-            return tickers[:max_items]
+            return _with_benchmark_tickers(tickers)
 
         logger.warning(
             "BigQuery table %s returned no active tickers. Falling back to local list.",
@@ -754,7 +783,7 @@ def fetch_active_tickers() -> List[str]:
             exc,
             exc_info=True,
         )
-    return _fallback_tickers()
+    return _with_benchmark_tickers(_fallback_tickers())
 
 
 def is_b3_holiday(reference_date: datetime.date) -> bool:
