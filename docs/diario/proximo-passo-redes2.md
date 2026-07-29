@@ -331,3 +331,42 @@ Próximo passo operacional imediato:
 3. Executar `intraday_candles` após haver amostras suficientes e confirmar ambos em `candles_intraday_15m` e `candles_intraday_1h`.
 4. Após o fechamento, confirmar `BOVA11` em `cotacao_ohlcv_diario`; tratar `IBOV` diário por benchmark canônico separado, pois o índice não é um ativo do COTAHIST como o ETF.
 5. Só então iniciar backfill e construção de `market_relative_v1`, preservando o controle point-in-time e a ablação definida anteriormente.
+
+## 2026-07-29 — Suspender novos datasets até maturidade do histórico
+
+Decisão operacional vigente: não implementar nem treinar `market_relative_v1` ou `feature_eod_hybrid_v1` agora. Manter o EOD v3 e o Apolo congelados como baseline enquanto `IBOV` e `BOVA11` acumulam histórico contínuo.
+
+Critérios para reabrir a trilha:
+1. Confirmar primeiro o deploy e a entrada diária dos dois benchmarks nas tabelas esperadas.
+2. Fazer somente análise exploratória após 120 pregões completos e alinhados.
+3. Iniciar dataset/validação formal após pelo menos 252 pregões, cobertura mínima de 98%, calendário e timezone consistentes, sem lacunas relevantes e com divergência IBOV/BOVA11 auditada.
+4. Rodar mensalmente checks de completude, duplicidade, atraso e continuidade até atingir os critérios; nunca usar BOVA11 como substituição silenciosa do IBOV.
+5. Enquanto isso, priorizar a validação multi-seed corrigida dos challengers existentes e não alterar o champion nem os thresholds para forçar sinais.
+
+## 2026-07-29 — Marcos estimados no calendário
+
+Se a coleta produtiva começar em `2026-07-30` sem interrupções, o calendário atual de `feriados_b3` projeta:
+- **2027-01-20:** 120º pregão, marco mínimo para análise exploratória.
+- **2027-07-30:** 252º pregão, marco mínimo para construção e validação formal.
+
+Essas datas devem ser recalculadas se o deploy atrasar ou houver lacunas. O gatilho real continua sendo a quantidade de sessões completas/alinhadas e cobertura mínima de 98%, não apenas a chegada da data.
+
+## 2026-07-29 — Corrigir cadência e confirmar benchmarks intraday
+
+Estado confirmado: a coleta/derivação atual funciona para 47 tickers, mas a fonte roda a cada 30 minutos e alimenta uma tabela denominada 15m com buckets de uma única cotação. `IBOV`/`BOVA11` ainda não estão em produção. Existe também o job legado `Intraday` com erro em `us-central1`.
+
+Próximo passo operacional, por conta com permissão de Cloud Scheduler:
+1. Publicar a revisão que torna `IBOV` e `BOVA11` obrigatórios.
+2. Atualizar `intraday-novo` (`us-east1`) para `0,15,30,45 10-18 * * 1-5`.
+3. Atualizar `intraday-candles-30m` (`us-central1`) para `5,20,35,50 10-18 * * 1-5`.
+4. Pausar o Scheduler legado `Intraday` (`us-central1`), que aponta para endpoint antigo e apresenta `status.code=5`.
+5. No pregão seguinte, exigir 36 snapshots por ticker em dia completo, presença de `IBOV`/`BOVA11`, 47–49 tickers conforme deploy, ausência de gaps e HTTP 200 nas agregações.
+6. Manter `SINGLE_QUOTE_BUCKET` como aviso: esses candles são snapshots de 15m. Só migrar para OHLC intrabucket real após piloto de frequência menor, medindo custo, latência e taxa de falha da fonte.
+
+## 2026-07-29 — Ordem de execução imediata
+
+1. Fazer merge/deploy da revisão de coleta obrigatória de `IBOV`/`BOVA11`.
+2. Aplicar, com conta autorizada, os três comandos de Scheduler registrados em `docs/manual_agendamentos_gcp.md`.
+3. No primeiro pregão completo, validar snapshots, benchmarks, gaps, erros do scraper e agregações antes de considerar a coleta estabilizada.
+4. Em paralelo, publicar/repetir a validação multi-seed corrigida usando o dataset EOD existente.
+5. Manter novos datasets suspensos até os gatilhos de 120/252 pregões completos.
