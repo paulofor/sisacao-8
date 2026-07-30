@@ -183,6 +183,8 @@ def _parse_request_date(payload: Dict[str, Any]) -> datetime.date:
 
 DEFAULT_TICKERS_FILE = Path(__file__).with_name("tickers.txt")
 _env_tickers_path = os.environ.get("TICKERS_FILE")
+DEFAULT_BENCHMARK_TICKERS = ("IBOV", "BOVA11")
+BENCHMARK_TICKERS_ENV = "BENCHMARK_TICKERS"
 
 
 def _default_ingestion_config() -> IngestionConfig:
@@ -281,6 +283,30 @@ def load_tickers_from_file(file_path: Optional[Path] = None) -> List[str]:
     return []
 
 
+def _benchmark_tickers() -> List[str]:
+    configured = os.environ.get(BENCHMARK_TICKERS_ENV)
+    raw_tickers = (
+        configured.replace(";", ",").split(",")
+        if configured
+        else DEFAULT_BENCHMARK_TICKERS
+    )
+    benchmarks: List[str] = []
+    for raw in raw_tickers:
+        ticker = str(raw).strip().upper()
+        if ticker and ticker not in benchmarks:
+            benchmarks.append(ticker)
+    return benchmarks
+
+
+def _with_benchmark_tickers(tickers: Iterable[str]) -> List[str]:
+    merged: List[str] = []
+    for raw in (*tickers, *_benchmark_tickers()):
+        ticker = str(raw).strip().upper()
+        if ticker and ticker not in merged:
+            merged.append(ticker)
+    return merged
+
+
 def load_tickers_from_google_finance() -> List[str]:
     """Load tickers using the google_finance_price helper."""
 
@@ -324,11 +350,11 @@ def load_configured_tickers(file_path: Optional[Path] = None) -> List[str]:
     """Load tickers from google_finance_price or fallback to file."""
 
     if file_path is not None:
-        return load_tickers_from_file(file_path)
+        return _with_benchmark_tickers(load_tickers_from_file(file_path))
     if _env_tickers_path:
-        return load_tickers_from_file(Path(_env_tickers_path))
+        return _with_benchmark_tickers(load_tickers_from_file(Path(_env_tickers_path)))
     try:
-        return load_tickers_from_google_finance()
+        return _with_benchmark_tickers(load_tickers_from_google_finance())
     except ModuleNotFoundError as exc:
         logging.warning(
             "Módulo google_finance_price indisponível (%s). "
@@ -343,8 +369,8 @@ def load_configured_tickers(file_path: Optional[Path] = None) -> List[str]:
         )
     tickers_from_bq = load_tickers_from_bigquery()
     if tickers_from_bq:
-        return tickers_from_bq
-    return load_tickers_from_file()
+        return _with_benchmark_tickers(tickers_from_bq)
+    return _with_benchmark_tickers(load_tickers_from_file())
 
 
 def load_tickers_from_bigquery() -> List[str]:
@@ -352,10 +378,7 @@ def load_tickers_from_bigquery() -> List[str]:
 
     table_id = f"{_project_id()}.{DATASET_ID}.acao_bovespa"
     query = (
-        "SELECT ticker "
-        f"FROM `{table_id}` "
-        "WHERE ativo = TRUE "
-        "ORDER BY ticker"
+        "SELECT ticker " f"FROM `{table_id}` " "WHERE ativo = TRUE " "ORDER BY ticker"
     )
     try:
         query_job = _query_with_location(query)

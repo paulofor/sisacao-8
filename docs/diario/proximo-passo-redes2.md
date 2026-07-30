@@ -298,3 +298,90 @@ Próximo passo operacional:
 2. Repetir a validação com a mesma família, `phase3.seed_repeats_only=true`, três seeds novas e hiperparâmetros fixos; confirmar em `neural_candidate_configs.hyperparameters_json` que somente `random_seed` muda.
 3. Manter bloqueada qualquer promoção se o novo Gate MUEN continuar com `passed=false`.
 4. Se — e somente se — a validação controlada produzir `passed=true`, aprovar manualmente o artefato vencedor com o nome operacional mitológico **Atena** e configurar uma execução diária em shadow, paralela ao Apolo, antes de considerar troca de champion.
+
+## 2026-07-29 — Abrir trilha experimental de dataset híbrido diário/intraday
+
+O dataset EOD v3 permanece como baseline e não deve ser substituído. A amostra do snapshot mais recente ainda cobre apenas `2026-03-30` a `2026-07-07`; o intraday disponível cobre período semelhante e somente 47 tickers, contra 152 no diário. Assim, mais linhas intraday não equivalem automaticamente a mais amostras independentes nem justificam promoção.
+
+Próximo passo operacional em paralelo à validação multi-seed já pendente:
+1. Auditar completude por ticker/sessão, timezone, horário de fechamento, duplicidade e conteúdo de `data_quality_flags` nas tabelas de 15 minutos e 1 hora.
+2. Especificar `feature_eod_hybrid_v1` como agregações point-in-time do intraday de D unidas às 30 features diárias, com alvo operacional D+1 e sem usar qualquer barra posterior ao corte de decisão.
+3. Criar primeiro um piloto somente na interseção de 47 tickers/datas completas, preservando o v3 e o Apolo como controle congelado.
+4. Comparar `daily-only` e `daily+intraday` nos mesmos folds, seeds, custos e universo, com ablação por grupo de features e métricas de expectativa líquida, precisão, cobertura, drawdown, estabilidade, calibração e turnover.
+5. Não publicar sinais híbridos nem promover modelo até o novo dataset passar pelos checks de qualidade e produzir ganho robusto no Gate MUEN; se o piloto não superar o controle, manter o diário e investigar primeiro histórico maior e fatores de mercado/setor.
+
+## 2026-07-29 — Priorizar benchmark Ibovespa e força relativa
+
+Diagnóstico atual: existe histórico antigo e curto de `IBOV` em `cotacao_bovespa` (`2025-09-03` a `2025-09-26`), mas não existe `IBOV`/`BOVA11` contínuo e alinhado ao dataset neural de 2026 nas tabelas diária, 15 minutos ou 1 hora. Logo, ainda não se deve preencher features de mercado com essa série incompleta.
+
+Próximo passo anterior ao piloto intraday completo:
+1. Restaurar e monitorar a coleta diária canônica do `IBOV`, registrando fonte, timezone, calendário e completude; manter `BOVA11` somente como proxy/fallback identificado explicitamente.
+2. Fazer backfill suficiente para cobrir todo o período dos snapshots neurais e validar alinhamento 1:1 por `reference_date`.
+3. Especificar um grupo `market_relative_v1` com retornos/regime do índice, excesso de retorno do ticker, beta, correlação, alpha/resíduo, volatilidade relativa e divergência ticker-mercado, todos point-in-time até D.
+4. Rodar ablação controlada no mesmo universo/folds/seeds/custos: `EOD v3` versus `EOD v3 + market_relative_v1`.
+5. Somente se o grupo relativo melhorar resultados robustos, incorporá-lo ao futuro `feature_eod_hybrid_v1` junto ao intraday; não alterar o Apolo nem publicar sinais antes do Gate MUEN.
+
+## 2026-07-29 — Publicar e confirmar a coleta dos benchmarks
+
+Estado do código: `google_finance_price` agora reserva vagas para `IBOV` e `BOVA11` em toda coleta, e `get_stock_data/tickers.txt` inclui ambos. O ambiente atual não possui credenciais/ferramentas para fazer deploy, portanto produção ainda executa a revisão anterior.
+
+Próximo passo operacional imediato:
+1. Publicar `google_finance_price` e `get_stock_data` pelo workflow de deploy do projeto.
+2. Disparar/aguardar uma execução de `google_finance_price` e confirmar linhas atuais de `IBOV` e `BOVA11` em `cotacao_b3`.
+3. Executar `intraday_candles` após haver amostras suficientes e confirmar ambos em `candles_intraday_15m` e `candles_intraday_1h`.
+4. Após o fechamento, confirmar `BOVA11` em `cotacao_ohlcv_diario`; tratar `IBOV` diário por benchmark canônico separado, pois o índice não é um ativo do COTAHIST como o ETF.
+5. Só então iniciar backfill e construção de `market_relative_v1`, preservando o controle point-in-time e a ablação definida anteriormente.
+
+## 2026-07-29 — Suspender novos datasets até maturidade do histórico
+
+Decisão operacional vigente: não implementar nem treinar `market_relative_v1` ou `feature_eod_hybrid_v1` agora. Manter o EOD v3 e o Apolo congelados como baseline enquanto `IBOV` e `BOVA11` acumulam histórico contínuo.
+
+Critérios para reabrir a trilha:
+1. Confirmar primeiro o deploy e a entrada diária dos dois benchmarks nas tabelas esperadas.
+2. Fazer somente análise exploratória após 120 pregões completos e alinhados.
+3. Iniciar dataset/validação formal após pelo menos 252 pregões, cobertura mínima de 98%, calendário e timezone consistentes, sem lacunas relevantes e com divergência IBOV/BOVA11 auditada.
+4. Rodar mensalmente checks de completude, duplicidade, atraso e continuidade até atingir os critérios; nunca usar BOVA11 como substituição silenciosa do IBOV.
+5. Enquanto isso, priorizar a validação multi-seed corrigida dos challengers existentes e não alterar o champion nem os thresholds para forçar sinais.
+
+## 2026-07-29 — Marcos estimados no calendário
+
+Se a coleta produtiva começar em `2026-07-30` sem interrupções, o calendário atual de `feriados_b3` projeta:
+- **2027-01-20:** 120º pregão, marco mínimo para análise exploratória.
+- **2027-07-30:** 252º pregão, marco mínimo para construção e validação formal.
+
+Essas datas devem ser recalculadas se o deploy atrasar ou houver lacunas. O gatilho real continua sendo a quantidade de sessões completas/alinhadas e cobertura mínima de 98%, não apenas a chegada da data.
+
+## 2026-07-29 — Corrigir cadência e confirmar benchmarks intraday
+
+Estado confirmado: a coleta/derivação atual funciona para 47 tickers, mas a fonte roda a cada 30 minutos e alimenta uma tabela denominada 15m com buckets de uma única cotação. `IBOV`/`BOVA11` ainda não estão em produção. Existe também o job legado `Intraday` com erro em `us-central1`.
+
+Próximo passo operacional, por conta com permissão de Cloud Scheduler:
+1. Publicar a revisão que torna `IBOV` e `BOVA11` obrigatórios.
+2. Atualizar `intraday-novo` (`us-east1`) para `0,15,30,45 10-18 * * 1-5`.
+3. Atualizar `intraday-candles-30m` (`us-central1`) para `5,20,35,50 10-18 * * 1-5`.
+4. Pausar o Scheduler legado `Intraday` (`us-central1`), que aponta para endpoint antigo e apresenta `status.code=5`.
+5. No pregão seguinte, exigir 36 snapshots por ticker em dia completo, presença de `IBOV`/`BOVA11`, 47–49 tickers conforme deploy, ausência de gaps e HTTP 200 nas agregações.
+6. Manter `SINGLE_QUOTE_BUCKET` como aviso: esses candles são snapshots de 15m. Só migrar para OHLC intrabucket real após piloto de frequência menor, medindo custo, latência e taxa de falha da fonte.
+
+## 2026-07-29 — Ordem de execução imediata
+
+1. Fazer merge/deploy da revisão de coleta obrigatória de `IBOV`/`BOVA11`.
+2. Aplicar, com conta autorizada, os três comandos de Scheduler registrados em `docs/manual_agendamentos_gcp.md`.
+3. No primeiro pregão completo, validar snapshots, benchmarks, gaps, erros do scraper e agregações antes de considerar a coleta estabilizada.
+4. Em paralelo, publicar/repetir a validação multi-seed corrigida usando o dataset EOD existente.
+5. Manter novos datasets suspensos até os gatilhos de 120/252 pregões completos.
+
+## 2026-07-29 — Resultado da auditoria de cumprimento
+
+Código e runbooks corrigidos: tanto a coleta intraday quanto `get_stock_data` agora preservam `IBOV`/`BOVA11` em todos os caminhos de seleção; a documentação não recomenda mais OIDC sem validação. Pendência exclusivamente operacional: merge/deploy, updates dos dois Schedulers, pausa do legado e validação do primeiro pregão completo por uma conta autorizada.
+
+## 2026-07-30 — Coleta implantada; falta validar o primeiro dia completo
+
+Estado confirmado: deploy/benchmarks e ajustes de Scheduler foram aplicados; o legado está pausado. `IBOV`/`BOVA11` já chegaram às tabelas bruta, 15m e 1h, e `BOVA11` chegou ao diário.
+
+Próximo passo vigente:
+1. Auditar o primeiro pregão completo sob a cadência nova e exigir cobertura próxima de 36 snapshots por ticker/benchmark, sem gaps relevantes.
+2. Monitorar e contabilizar falhas individuais do scraper, especialmente recorrência em `BRFS3` e `CPLE6`.
+3. Considerar o início oficial da contagem de 120/252 pregões somente quando o dia completo passar na auditoria.
+4. Manter pendente a materialização diária canônica do `IBOV`; não confundir ausência no COTAHIST com falha do ETF BOVA11.
+5. Continuar em paralelo a validação multi-seed existente e manter datasets novos suspensos.
