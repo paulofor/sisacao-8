@@ -374,3 +374,14 @@ Próximo passo operacional, por conta com permissão de Cloud Scheduler:
 ## 2026-07-29 — Resultado da auditoria de cumprimento
 
 Código e runbooks corrigidos: tanto a coleta intraday quanto `get_stock_data` agora preservam `IBOV`/`BOVA11` em todos os caminhos de seleção; a documentação não recomenda mais OIDC sem validação. Pendência exclusivamente operacional: merge/deploy, updates dos dois Schedulers, pausa do legado e validação do primeiro pregão completo por uma conta autorizada.
+
+## 2026-07-30 — Coleta implantada; falta validar o primeiro dia completo
+
+Estado confirmado: deploy/benchmarks e ajustes de Scheduler foram aplicados; o legado está pausado. `IBOV`/`BOVA11` já chegaram às tabelas bruta, 15m e 1h, e `BOVA11` chegou ao diário.
+
+Próximo passo vigente:
+1. Auditar o primeiro pregão completo sob a cadência nova e exigir cobertura próxima de 36 snapshots por ticker/benchmark, sem gaps relevantes.
+2. Monitorar e contabilizar falhas individuais do scraper, especialmente recorrência em `BRFS3` e `CPLE6`.
+3. Considerar o início oficial da contagem de 120/252 pregões somente quando o dia completo passar na auditoria.
+4. Manter pendente a materialização diária canônica do `IBOV`; não confundir ausência no COTAHIST com falha do ETF BOVA11.
+5. Continuar em paralelo a validação multi-seed existente e manter datasets novos suspensos.
