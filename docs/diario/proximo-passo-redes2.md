@@ -385,3 +385,14 @@ Próximo passo vigente:
 3. Considerar o início oficial da contagem de 120/252 pregões somente quando o dia completo passar na auditoria.
 4. Manter pendente a materialização diária canônica do `IBOV`; não confundir ausência no COTAHIST com falha do ETF BOVA11.
 5. Continuar em paralelo a validação multi-seed existente e manter datasets novos suspensos.
+
+## 2026-07-31 — Apolo recuperado; adicionar retry tardio condicionado ao COTAHIST
+
+Estado confirmado: a execução automática do Apolo para `reference_date=2026-07-30` ocorreu antes de a B3 publicar `COTAHIST_D30072026.ZIP`; por isso não havia candle diário e a inferência encerrou vazia. Após o arquivo passar a HTTP 200, a carga e a inferência foram reexecutadas manualmente: há 151 candles diários e 150 predições do Apolo válidas para `2026-07-31`. O gerador neural avaliou os dados, mas produziu zero BUY/SELL porque as probabilidades ficaram abaixo do threshold `0.6`, não por ausência de predição.
+
+Próximo passo operacional imediato:
+1. Confirmar os nomes, regiões, horários, autenticação e estado dos Schedulers atuais da carga diária, inferência Apolo e sinais neurais.
+2. Configurar, com conta autorizada, uma nova tentativa tardia e idempotente após a janela em que o COTAHIST efetivamente estiver disponível; a inferência deve rodar somente depois de confirmar candles do `reference_date`.
+3. Alertar separadamente `missing_daily_candles` e “predições presentes, mas zero BUY/SELL”, pois o primeiro é falha de dados e o segundo pode ser decisão normal do threshold.
+4. Não usar snapshots intraday como substituição silenciosa do candle oficial e não reduzir o threshold `0.6` apenas para forçar sinais.
+5. Manter Apolo como controle e os novos datasets suspensos enquanto continuam a validação multi-seed e a formação do histórico IBOV/BOVA11.
