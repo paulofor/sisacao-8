@@ -57,8 +57,12 @@ dataset por DCL SQL.
 
 Depois do merge em `main`, o workflow `Deploy` publica a função somente se a
 service account dedicada existir. A tabela é criada pela função no primeiro
-POST real. Para iniciar a coleta a cada cinco minutos, com endpoint público e
-sem OIDC:
+POST real. Depois de todos os deploys concluírem, o mesmo workflow cria ou
+atualiza e reativa o Scheduler público `crypto-market-pilot-5m`, sem OIDC. O
+payload busca as últimas 120 barras para recuperar automaticamente interrupções
+de até aproximadamente duas horas; o `MERGE` idempotente descarta a sobreposição.
+
+Para configurar o job manualmente, se necessário:
 
 ```bash
 gcloud scheduler jobs create http crypto-market-pilot-5m \
@@ -69,13 +73,16 @@ gcloud scheduler jobs create http crypto-market-pilot-5m \
   --uri='https://us-east1-ingestaokraken.cloudfunctions.net/crypto_market_pilot' \
   --http-method=POST \
   --headers='Content-Type=application/json' \
-  --message-body='{"pairs":["BTCUSDT","ETHUSDT"],"limit":10,"dry_run":false}' \
+  --message-body='{"pairs":["BTCUSDT","ETHUSDT"],"limit":120,"dry_run":false}' \
   --attempt-deadline=180s
 ```
 
-Antes de criar o Scheduler, faça um POST com `dry_run=true`; depois do primeiro
-POST real, valide `crypto_market.candles_1m` no BigQuery. Não configure OIDC
-enquanto o workflow mantiver `--allow-unauthenticated`.
+Antes de criar o Scheduler manualmente, faça um POST com `dry_run=true`; depois
+do primeiro POST real, valide `crypto_market.candles_1m` no BigQuery. Não
+configure OIDC enquanto o workflow mantiver `--allow-unauthenticated`. A conta
+do workflow precisa de permissão para descrever, criar, atualizar e reativar
+jobs do Cloud Scheduler; uma falha nessa etapa deixa o deploy explicitamente
+vermelho, em vez de publicar a função sem ativar a coleta recorrente.
 
 ## Verificação operacional
 

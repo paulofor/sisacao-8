@@ -612,3 +612,39 @@ O ponto de parada das redes neurais não mudou nesta auditoria; por isso `docs/d
 - O workflow versionado publica o container como `sisacao8-mcp-server-java` em `-p 80:80`, exige estado `running` e só conclui após um `initialize` local em `http://127.0.0.1/mcp` retornar 200. A correção operacional é inspecionar na VPS `docker ps -a`, `docker inspect`, `docker logs`, o listener da porta 80 e executar o mesmo smoke test local; se o teste local falhar, reiniciar/republicar o container e corrigir a causa mostrada nos logs; se passar, corrigir o target/rota do Envoy para a VPS/porta efetiva.
 - Para a coleta cripto ainda faltam, na ordem: restabelecer o MCP para observação; confirmar que a correção `WHEN NOT MATCHED THEN INSERT ROW` foi publicada; executar um POST real com HTTP 200; confirmar linhas recentes de `BTCUSDT` e `ETHUSDT`; criar e habilitar `crypto-market-pilot-5m` somente depois dessa validação; e auditar continuidade/qualidade após 24 horas. Enquanto tabela recente e Scheduler não forem confirmados, a coleta não deve ser declarada ativa.
 - Comandos usados: `getent ahostsv4`, `dig`, `curl` com retry/backoff e modo verbose, inspeção de `.github/workflows/deploy-mcp-java-vps.yml`, `mcp-server-java/Dockerfile`, `docker-entrypoint.sh` e `McpController.java`. Também tentei conexão direta sem o proxy do ambiente, mas a rede do container não oferece rota direta; essa limitação não altera o diagnóstico retornado pelo Envoy. O próximo passo das redes neurais não mudou.
+## 2026-08-14 — Persistência cripto recuperada e Scheduler automatizado
+
+- Revalidei diretamente o endpoint produtivo `crypto_market_pilot`. O `dry_run`
+  retornou HTTP 200 e candles fechados de `BTCUSDT` e `ETHUSDT`; em seguida, um
+  POST real também retornou HTTP 200, sem falhas, e informou 18 linhas
+  persistidas. Isso confirma que a revisão com `INSERT ROW` corrigiu o erro de
+  `MERGE` que anteriormente deixava a tabela vazia.
+- O MCP HTTP/JSON-RPC foi tentado conforme o protocolo obrigatório, com quatro
+  novas inicializações, backoff e uso exclusivo de HTTP. Todas retornaram 503
+  por conexão recusada no upstream; portanto não foi possível consultar por MCP
+  o total atual da tabela, duplicidades, gaps, flags nem o estado atual do
+  Scheduler nesta sessão. Essa limitação foi tratada como indisponibilidade do
+  MCP, não como evidência de falha da coleta.
+- Corrigi a lacuna operacional que permitia publicar a função sem ativar a
+  recorrência: após o deploy das Cloud Functions, o workflow agora cria ou
+  atualiza `crypto-market-pilot-5m`, remove autenticação OIDC do job público,
+  reativa o job e imprime sua configuração final. Em pull requests a etapa não
+  altera produção.
+- O payload recorrente passou de 10 para 120 barras. Como o job roda a cada
+  cinco minutos e o destino usa `MERGE` idempotente, a sobreposição é segura e
+  passa a recuperar interrupções de aproximadamente duas horas, em vez de
+  deixar gaps permanentes após uma indisponibilidade de pouco mais de dez
+  minutos.
+- Comandos/ferramentas usados: `curl` contra o MCP por HTTP e contra a Cloud
+  Function produtiva, `git log`, `git status`, `sed`, `rg`, `apply_patch`,
+  `black`, `flake8`, `pytest` e `git diff --check`. A busca web de documentação
+  oficial também foi tentada, mas a ferramenta retornou HTTP 401. O próximo
+  passo das redes neurais não mudou; `proximo-passo-redes2.md` foi preservado.
+
+Próximo passo operacional de cripto após merge/deploy:
+1. confirmar no log do workflow que `crypto-market-pilot-5m` ficou `ENABLED` em
+   `us-east1`, sem OIDC e com payload `limit=120`;
+2. quando o MCP voltar, auditar atualidade, duplicidades, flags e gaps no
+   BigQuery;
+3. após 24 horas contínuas, exigir aproximadamente 1.440 candles por par antes
+   de declarar a coleta estabilizada.
