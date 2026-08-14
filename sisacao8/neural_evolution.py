@@ -658,6 +658,15 @@ def generate_phase3_family_candidates(
                 hyperparameters["candidate_family_hash"] = str(
                     family.get("candidate_family_hash")
                 )
+            else:
+                # Keep the research family stable across dates and random seeds.
+                # ``model_version`` remains unique for artifact traceability, but
+                # MUEN evidence must be grouped by the knobs that define the
+                # policy rather than by an individual training run.
+                hyperparameters["candidate_family_hash"] = (
+                    "neural_eod_phase3_family_"
+                    f"{candidate_family_key(architecture, hyperparameters)[:24]}"
+                )
             hyperparameters["random_seed"] = (
                 int(budget.random_seed) + 30_000 + seed_offset
             )
