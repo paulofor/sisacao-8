@@ -76,3 +76,11 @@ gcloud scheduler jobs create http crypto-market-pilot-5m \
 Antes de criar o Scheduler, faça um POST com `dry_run=true`; depois do primeiro
 POST real, valide `crypto_market.candles_1m` no BigQuery. Não configure OIDC
 enquanto o workflow mantiver `--allow-unauthenticated`.
+
+## Verificação operacional
+
+A coleta saudável deve ter o job `crypto-market-pilot-5m` ativo em `us-east1`,
+linhas recentes para os dois pares e nenhuma duplicidade na chave
+`exchange + symbol + interval + event_time`. Se a tabela existir, mas estiver
+vazia, confira primeiro os logs da função: uma resposta HTTP 500 indica falha de
+persistência e não deve ser interpretada como coleta ativa.

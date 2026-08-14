@@ -574,3 +574,26 @@
 - A tabela `crypto_market.candles_1m` foi criada pelo primeiro POST, porém nenhuma linha foi confirmada como persistida nessa tentativa. O Scheduler `crypto-market-pilot-5m` ainda não existe, corretamente, pois deve ser criado somente após redeploy da correção e um POST real bem-sucedido.
 - Próxima ação externa: redeployar/mesclar esta correção; depois repetir dry-run e POST real, validar linhas/duplicidades/flags no BigQuery e só então criar o Scheduler. O próximo passo neural não mudou.
 - Comandos/ferramentas usados: MCP HTTP/JSON-RPC `initialize` e `tools/call` com `gcloud_research`, `cloud_run_function_logs`, `bigquery_query` e `cloud_scheduler_job`; `curl` no endpoint produtivo para dry-run e execução real; `apply_patch`, `black`, `flake8`, `pytest` e `git diff --check`.
+
+## 2026-08-14 — Auditoria e correção da coleta piloto de criptoativos
+
+Foi auditada a coleta `crypto_market_pilot` via MCP JSON-RPC por HTTP, com `initialize`, sessão `mcp-session-id`, consultas `bigquery_query`, `cloud_scheduler_job` e `cloud_run_function_logs`.
+
+Estado confirmado:
+- a tabela `ingestaokraken.crypto_market.candles_1m` existe com o schema esperado, mas está vazia: não há dados coletados de `BTCUSDT` nem `ETHUSDT`;
+- o job `crypto-market-pilot-5m` não existe em `ingestaokraken/us-east1` (`NOT_FOUND` confirmado pelo `cloud_scheduler_job`);
+- houve uma chamada manual `POST 200` em `2026-08-14 04:35:56`, seguida por uma chamada real `POST 500`;
+- os logs da função confirmaram a causa do HTTP 500: o `MERGE` falhava no BigQuery com `Syntax error: Unexpected keyword INTERVAL`, na lista de colunas do ramo `WHEN NOT MATCHED THEN INSERT`;
+- como a tabela não continha linhas, consultas de atualidade, duplicidade, flags de qualidade e gaps retornaram zero grupos e não permitiram ainda avaliar qualidade histórica.
+
+Correção aplicada no repositório:
+- o `MERGE` agora usa `WHEN NOT MATCHED THEN INSERT ROW`. A staging e o destino usam o mesmo `CANDLE_SCHEMA`, na mesma ordem, e assim a linha completa é inserida sem expor o campo reservado `interval` na lista de colunas;
+- o teste unitário passou a exigir essa forma do SQL e a documentação ganhou uma verificação operacional explícita para não confundir tabela vazia com coleta ativa.
+
+Próximo passo operacional de cripto:
+1. publicar a função `crypto_market_pilot` corrigida;
+2. executar um POST real e confirmar HTTP 200 e linhas recentes de `BTCUSDT`/`ETHUSDT` na tabela;
+3. somente depois criar o job público `crypto-market-pilot-5m` em `us-east1`, sem OIDC enquanto a função continuar `--allow-unauthenticated`;
+4. após pelo menos 24 horas, auditar 1.440 candles por par, gaps, duplicidades, `data_quality_flags` e atraso da última linha; não declarar a coleta estabilizada antes desses checks.
+
+O ponto de parada das redes neurais não mudou nesta auditoria; por isso `docs/diario/proximo-passo-redes2.md` foi preservado.
