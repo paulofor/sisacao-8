@@ -298,6 +298,57 @@ jobs:
             exit $status
           done
 
+  configure-crypto-scheduler:
+    name: Configure crypto collection schedule
+    if: github.event_name != 'pull_request'
+    needs: deploy-cloud-functions
+    runs-on: ubuntu-latest
+    steps:
+      - name: Auth GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: '${{ secrets.GCP_SA_KEY }}'
+          project_id: '${{ env.PROJECT_ID }}'
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+      - name: Create or update crypto collector Scheduler
+        run: |
+          set -euo pipefail
+
+          job_name='crypto-market-pilot-5m'
+          function_uri="https://${REGION}-${PROJECT_ID}.cloudfunctions.net/crypto_market_pilot"
+          message_body='{"pairs":["BTCUSDT","ETHUSDT"],"limit":120,"dry_run":false}'
+          common_args=(
+            --project="${PROJECT_ID}"
+            --location="${REGION}"
+            --schedule='*/5 * * * *'
+            --time-zone='Etc/UTC'
+            --uri="${function_uri}"
+            --http-method=POST
+            --headers='Content-Type=application/json'
+            --message-body="${message_body}"
+            --attempt-deadline=180s
+          )
+
+          if gcloud scheduler jobs describe "${job_name}" \
+            --project="${PROJECT_ID}" \
+            --location="${REGION}" >/dev/null 2>&1; then
+            gcloud scheduler jobs update http "${job_name}" \
+              "${common_args[@]}" \
+              --clear-auth-token
+          else
+            gcloud scheduler jobs create http "${job_name}" \
+              "${common_args[@]}"
+          fi
+
+          gcloud scheduler jobs resume "${job_name}" \
+            --project="${PROJECT_ID}" \
+            --location="${REGION}" || true
+          gcloud scheduler jobs describe "${job_name}" \
+            --project="${PROJECT_ID}" \
+            --location="${REGION}" \
+            --format='yaml(name,state,schedule,timeZone,httpTarget.uri,httpTarget.body,httpTarget.headers)'
+
   deploy-cloud-run:
     runs-on: ubuntu-latest
     needs: deploy-cloud-functions

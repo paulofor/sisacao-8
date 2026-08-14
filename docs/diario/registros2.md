@@ -597,3 +597,40 @@ Próximo passo operacional de cripto:
 4. após pelo menos 24 horas, auditar 1.440 candles por par, gaps, duplicidades, `data_quality_flags` e atraso da última linha; não declarar a coleta estabilizada antes desses checks.
 
 O ponto de parada das redes neurais não mudou nesta auditoria; por isso `docs/diario/proximo-passo-redes2.md` foi preservado.
+
+## 2026-08-14 — Persistência cripto recuperada e Scheduler automatizado
+
+- Revalidei diretamente o endpoint produtivo `crypto_market_pilot`. O `dry_run`
+  retornou HTTP 200 e candles fechados de `BTCUSDT` e `ETHUSDT`; em seguida, um
+  POST real também retornou HTTP 200, sem falhas, e informou 18 linhas
+  persistidas. Isso confirma que a revisão com `INSERT ROW` corrigiu o erro de
+  `MERGE` que anteriormente deixava a tabela vazia.
+- O MCP HTTP/JSON-RPC foi tentado conforme o protocolo obrigatório, com quatro
+  novas inicializações, backoff e uso exclusivo de HTTP. Todas retornaram 503
+  por conexão recusada no upstream; portanto não foi possível consultar por MCP
+  o total atual da tabela, duplicidades, gaps, flags nem o estado atual do
+  Scheduler nesta sessão. Essa limitação foi tratada como indisponibilidade do
+  MCP, não como evidência de falha da coleta.
+- Corrigi a lacuna operacional que permitia publicar a função sem ativar a
+  recorrência: após o deploy das Cloud Functions, o workflow agora cria ou
+  atualiza `crypto-market-pilot-5m`, remove autenticação OIDC do job público,
+  reativa o job e imprime sua configuração final. Em pull requests a etapa não
+  altera produção.
+- O payload recorrente passou de 10 para 120 barras. Como o job roda a cada
+  cinco minutos e o destino usa `MERGE` idempotente, a sobreposição é segura e
+  passa a recuperar interrupções de aproximadamente duas horas, em vez de
+  deixar gaps permanentes após uma indisponibilidade de pouco mais de dez
+  minutos.
+- Comandos/ferramentas usados: `curl` contra o MCP por HTTP e contra a Cloud
+  Function produtiva, `git log`, `git status`, `sed`, `rg`, `apply_patch`,
+  `black`, `flake8`, `pytest` e `git diff --check`. A busca web de documentação
+  oficial também foi tentada, mas a ferramenta retornou HTTP 401. O próximo
+  passo das redes neurais não mudou; `proximo-passo-redes2.md` foi preservado.
+
+Próximo passo operacional de cripto após merge/deploy:
+1. confirmar no log do workflow que `crypto-market-pilot-5m` ficou `ENABLED` em
+   `us-east1`, sem OIDC e com payload `limit=120`;
+2. quando o MCP voltar, auditar atualidade, duplicidades, flags e gaps no
+   BigQuery;
+3. após 24 horas contínuas, exigir aproximadamente 1.440 candles por par antes
+   de declarar a coleta estabilizada.
