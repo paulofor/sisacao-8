@@ -375,11 +375,11 @@ def _merge_rows(
             + ", ".join(
                 f"target.`{column}` = source.`{column}`" for column in update_columns
             )
-            + " WHEN NOT MATCHED THEN INSERT ("
-            + ", ".join(f"`{column}`" for column in columns)
-            + ") VALUES ("
-            + ", ".join(f"source.`{column}`" for column in columns)
-            + ")"
+            # BigQuery treats INTERVAL as a reserved keyword in a MERGE INSERT
+            # column list, even though the existing schema uses `interval`.
+            # The staging and destination schemas are identical and ordered by
+            # CANDLE_SCHEMA, so INSERT ROW safely copies the complete source row.
+            + " WHEN NOT MATCHED THEN INSERT ROW"
         )
         client.query(merge_sql).result()
     finally:

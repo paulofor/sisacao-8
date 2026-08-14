@@ -167,7 +167,8 @@ def test_merge_rows_loads_staging_merges_and_always_deletes() -> None:
     assert "MERGE `ingestaokraken.crypto_market.candles_1m`" in client.queries[0]
     assert "target.`event_time` = source.`event_time`" in client.queries[0]
     assert "target.`interval` = source.`interval`" in client.queries[0]
-    assert "INSERT (`exchange`, `symbol`, `base_asset`" in client.queries[0]
+    assert "WHEN NOT MATCHED THEN INSERT ROW" in client.queries[0]
+    assert "THEN INSERT (`exchange`" not in client.queries[0]
     assert client.deleted == [
         (
             "ingestaokraken.crypto_market._candles_1m_crypto_pilot_test",
