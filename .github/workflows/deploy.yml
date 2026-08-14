@@ -31,6 +31,14 @@ jobs:
             service_account: sa-get-stock-data@ingestaokraken.iam.gserviceaccount.com
             memory: 512Mi
             env: BQ_INTRADAY_DATASET=cotacao_intraday,BQ_DAILY_TABLE=cotacao_ohlcv_diario,BQ_HOLIDAYS_TABLE=feriados_b3
+          - name: crypto_market_pilot
+            entry_point: crypto_market_pilot
+            source: functions/crypto_market_pilot
+            service_account: sa-crypto-market-pilot@ingestaokraken.iam.gserviceaccount.com
+            require_service_account: true
+            memory: 256Mi
+            timeout: 180s
+            env: BQ_CRYPTO_DATASET=crypto_market,BQ_CRYPTO_CANDLES_1M_TABLE=candles_1m,BQ_LOCATION=us-east1,CRYPTO_PILOT_LIMIT=10
           - name: intraday_candles
             entry_point: generate_intraday_candles
             source: functions/intraday_candles
@@ -114,6 +122,7 @@ jobs:
 
           resolve_service_account_arg() {
             local desired_service_account="$1"
+            local require_service_account="${2:-false}"
 
             if gcloud iam service-accounts describe "${desired_service_account}" \
               --project "${PROJECT_ID}" >/dev/null 2>&1; then
@@ -123,6 +132,10 @@ jobs:
             fi
 
             echo "Configured service account ${desired_service_account} was not found." >&2
+            if [ "${require_service_account}" = "true" ]; then
+              echo "This function requires its dedicated service account; refusing fallback deploy." >&2
+              return 1
+            fi
             echo "Deploy will proceed without --service-account and keep existing/default identity." >&2
             return 0
           }
@@ -205,7 +218,9 @@ jobs:
             nl -ba "${vendored_training}" | sed -n '180,260p'
           fi
 
-          service_account_arg=$(resolve_service_account_arg "${{ matrix.service_account }}")
+          service_account_arg=$(resolve_service_account_arg \
+            "${{ matrix.service_account }}" \
+            "${{ matrix.require_service_account }}")
 
           deploy_cmd=(
             gcloud functions deploy "${{ matrix.name }}"
