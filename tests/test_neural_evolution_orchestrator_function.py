@@ -38,6 +38,8 @@ class _FakeClient:
             return _FakeQueryJob(
                 [{"dedupe_hash": item} for item in self.existing_hashes]
             )
+        if "JOIN" in query and "neural_fold_metrics" in query:
+            return _FakeQueryJob([])
         if (
             "FROM `ingestaokraken.cotacao_intraday.vw_neural_evolution_leaderboard`"
             in query
@@ -759,6 +761,72 @@ def test_aggregate_muen_rows_by_family_consolidates_distinct_seeds():
     assert rows["gate_decisions"][0]["candidate_family_hash"] == (
         "family_tabular_p50_m08_t35"
     )
+
+
+def test_load_legacy_phase3_fold_rows_rekeys_and_filters_family():
+    architecture = {
+        "type": "tabular_bottleneck_mlp",
+        "hidden_units": [256, 64, 16],
+        "batch_norm": False,
+    }
+    hyperparameters = {
+        "dropout_rate": 0.25,
+        "learning_rate": 0.0003,
+        "batch_size": 256,
+        "epochs": 80,
+        "class_weight": "balanced",
+        "min_directional_probability": 0.45,
+        "min_directional_margin": 0.05,
+        "random_seed": 20453066,
+    }
+    stable_hash = (
+        "neural_eod_phase3_family_"
+        f"{module.candidate_family_key(architecture, hyperparameters)[:24]}"
+    )
+
+    class LegacyClient:
+        def query(self, query, job_config=None):
+            assert "JOIN" in query
+            assert job_config is not None
+            return _FakeQueryJob(
+                [
+                    {
+                        "protocol_version": "neural_eod_protocol_v1",
+                        "dataset_snapshot": "snapshot_2026",
+                        "candidate_family_hash": "dated-model-version",
+                        "trial_id": "trial-1",
+                        "seed": 20453066,
+                        "metrics_json": {"fold_id": "test", "trades": 10},
+                        "architecture_json": architecture,
+                        "hyperparameters_json": hyperparameters,
+                    }
+                ]
+            )
+
+    rows = module._load_legacy_phase3_fold_metric_rows(
+        client=LegacyClient(),
+        dataset_snapshot="snapshot_2026",
+        target_family_hashes={stable_hash},
+    )
+
+    assert len(rows) == 1
+    assert rows[0]["candidate_family_hash"] == stable_hash
+    assert rows[0]["trial_id"] == "trial-1"
+
+
+def test_merge_fold_metric_rows_deduplicates_persisted_trial():
+    historical = [{"trial_id": "trial-1", "seed": 1, "metrics_json": {}}]
+    current = [
+        {"trial_id": "trial-1", "seed": 1, "metrics_json": {"trades": 2}},
+        {"trial_id": "trial-2", "seed": 2, "metrics_json": {"trades": 3}},
+    ]
+
+    merged = module._merge_fold_metric_rows(historical, current)
+
+    assert {row["trial_id"] for row in merged} == {"trial-1", "trial-2"}
+    assert next(row for row in merged if row["trial_id"] == "trial-1")[
+        "metrics_json"
+    ] == {"trades": 2}
 
 
 def test_orchestrator_apolo_challenger_shadow_dry_run_is_governed(monkeypatch):

@@ -69,6 +69,52 @@ def test_generate_phase3_family_candidates_creates_new_family_payloads():
     assert all(
         candidate.training_request["status"] == "candidate" for candidate in candidates
     )
+    assert all(
+        candidate.training_request["candidate_family_hash"].startswith(
+            "neural_eod_phase3_family_"
+        )
+        for candidate in candidates
+    )
+
+
+def test_phase3_automatic_family_hash_is_stable_across_seed_and_prefix():
+    family_space = [
+        {
+            "architecture_type": "tabular_bottleneck_mlp",
+            "model_id": "neural_eod_tabular_bottleneck_mlp",
+            "hidden_units": (256, 64, 16),
+            "dropout_rate": 0.25,
+            "learning_rate": 0.0003,
+            "batch_size": 256,
+            "epochs": 80,
+            "class_weight": "balanced",
+            "min_directional_probability": 0.45,
+            "min_directional_margin": 0.05,
+        }
+    ]
+    first = generate_phase3_family_candidates(
+        evolution_run_id="run-one",
+        dataset_snapshot="snapshot-1",
+        budget=EvolutionBudget(max_trials=1, random_seed=7),
+        model_version_prefix="phase3_20260808",
+        family_space=family_space,
+    )[0]
+    second = generate_phase3_family_candidates(
+        evolution_run_id="run-two",
+        dataset_snapshot="snapshot-1",
+        budget=EvolutionBudget(max_trials=1, random_seed=99),
+        model_version_prefix="phase3_20260814",
+        family_space=family_space,
+    )[0]
+
+    assert first.model_version != second.model_version
+    assert (
+        first.training_request["random_seed"] != second.training_request["random_seed"]
+    )
+    assert (
+        first.training_request["candidate_family_hash"]
+        == second.training_request["candidate_family_hash"]
+    )
 
 
 def test_generate_phase3_family_candidates_accepts_trade_budget_policy():
