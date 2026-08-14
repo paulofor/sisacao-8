@@ -396,3 +396,41 @@ Próximo passo operacional imediato:
 3. Alertar separadamente `missing_daily_candles` e “predições presentes, mas zero BUY/SELL”, pois o primeiro é falha de dados e o segundo pode ser decisão normal do threshold.
 4. Não usar snapshots intraday como substituição silenciosa do candle oficial e não reduzir o threshold `0.6` apenas para forçar sinais.
 5. Manter Apolo como controle e os novos datasets suspensos enquanto continuam a validação multi-seed e a formação do histórico IBOV/BOVA11.
+
+## 2026-08-14 — Nova candidata promissora, mas ainda sem nova aprovada
+
+Estado confirmado no Gate MUEN: ainda não surgiu um segundo modelo aprovado. Existem 2.617 decisões até `2026-08-14T02:31:12Z`; somente a família do Apolo NEV, aprovada em 10/07, possui `passed=true`. Desde 01/08 foram avaliadas 639 decisões e nenhuma passou.
+
+A candidata recente mais interessante para aprofundamento é `neural_eod_phase3_20260808_reseed20423066_tabular_bottleneck_mlp_01`. Ela apresentou delta mediano de expectancy versus champion de aproximadamente `+0,02056`, drawdown de `0,1351`, 76 trades e folds positivos em todas as avaliações. O único critério reprovado foi `seeds_instaveis`, pois essa decisão usou apenas uma seed. Portanto, ela é uma boa candidata de pesquisa, mas ainda não é um modelo bom o suficiente para aprovação ou promoção.
+
+Próximo passo operacional revisado:
+1. Repetir exatamente essa configuração `tabular_bottleneck_mlp` em validação multi-seed, mantendo fixos arquitetura `[256,64,16]`, dropout `0,25`, learning rate `0,0003`, thresholds direcionais (`probability=0,45`, `margin=0,05`) e demais hiperparâmetros; variar somente `random_seed`.
+2. Consolidar os resultados por família e exigir `stable_across_seeds=true`, preservando os gates atuais de trades, folds e drawdown.
+3. Manter o Apolo como champion. Não chamar a candidata de Atena, não publicar sinais e não promover enquanto a decisão consolidada continuar com `passed=false`.
+4. Se a repetição multi-seed passar, comparar o artefato com o Apolo e submetê-lo à aprovação manual antes de qualquer shadow operacional.
+
+## 2026-08-14 — Correção: repetição automática existe, mas não consolida as seeds
+
+A candidata de 08/08 não está aguardando uma execução manual para receber novas seeds. A estratégia automática `phase3_new_families` continuou recriando a mesma configuração-base e, entre `2026-08-08T10:30:01Z` e `2026-08-14T01:30:01Z`, produziu 99 configurações equivalentes com 99 seeds distintas. Entretanto, cada execução recebeu um `model_version`/`candidate_family_hash` próprio e o Gate avaliou cada uma isoladamente como família de uma seed; por isso todas foram marcadas com `seeds_instaveis`, em vez de formar uma decisão multi-seed consolidada.
+
+A evidência agregada também reduz o otimismo sobre o resultado isolado de 08/08: nenhuma das 99 repetições passou, apenas 25 tiveram todos os folds positivos e o delta médio de expectancy versus champion ficou próximo de zero (`+0,00068`), apesar de uma melhor repetição isolada ter chegado a aproximadamente `+0,04012`. Portanto, a candidata de 08/08 não deve mais ser tratada como provável challenger; ela é uma configuração que precisa de consolidação correta para medir robustez.
+
+Próximo passo operacional corrigido:
+1. Não criar outro Scheduler apenas para repetir essa configuração: a repetição automática já está ocorrendo no `phase3_new_families`.
+2. Corrigir a identidade de família da validação controlada para que arquitetura, thresholds e hiperparâmetros fixos compartilhem um `candidate_family_hash` estável, excluindo `random_seed` e data do identificador de família.
+3. Reutilizar ou reavaliar as 99 seeds já existentes em uma decisão MUEN consolidada antes de consumir novos treinos.
+4. Manter o Apolo como champion; a configuração de 08/08 continua reprovada e não deve ser promovida.
+
+No ciclo operacional mais recente, o Apolo efetivamente fez previsões: foram materializadas 150 predições com `reference_date=2026-08-13`, válidas para `2026-08-14`, todas `HOLD`. A confiança máxima foi aproximadamente `0,50814`, abaixo do threshold de decisão `0,6`; assim, o Apolo não produziu BUY/SELL. Os cinco sinais `signals_v1` existentes para 14/08 (dois BUY e três SELL) pertencem à estratégia clássica, não ao Apolo.
+
+## 2026-08-14 — Consolidação multi-seed implementada no orquestrador
+
+O próximo passo de código foi executado. Candidatas genéricas de `phase3_new_families` agora recebem automaticamente um `candidate_family_hash` estável calculado a partir da arquitetura, thresholds e hiperparâmetros que definem a política; data, `model_version` e `random_seed` não participam dessa identidade. O artefato continua com versão única, preservando rastreabilidade sem fragmentar a família no Gate MUEN.
+
+O orquestrador também passa a consultar folds legados do mesmo dataset, ligar os hashes antigos às configurações persistidas em `neural_candidate_configs`, recalcular a identidade estável e incorporar apenas as famílias da rodada atual. Os folds históricos e atuais são deduplicados por `trial_id` antes da decisão consolidada. Assim, quando a configuração de 08/08 voltar a aparecer após o deploy, as seeds já treinadas poderão ser reutilizadas em vez de iniciar outra sequência cega de treinos.
+
+Próximo passo operacional após merge/deploy:
+1. Publicar `neural_evolution_orchestrator` com a correção.
+2. Executar uma rodada controlada de `phase3_new_families` que inclua a configuração `[256,64,16]`, dropout `0,25`, learning rate `0,0003`, probability `0,45` e margin `0,05`.
+3. Confirmar em `neural_family_evaluations` e `neural_gate_decisions` que a família automática contém mais de uma seed e uma única decisão consolidada.
+4. Não promover se a consolidação confirmar instabilidade ou `passed=false`; manter o Apolo como champion.

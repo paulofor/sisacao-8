@@ -17,6 +17,7 @@ from sisacao8.neural_evolution import (
     CandidateConfig,
     EvaluationScore,
     EvolutionBudget,
+    candidate_family_key,
     generate_architecture_variant_candidates,
     generate_controlled_diversity_candidates,
     generate_deterministic_candidates,
@@ -396,7 +397,18 @@ def neural_evolution_orchestrator(request_obj: Any) -> tuple[Dict[str, Any], int
 
     grouped_muen_rows = _aggregate_muen_rows_by_family(
         dataset_snapshot=dataset_snapshot,
-        fold_metric_rows=fold_metric_rows,
+        fold_metric_rows=_merge_fold_metric_rows(
+            _load_legacy_phase3_fold_metric_rows(
+                client=client,
+                dataset_snapshot=dataset_snapshot,
+                target_family_hashes={
+                    str(row.get("candidate_family_hash") or "")
+                    for row in fold_metric_rows
+                    if row.get("candidate_family_hash")
+                },
+            ),
+            fold_metric_rows,
+        ),
     )
     family_evaluation_rows.extend(grouped_muen_rows["family_evaluations"])
     gate_decision_rows.extend(grouped_muen_rows["gate_decisions"])
@@ -1169,6 +1181,77 @@ def _aggregate_muen_rows_by_family(
             )
         )
     return {"family_evaluations": family_rows, "gate_decisions": gate_rows}
+
+
+def _load_legacy_phase3_fold_metric_rows(
+    *,
+    client: bigquery.Client,
+    dataset_snapshot: str,
+    target_family_hashes: set[str],
+) -> list[dict[str, Any]]:
+    """Load and re-key legacy one-seed Phase-3 evidence for consolidation.
+
+    Older generic Phase-3 candidates used their dated ``model_version`` as the
+    family hash.  Joining the persisted candidate configuration lets us rebuild
+    the stable family identity and reuse those folds without retraining them.
+    """
+
+    if not target_family_hashes:
+        return []
+    sql = (
+        "SELECT f.protocol_version, f.dataset_snapshot, "
+        "f.candidate_family_hash, f.trial_id, f.seed, f.metrics_json, "
+        "c.architecture_json, c.hyperparameters_json "
+        f"FROM `{_table_id(FOLD_METRICS_TABLE)}` AS f "
+        f"JOIN `{_table_id(CANDIDATE_CONFIGS_TABLE)}` AS c "
+        "ON f.candidate_family_hash = c.model_version "
+        "WHERE f.dataset_snapshot = @dataset_snapshot "
+        "AND c.candidate_source = 'phase3_family'"
+    )
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ScalarQueryParameter(
+                "dataset_snapshot", "STRING", dataset_snapshot
+            )
+        ]
+    )
+    rows = client.query(sql, job_config=job_config).result()
+    normalized: list[dict[str, Any]] = []
+    for row in rows:
+        architecture = _json_mapping(_value(row, "architecture_json"))
+        hyperparameters = _json_mapping(_value(row, "hyperparameters_json"))
+        family_hash = (
+            "neural_eod_phase3_family_"
+            f"{candidate_family_key(architecture, hyperparameters)[:24]}"
+        )
+        if family_hash not in target_family_hashes:
+            continue
+        normalized.append(
+            {
+                "protocol_version": _value(row, "protocol_version"),
+                "dataset_snapshot": _value(row, "dataset_snapshot"),
+                "candidate_family_hash": family_hash,
+                "trial_id": _value(row, "trial_id"),
+                "seed": _value(row, "seed"),
+                "metrics_json": _value(row, "metrics_json"),
+            }
+        )
+    return normalized
+
+
+def _merge_fold_metric_rows(
+    *groups: Iterable[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    """Merge fold evidence without double-counting a persisted trial."""
+
+    merged: dict[str, dict[str, Any]] = {}
+    for rows in groups:
+        for row in rows:
+            materialized = dict(row)
+            trial_id = str(materialized.get("trial_id") or "")
+            key = trial_id or json.dumps(materialized, sort_keys=True, default=str)
+            merged[key] = materialized
+    return list(merged.values())
 
 
 def _stable_across_seed_rows(rows: list[dict[str, Any]]) -> bool:
