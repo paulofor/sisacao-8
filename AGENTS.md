@@ -163,6 +163,7 @@ curl -sS -X POST 'http://mcpserversisacao.shop/mcp' \
 - `cotacao_intraday.dq_incidents` (`BQ_DQ_INCIDENTS_TABLE`): incidentes detectados nos checks de qualidade.
 - `cotacao_intraday.pipeline_config` (`PIPELINE_CONFIG_TABLE`): parâmetros operacionais do pipeline.
 - `cotacao_intraday.strategy_config` (`BQ_STRATEGY_CONFIG_TABLE`): parâmetros/versionamento da estratégia de sinais.
+- `crypto_market.candles_1m` (`BQ_CRYPTO_CANDLES_1M_TABLE`): piloto isolado de candles fechados de 1 minuto para BTC/ETH, sem execução de ordens.
 
 Objetivo operacional resumido:
 1. Coletar cotações (intraday + diário).
