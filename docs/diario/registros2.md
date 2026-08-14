@@ -598,6 +598,20 @@ Próximo passo operacional de cripto:
 
 O ponto de parada das redes neurais não mudou nesta auditoria; por isso `docs/diario/proximo-passo-redes2.md` foi preservado.
 
+## 2026-08-14 — Tentativa de revalidação imediata da coleta cripto
+
+- A última evidência operacional confirmada continua indicando coleta inativa: a tabela `crypto_market.candles_1m` estava vazia, o Scheduler `crypto-market-pilot-5m` não existia e a correção do `MERGE` ainda precisava ser publicada e validada com um POST real bem-sucedido.
+- Tentei revalidar o estado atual pelo MCP obrigatório, sempre via JSON-RPC e HTTP. O `initialize` foi repetido com backoff, mas todas as tentativas retornaram HTTP 503, `upstream connect error` e `Connection refused`; portanto não foi possível abrir uma sessão, consultar o Scheduler ou verificar a linha mais recente no BigQuery nesta rodada.
+- Conclusão responsável para a pergunta “as cripto estão sendo coletadas agora?”: não há evidência confirmada de que estejam. O último estado validado é “não”, mas a indisponibilidade temporária do MCP impede afirmar se houve ativação posterior. Não foi disparado POST real nem criada automação durante esta consulta.
+- Ferramentas/comandos usados: `find`, `git status`, `rg`, `tail`, `sed` e `git log`; `curl` com `initialize` JSON-RPC por `http://mcpserversisacao.shop/mcp`, headers obrigatórios e múltiplas tentativas com backoff. O próximo passo das redes neurais não mudou, então `proximo-passo-redes2.md` foi preservado.
+
+## 2026-08-14 — Diagnóstico da indisponibilidade do MCP e pendências da coleta cripto
+
+- Repeti o `initialize` JSON-RPC por HTTP três vezes. O DNS resolveu `mcpserversisacao.shop` para `187.45.254.75`, e todas as respostas vieram imediatamente do Envoy com HTTP 503 e a mensagem `upstream connect error ... Connection refused`.
+- A evidência delimita o incidente: DNS e o proxy/gateway público estão acessíveis, mas o Envoy não consegue abrir conexão TCP com o upstream configurado. Isso ocorre antes de o Spring/MCP processar o JSON-RPC, portanto não é erro de sessão, header `mcp-session-id`, BigQuery, credencial GCP ou payload da consulta. Sem acesso SSH/logs do host nesta sessão, ainda não é possível distinguir entre container parado/reiniciando, porta 80 sem listener, bind/publicação Docker ausente ou upstream/endereço do proxy desatualizado; essas alternativas permanecem hipóteses, não conclusões.
+- O workflow versionado publica o container como `sisacao8-mcp-server-java` em `-p 80:80`, exige estado `running` e só conclui após um `initialize` local em `http://127.0.0.1/mcp` retornar 200. A correção operacional é inspecionar na VPS `docker ps -a`, `docker inspect`, `docker logs`, o listener da porta 80 e executar o mesmo smoke test local; se o teste local falhar, reiniciar/republicar o container e corrigir a causa mostrada nos logs; se passar, corrigir o target/rota do Envoy para a VPS/porta efetiva.
+- Para a coleta cripto ainda faltam, na ordem: restabelecer o MCP para observação; confirmar que a correção `WHEN NOT MATCHED THEN INSERT ROW` foi publicada; executar um POST real com HTTP 200; confirmar linhas recentes de `BTCUSDT` e `ETHUSDT`; criar e habilitar `crypto-market-pilot-5m` somente depois dessa validação; e auditar continuidade/qualidade após 24 horas. Enquanto tabela recente e Scheduler não forem confirmados, a coleta não deve ser declarada ativa.
+- Comandos usados: `getent ahostsv4`, `dig`, `curl` com retry/backoff e modo verbose, inspeção de `.github/workflows/deploy-mcp-java-vps.yml`, `mcp-server-java/Dockerfile`, `docker-entrypoint.sh` e `McpController.java`. Também tentei conexão direta sem o proxy do ambiente, mas a rede do container não oferece rota direta; essa limitação não altera o diagnóstico retornado pelo Envoy. O próximo passo das redes neurais não mudou.
 ## 2026-08-14 — Persistência cripto recuperada e Scheduler automatizado
 
 - Revalidei diretamente o endpoint produtivo `crypto_market_pilot`. O `dry_run`
