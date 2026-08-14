@@ -367,18 +367,18 @@ def _merge_rows(
         merge_sql = (
             f"MERGE `{_destination_table_id()}` AS target "
             f"USING `{staging_table_id}` AS source "
-            "ON target.exchange = source.exchange "
-            "AND target.symbol = source.symbol "
-            "AND target.interval = source.interval "
-            "AND target.event_time = source.event_time "
+            "ON target.`exchange` = source.`exchange` "
+            "AND target.`symbol` = source.`symbol` "
+            "AND target.`interval` = source.`interval` "
+            "AND target.`event_time` = source.`event_time` "
             "WHEN MATCHED THEN UPDATE SET "
             + ", ".join(
-                f"target.{column} = source.{column}" for column in update_columns
+                f"target.`{column}` = source.`{column}`" for column in update_columns
             )
             + " WHEN NOT MATCHED THEN INSERT ("
-            + ", ".join(columns)
+            + ", ".join(f"`{column}`" for column in columns)
             + ") VALUES ("
-            + ", ".join(f"source.{column}" for column in columns)
+            + ", ".join(f"source.`{column}`" for column in columns)
             + ")"
         )
         client.query(merge_sql).result()
