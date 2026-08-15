@@ -648,3 +648,113 @@ Próximo passo operacional de cripto após merge/deploy:
    BigQuery;
 3. após 24 horas contínuas, exigir aproximadamente 1.440 candles por par antes
    de declarar a coleta estabilizada.
+
+## 2026-08-15 — Revalidação do estado da coleta de criptoativos
+
+- O endpoint produtivo `crypto_market_pilot` continua acessível. Um POST de
+  diagnóstico com `dry_run=true`, dois pares e limite 2 respondeu HTTP 200,
+  `status=ok`, sem falhas, e retornou um candle fechado para `BTCUSDT` e outro
+  para `ETHUSDT`. Isso confirma a disponibilidade da função e da fonte de market
+  data, mas o dry-run não grava dados e, isoladamente, não confirma recorrência.
+- Consultei pela API pública do GitHub a execução de deploy do merge
+  `088c7dd7`. O deploy da função `crypto_market_pilot` concluiu com sucesso, mas
+  o job posterior `Configure crypto collection schedule` falhou exatamente na
+  etapa `Create or update crypto collector Scheduler` (exit code 1). Portanto,
+  a automação pretendida não foi validada e não há base para declarar que a
+  coleta esteja ocorrendo continuamente a cada cinco minutos.
+- Tentei confirmar Scheduler e linhas recentes no BigQuery pelo MCP obrigatório,
+  usando JSON-RPC exclusivamente em
+  `http://mcpserversisacao.shop/mcp`. Foram três inicializações com backoff; todas
+  retornaram HTTP 503 por conexão recusada no upstream, sem emissão de
+  `mcp-session-id`. Por isso não foi possível consultar diretamente o estado do
+  job nem a atualidade da tabela nesta rodada.
+- Conclusão operacional: a função está saudável para buscar BTC/ETH sob demanda,
+  e já havia persistência manual confirmada, mas **a coleta recorrente atual não
+  está confirmada**; a última tentativa versionada de configurar o Scheduler
+  falhou. Deve-se corrigir/reexecutar essa etapa e depois confirmar job `ENABLED`
+  e timestamps recentes no BigQuery antes de responder que a coleta está ativa.
+- Comandos/ferramentas usados: `find`, `git status`, `git log`, `rg`, `sed`,
+  `tail`; `curl` no endpoint produtivo, na API pública do GitHub e no MCP HTTP
+  JSON-RPC com retry/backoff. O próximo passo das redes neurais não mudou;
+  `docs/diario/proximo-passo-redes2.md` foi preservado.
+
+## 2026-08-15 — Universo do piloto cripto ampliado para sete pares
+
+- Ampliei o universo padrão do `crypto_market_pilot` de dois para sete pares
+  líquidos cotados em USDT: `BTCUSDT`, `ETHUSDT`, `SOLUSDT`, `BNBUSDT`,
+  `XRPUSDT`, `ADAUSDT` e `DOGEUSDT`. O limite de segurança permanece em no
+  máximo dez pares por requisição, e o piloto continua restrito a market data,
+  sem ordens ou capital real.
+- Atualizei também o payload do Cloud Scheduler no workflow para que a coleta
+  recorrente solicite explicitamente os sete pares com janela de recuperação de
+  120 candles. O README e o exemplo operacional manual agora refletem o mesmo
+  universo, evitando divergência entre padrão da função, deploy e runbook.
+- Confirmei a disponibilidade dos sete símbolos no endpoint público de market
+  data da Binance: cada consulta REST de klines respondeu HTTP 200. Em seguida,
+  executei um único dry-run produtivo contendo os sete pares; a função respondeu
+  HTTP 200, `status=ok`, nenhuma falha e sete candles fechados. Como foi dry-run,
+  nenhuma linha foi gravada nesta validação.
+- Acrescentei teste de regressão para fixar o universo padrão e garantir que ele
+  continue dentro do teto de dez pares. A ativação recorrente ainda depende de
+  o workflow configurar com sucesso o job `crypto-market-pilot-5m`; após deploy,
+  é obrigatório confirmar o Scheduler `ENABLED` e linhas recentes dos sete pares
+  no BigQuery.
+- Comandos/ferramentas usados: `git status`, `git log`, `sed`, `rg`, `curl` e
+  Python `urllib.request` contra `https://data-api.binance.vision`, além de
+  `apply_patch`. O próximo passo das redes neurais não mudou;
+  `docs/diario/proximo-passo-redes2.md` foi preservado.
+
+## 2026-08-15 — Esclarecimento: dados reais versus coleta recorrente
+
+- A função usa candles reais do endpoint público de market data da Binance; não
+  gera preços sintéticos nem fixtures em produção. Com `dry_run=false`, persiste
+  esses candles reais no BigQuery. O termo “piloto” significa escopo de pesquisa
+  e ausência de ordens/capital real, não dados falsos.
+- Revalidei a situação de implantação pela API pública do GitHub. O commit que
+  amplia o universo para sete pares ainda está apenas no branch local, sem nova
+  execução de deploy. A última execução `push` disponível continua sendo a do
+  merge `088c7dd7`, na qual a função foi publicada, mas a configuração do
+  Scheduler falhou. Portanto os sete pares ainda não estão ativos em produção e
+  não se deve afirmar que existe coleta automática contínua neste momento.
+- Tentei novamente consultar Scheduler e BigQuery pelo MCP obrigatório via
+  JSON-RPC/HTTP, com três inicializações e backoff. Todas retornaram HTTP 503 por
+  conexão recusada no upstream e não forneceram `mcp-session-id`; por isso a
+  atualidade da tabela não pôde ser confirmada diretamente nesta rodada.
+- Resposta operacional: os dados coletados pela função são reais, mas a coleta
+  recorrente dos sete pares só ficará efetivamente ativa depois de merge/deploy,
+  Scheduler `crypto-market-pilot-5m` em estado `ENABLED` e confirmação de linhas
+  recentes no BigQuery. O próximo passo das redes neurais não mudou;
+  `docs/diario/proximo-passo-redes2.md` foi preservado.
+- Comandos/ferramentas usados: `git status`, `git log`, `git remote`, `curl` na
+  API pública do GitHub e `curl` no MCP HTTP JSON-RPC com retry/backoff.
+
+## 2026-08-15 — Causa confirmada da falha ao criar o Scheduler cripto
+
+- O log do GitHub Actions fornecido pelo operador confirmou a causa: o workflow
+  autentica como `codex-openai@ingestaokraken.iam.gserviceaccount.com`, e essa
+  identidade não possui `cloudscheduler.jobs.create` no projeto
+  `ingestaokraken`. Não é falha da função, do payload dos sete pares, da Binance,
+  do BigQuery ou de OIDC; é uma pendência IAM para administrar Cloud Scheduler.
+- A correção de produção exige que um administrador do projeto conceda uma vez
+  `roles/cloudscheduler.admin` à service account do workflow e depois reexecute
+  o deploy. Esse papel cobre as operações usadas pelo workflow para descrever,
+  criar, atualizar e reativar o job. Este ambiente não possui credencial
+  administrativa nem `gcloud`, portanto não foi possível aplicar o grant daqui.
+- Atualizei o runbook com o comando exato de IAM e esclareci que conceder OIDC
+  não corrige essa falha. Também removi a supressão cega do erro de `describe` no
+  workflow: agora uma resposta `PERMISSION_DENIED` é preservada e acompanhada de
+  uma anotação explícita indicando o papel e a identidade necessários, em vez de
+  ser confundida silenciosamente com job inexistente antes da tentativa de
+  criação.
+- Até o grant e a reexecução concluírem, a Cloud Function continua apta a buscar
+  e persistir dados reais sob chamada, mas a coleta automática dos sete pares
+  não deve ser declarada ativa. Depois do deploy, confirmar
+  `crypto-market-pilot-5m` como `ENABLED` e validar timestamps recentes dos sete
+  símbolos no BigQuery.
+- Comandos/ferramentas usados: inspeção do log fornecido pelo operador;
+  `git status`, `git log`, `command -v`, `rg`, `sed`, `apply_patch`, validação
+  YAML com Ruby, `black --check`, `isort --check-only`, `flake8`, `pytest` e
+  `git diff --check`. A tentativa de validar YAML com Python não foi usada porque
+  o ambiente não possui o módulo `yaml`; a validação equivalente com Ruby
+  passou. O próximo passo das redes neurais não mudou;
+  `docs/diario/proximo-passo-redes2.md` foi preservado.

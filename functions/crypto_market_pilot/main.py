@@ -24,9 +24,20 @@ BINANCE_API_BASE_URL = os.environ.get(
     "BINANCE_API_BASE_URL",
     "https://data-api.binance.vision",
 ).rstrip("/")
+DEFAULT_PAIR_SYMBOLS = (
+    "BTCUSDT",
+    "ETHUSDT",
+    "SOLUSDT",
+    "BNBUSDT",
+    "XRPUSDT",
+    "ADAUSDT",
+    "DOGEUSDT",
+)
 DEFAULT_PAIRS = tuple(
     pair.strip().upper()
-    for pair in os.environ.get("CRYPTO_PILOT_PAIRS", "BTCUSDT,ETHUSDT").split(",")
+    for pair in os.environ.get(
+        "CRYPTO_PILOT_PAIRS", ",".join(DEFAULT_PAIR_SYMBOLS)
+    ).split(",")
     if pair.strip()
 )
 DEFAULT_LIMIT = int(os.environ.get("CRYPTO_PILOT_LIMIT", "5"))
@@ -62,7 +73,7 @@ CANDLE_SCHEMA = (
 
 
 def crypto_market_pilot(http_request: Any) -> tuple[dict[str, Any], int]:
-    """Fetch closed BTC/ETH one-minute candles and idempotently store them."""
+    """Fetch closed one-minute crypto candles and idempotently store them."""
 
     payload = _request_payload(http_request)
     try:
