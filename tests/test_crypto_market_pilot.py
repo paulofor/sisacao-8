@@ -130,6 +130,19 @@ def test_normalize_pairs_rejects_invalid_or_excessive_input() -> None:
         raise AssertionError("par inválido deveria falhar")
 
 
+def test_default_pairs_include_expanded_liquid_usdt_universe() -> None:
+    assert module.DEFAULT_PAIRS == (
+        "BTCUSDT",
+        "ETHUSDT",
+        "SOLUSDT",
+        "BNBUSDT",
+        "XRPUSDT",
+        "ADAUSDT",
+        "DOGEUSDT",
+    )
+    assert len(module.DEFAULT_PAIRS) <= 10
+
+
 def test_merge_rows_loads_staging_merges_and_always_deletes() -> None:
     class Job:
         def result(self):

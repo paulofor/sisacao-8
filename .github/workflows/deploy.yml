@@ -317,7 +317,7 @@ jobs:
 
           job_name='crypto-market-pilot-5m'
           function_uri="https://${REGION}-${PROJECT_ID}.cloudfunctions.net/crypto_market_pilot"
-          message_body='{"pairs":["BTCUSDT","ETHUSDT"],"limit":120,"dry_run":false}'
+          message_body='{"pairs":["BTCUSDT","ETHUSDT","SOLUSDT","BNBUSDT","XRPUSDT","ADAUSDT","DOGEUSDT"],"limit":120,"dry_run":false}'
           common_args=(
             --project="${PROJECT_ID}"
             --location="${REGION}"
