@@ -1,8 +1,9 @@
 # Crypto market pilot
 
 Piloto de pesquisa, sem ordens e sem capital real, que coleta candles fechados
-de um minuto da Binance Spot para `BTCUSDT` e `ETHUSDT` e os grava de forma
-idempotente em `crypto_market.candles_1m`.
+de um minuto da Binance Spot para `BTCUSDT`, `ETHUSDT`, `SOLUSDT`, `BNBUSDT`,
+`XRPUSDT`, `ADAUSDT` e `DOGEUSDT` e os grava de forma idempotente em
+`crypto_market.candles_1m`.
 
 ## Variáveis
 
@@ -10,7 +11,8 @@ idempotente em `crypto_market.candles_1m`.
 - `BQ_CRYPTO_DATASET` (default: `crypto_market`)
 - `BQ_CRYPTO_CANDLES_1M_TABLE` (default: `candles_1m`)
 - `BQ_LOCATION` (default: `us-east1`)
-- `CRYPTO_PILOT_PAIRS` (default: `BTCUSDT,ETHUSDT`)
+- `CRYPTO_PILOT_PAIRS` (default:
+  `BTCUSDT,ETHUSDT,SOLUSDT,BNBUSDT,XRPUSDT,ADAUSDT,DOGEUSDT`)
 - `CRYPTO_PILOT_LIMIT` (default: `5`)
 - `BINANCE_API_BASE_URL` (default: `https://data-api.binance.vision`, endpoint
   público da Binance exclusivo para market data)
@@ -19,7 +21,15 @@ idempotente em `crypto_market.candles_1m`.
 
 ```json
 {
-  "pairs": ["BTCUSDT", "ETHUSDT"],
+  "pairs": [
+    "BTCUSDT",
+    "ETHUSDT",
+    "SOLUSDT",
+    "BNBUSDT",
+    "XRPUSDT",
+    "ADAUSDT",
+    "DOGEUSDT"
+  ],
   "limit": 5,
   "dry_run": true
 }
@@ -73,7 +83,7 @@ gcloud scheduler jobs create http crypto-market-pilot-5m \
   --uri='https://us-east1-ingestaokraken.cloudfunctions.net/crypto_market_pilot' \
   --http-method=POST \
   --headers='Content-Type=application/json' \
-  --message-body='{"pairs":["BTCUSDT","ETHUSDT"],"limit":120,"dry_run":false}' \
+  --message-body='{"pairs":["BTCUSDT","ETHUSDT","SOLUSDT","BNBUSDT","XRPUSDT","ADAUSDT","DOGEUSDT"],"limit":120,"dry_run":false}' \
   --attempt-deadline=180s
 ```
 
@@ -87,7 +97,7 @@ vermelho, em vez de publicar a função sem ativar a coleta recorrente.
 ## Verificação operacional
 
 A coleta saudável deve ter o job `crypto-market-pilot-5m` ativo em `us-east1`,
-linhas recentes para os dois pares e nenhuma duplicidade na chave
+linhas recentes para os sete pares e nenhuma duplicidade na chave
 `exchange + symbol + interval + event_time`. Se a tabela existir, mas estiver
 vazia, confira primeiro os logs da função: uma resposta HTTP 500 indica falha de
 persistência e não deve ser interpretada como coleta ativa.
