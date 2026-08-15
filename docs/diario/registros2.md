@@ -758,3 +758,73 @@ Próximo passo operacional de cripto após merge/deploy:
   o ambiente não possui o módulo `yaml`; a validação equivalente com Ruby
   passou. O próximo passo das redes neurais não mudou;
   `docs/diario/proximo-passo-redes2.md` foi preservado.
+
+## 2026-08-15 — Coleta recorrente de sete criptoativos confirmada
+
+- Confirmei pela API pública do GitHub Actions que o workflow `Deploy` do merge
+  `04789fbc` terminou com sucesso. Tanto o deploy de `crypto_market_pilot`
+  quanto o job posterior `Configure crypto collection schedule` e sua etapa
+  `Create or update crypto collector Scheduler` ficaram com conclusão
+  `success`. Isso confirma que a pendência IAM registrada anteriormente foi
+  superada e que a automação versionada conseguiu configurar o Scheduler.
+- Validei o endpoint produtivo primeiro com `dry_run=true`: a chamada respondeu
+  HTTP 200, `status=ok`, sem falhas e retornou candles fechados dos sete pares
+  (`BTCUSDT`, `ETHUSDT`, `SOLUSDT`, `BNBUSDT`, `XRPUSDT`, `ADAUSDT` e
+  `DOGEUSDT`). Em seguida executei um POST real, também HTTP 200 e sem falhas,
+  que confirmou `persisted_count=7` para candles com
+  `event_time=2026-08-15T22:52:00Z` em `crypto_market.candles_1m`.
+- Conclusão operacional: sim, a coleta automática está configurada para os sete
+  pares e a persistência real está funcionando. O `MERGE` idempotente pode
+  contabilizar somente novas barras em cada execução, portanto a quantidade
+  persistida não precisa corresponder ao limite de recuperação solicitado.
+- O MCP obrigatório foi novamente acessado exclusivamente por JSON-RPC e HTTP,
+  com `initialize` e retries/backoff. Todas as tentativas retornaram HTTP 503
+  por conexão recusada no upstream e não emitiram `mcp-session-id`; por isso não
+  foi possível fazer nesta rodada uma consulta independente do estado do job ou
+  uma auditoria de gaps/duplicidades diretamente no BigQuery. A confirmação
+  atual combina a etapa do Scheduler concluída no deploy com persistência real
+  bem-sucedida no endpoint.
+- Comandos/ferramentas usados: `find`, `git status`, `git log`, `rg`, `sed`,
+  `tail`; `curl` no MCP HTTP/JSON-RPC, no endpoint produtivo e na API pública do
+  GitHub; Python para resumir jobs e etapas do workflow. O próximo passo das
+  redes neurais não mudou; `docs/diario/proximo-passo-redes2.md` foi preservado.
+
+## 2026-08-15 — Horizonte mínimo de dados para dataset e redes de cripto
+
+- A montagem do dataset pode começar imediatamente: o schema OHLCV de um minuto
+  já contém preço, volumes, quantidade de trades, agressão compradora,
+  timestamps e flags de qualidade para os sete pares. Não é necessário aguardar
+  meses para implementar agregações 15m/1h, features, targets e splits temporais.
+- Para validar apenas a engenharia, sete dias contínuos representam até 10.080
+  candles por par (70.560 no total). Esse volume serve para detectar vazamento,
+  gaps, duplicidades e erros de alinhamento, mas não para concluir que uma rede
+  possui edge econômico.
+- Sem backfill, usando `2026-08-15` como início operacional confirmado, o
+  primeiro baseline comparável deve esperar pelo menos 90 dias, aproximadamente
+  em `2026-11-13`: até 129.600 candles de 1m por par, 907.200 no total, ou 8.640
+  barras de 15m por par. Para começar experimentos neurais com walk-forward, o
+  mínimo recomendado é 180 dias, aproximadamente em `2027-02-11`: até 259.200
+  candles de 1m por par e 1.814.400 no total. Promoção operacional não deve ser
+  considerada antes de pelo menos 365 dias (`2027-08-15`) e validação fora da
+  amostra em regimes distintos.
+- A alternativa recomendada é não esperar esses prazos: criar um backfill
+  histórico idempotente da Binance, reutilizando a chave lógica atual. O coletor
+  aceita `start_time`/`end_time`, mas limita uma consulta a 1.000 candles; logo o
+  backfill deve paginar, ter checkpoints, respeitar rate limits e auditar
+  completude antes do treino. Com backfill de 180 a 365 dias, o dataset e os
+  primeiros baselines podem ser montados assim que a ingestão histórica e os
+  checks de qualidade terminarem, em vez de aguardar a coleta orgânica.
+- A separação temporal deve ocorrer antes da geração de janelas e normalização,
+  e os sete pares não devem ser somados como se fossem observações independentes.
+  O gate inicial deve comparar a rede com buy-and-hold e baselines simples,
+  incluindo custos, slippage e walk-forward; quantidade de candles isolada não
+  torna o modelo pronto para capital real.
+- Tentei obter a contagem e cobertura exatas pelo MCP obrigatório via JSON-RPC e
+  HTTP, com cinco tentativas de `initialize` e backoff. O upstream continuou
+  respondendo HTTP 503 por conexão recusada, sem sessão, portanto os números
+  acima são capacidades teóricas para continuidade perfeita e precisam ser
+  confrontados com gaps/duplicidades no BigQuery quando o MCP voltar.
+- Comandos/ferramentas usados: `curl` no MCP HTTP/JSON-RPC; `nl`, `rg` e `sed`
+  para inspecionar o coletor, o schema, os limites e o Scheduler. O próximo passo
+  operacional das redes B3 não mudou; por isso
+  `docs/diario/proximo-passo-redes2.md` foi preservado.
