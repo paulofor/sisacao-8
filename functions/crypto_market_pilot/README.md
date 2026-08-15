@@ -59,6 +59,12 @@ bq query --location=us-east1 --use_legacy_sql=false \
   'GRANT `roles/bigquery.dataEditor`
    ON SCHEMA `ingestaokraken`.crypto_market
    TO "serviceAccount:sa-crypto-market-pilot@ingestaokraken.iam.gserviceaccount.com"'
+
+# Executar com um administrador do projeto: o workflow autentica como esta SA
+# e precisa criar/atualizar/descrever o Scheduler recorrente.
+gcloud projects add-iam-policy-binding ingestaokraken \
+  --member='serviceAccount:codex-openai@ingestaokraken.iam.gserviceaccount.com' \
+  --role='roles/cloudscheduler.admin'
 ```
 
 O comando legado `bq add-iam-policy-binding` pode responder `This feature
@@ -93,6 +99,15 @@ configure OIDC enquanto o workflow mantiver `--allow-unauthenticated`. A conta
 do workflow precisa de permissão para descrever, criar, atualizar e reativar
 jobs do Cloud Scheduler; uma falha nessa etapa deixa o deploy explicitamente
 vermelho, em vez de publicar a função sem ativar a coleta recorrente.
+
+Se o workflow retornar `PERMISSION_DENIED` para
+`cloudscheduler.jobs.create`, a função já pode ter sido publicada, mas a coleta
+recorrente não foi ativada. Um administrador deve aplicar uma única vez o grant
+`roles/cloudscheduler.admin` para a identidade autenticada pelo workflow (hoje
+`codex-openai@ingestaokraken.iam.gserviceaccount.com`) usando o comando dos
+pré-requisitos e reexecutar o job de deploy. Não substitua esse grant por OIDC:
+OIDC controla a invocação da função, enquanto este erro é autorização da conta
+que administra o recurso Cloud Scheduler.
 
 ## Verificação operacional
 

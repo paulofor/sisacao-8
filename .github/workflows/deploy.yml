@@ -330,12 +330,21 @@ jobs:
             --attempt-deadline=180s
           )
 
-          if gcloud scheduler jobs describe "${job_name}" \
+          set +e
+          describe_output=$(gcloud scheduler jobs describe "${job_name}" \
             --project="${PROJECT_ID}" \
-            --location="${REGION}" >/dev/null 2>&1; then
+            --location="${REGION}" 2>&1)
+          describe_status=$?
+          set -e
+
+          if (( describe_status == 0 )); then
             gcloud scheduler jobs update http "${job_name}" \
               "${common_args[@]}" \
               --clear-auth-token
+          elif grep -q 'PERMISSION_DENIED' <<<"${describe_output}"; then
+            echo "${describe_output}" >&2
+            echo "::error::A identidade de GCP do workflow precisa de roles/cloudscheduler.admin no projeto ${PROJECT_ID} para descrever, criar e atualizar ${job_name}." >&2
+            exit 1
           else
             gcloud scheduler jobs create http "${job_name}" \
               "${common_args[@]}"

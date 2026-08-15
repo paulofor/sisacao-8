@@ -727,3 +727,34 @@ Próximo passo operacional de cripto após merge/deploy:
   `docs/diario/proximo-passo-redes2.md` foi preservado.
 - Comandos/ferramentas usados: `git status`, `git log`, `git remote`, `curl` na
   API pública do GitHub e `curl` no MCP HTTP JSON-RPC com retry/backoff.
+
+## 2026-08-15 — Causa confirmada da falha ao criar o Scheduler cripto
+
+- O log do GitHub Actions fornecido pelo operador confirmou a causa: o workflow
+  autentica como `codex-openai@ingestaokraken.iam.gserviceaccount.com`, e essa
+  identidade não possui `cloudscheduler.jobs.create` no projeto
+  `ingestaokraken`. Não é falha da função, do payload dos sete pares, da Binance,
+  do BigQuery ou de OIDC; é uma pendência IAM para administrar Cloud Scheduler.
+- A correção de produção exige que um administrador do projeto conceda uma vez
+  `roles/cloudscheduler.admin` à service account do workflow e depois reexecute
+  o deploy. Esse papel cobre as operações usadas pelo workflow para descrever,
+  criar, atualizar e reativar o job. Este ambiente não possui credencial
+  administrativa nem `gcloud`, portanto não foi possível aplicar o grant daqui.
+- Atualizei o runbook com o comando exato de IAM e esclareci que conceder OIDC
+  não corrige essa falha. Também removi a supressão cega do erro de `describe` no
+  workflow: agora uma resposta `PERMISSION_DENIED` é preservada e acompanhada de
+  uma anotação explícita indicando o papel e a identidade necessários, em vez de
+  ser confundida silenciosamente com job inexistente antes da tentativa de
+  criação.
+- Até o grant e a reexecução concluírem, a Cloud Function continua apta a buscar
+  e persistir dados reais sob chamada, mas a coleta automática dos sete pares
+  não deve ser declarada ativa. Depois do deploy, confirmar
+  `crypto-market-pilot-5m` como `ENABLED` e validar timestamps recentes dos sete
+  símbolos no BigQuery.
+- Comandos/ferramentas usados: inspeção do log fornecido pelo operador;
+  `git status`, `git log`, `command -v`, `rg`, `sed`, `apply_patch`, validação
+  YAML com Ruby, `black --check`, `isort --check-only`, `flake8`, `pytest` e
+  `git diff --check`. A tentativa de validar YAML com Python não foi usada porque
+  o ambiente não possui o módulo `yaml`; a validação equivalente com Ruby
+  passou. O próximo passo das redes neurais não mudou;
+  `docs/diario/proximo-passo-redes2.md` foi preservado.
