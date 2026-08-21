@@ -828,3 +828,54 @@ Próximo passo operacional de cripto após merge/deploy:
   para inspecionar o coletor, o schema, os limites e o Scheduler. O próximo passo
   operacional das redes B3 não mudou; por isso
   `docs/diario/proximo-passo-redes2.md` foi preservado.
+
+## 2026-08-21 — Auditoria pontual das coletas de Ibovespa e cripto
+
+- Tentei auditar o estado atual das duas coletas no BigQuery e no Cloud
+  Scheduler pelo MCP obrigatório, exclusivamente por JSON-RPC e HTTP. Foram
+  feitas cinco tentativas de `initialize`, com timeout e backoff; todas
+  retornaram HTTP 503 por recusa de conexão no upstream e nenhuma forneceu
+  `mcp-session-id`. Assim, nesta rodada não foi possível confirmar diretamente
+  a última linha, cobertura ou gaps atuais de `IBOV`/`BOVA11`, nem descrever o
+  estado corrente dos Schedulers.
+- A última evidência confirmada do índice permanece a auditoria de 2026-07-31:
+  a coleta intraday de `IBOV` e do proxy explícito `BOVA11` estava operacional,
+  mas o primeiro pregão completo teve 34/36 snapshots de IBOV (94,4%) e 35/36
+  de BOVA11 (97,2%). O código produtivo reserva os dois benchmarks e traduz
+  `IBOV` para `IBOV:INDEXBVMF`. A série diária canônica do índice continua sendo
+  uma pendência separada; o COTAHIST diário contém o ETF BOVA11, não o índice.
+  Como o MCP está indisponível, não declarei continuidade atual do índice sem
+  evidência de tabela.
+- Para cripto, validei diretamente o endpoint produtivo. O `dry_run` retornou
+  HTTP 200, `status=ok`, sem falhas e um candle fechado recente para cada um dos
+  sete pares. Um POST real com janela de 120 barras também retornou HTTP 200,
+  sem falhas, e persistiu 833 linhas, cobrindo `2026-08-20T22:09:00Z` a
+  `2026-08-21T00:07:00Z`. Como 833 equivale a 119 barras novas para cada um dos
+  sete pares, embora o job devesse executar a cada cinco minutos com
+  sobreposição idempotente, a evidência indica uma lacuna de aproximadamente
+  duas horas antes da recuperação manual. A função e o `MERGE` estão saudáveis,
+  mas a recorrência automática deve ser tratada como degradada ou não
+  confirmada até que Scheduler e logs sejam auditados; o POST manual recuperou
+  a janela ainda alcançável pelo limite atual.
+- Recomendação para ampliar a pesquisa cripto, sem execução de ordens: primeiro
+  consolidar qualidade e backfill do OHLCV já existente; depois priorizar
+  negócios agregados, spread e profundidade do livro, e somente então dados de
+  derivativos (funding, open interest, basis e liquidações). Em uma terceira
+  etapa, acrescentar métricas on-chain de baixa frequência, como fluxos de
+  exchanges, endereços ativos, taxas e atividade de stablecoins. Cada família
+  deve ter dataset, fonte, granularidade e custo próprios, com timestamp de
+  evento e ingestão, controle de revisões, cobertura e licenciamento. Não é
+  recomendável ampliar apenas a lista de moedas antes de restaurar o Scheduler,
+  auditar gaps/duplicidades e criar backfill paginado.
+- Próximas verificações operacionais: quando o MCP voltar, descrever
+  `crypto-market-pilot-5m`, consultar logs da função e medir a maior lacuna por
+  símbolo; confirmar timestamps recentes de IBOV/BOVA11 nas tabelas bruta, 15m
+  e 1h; e separar o monitoramento da série diária canônica do IBOV. O próximo
+  passo das redes neurais não mudou, portanto
+  `docs/diario/proximo-passo-redes2.md` foi preservado.
+- Comandos/ferramentas usados: `find`, `git status`, `rg`, `sed`, `tail`, `nl`;
+  `curl` no MCP HTTP/JSON-RPC com retries/backoff, no endpoint produtivo
+  `crypto_market_pilot` em modos `dry_run` e persistente, e tentativa de leitura
+  da API pública do GitHub Actions; inspeção do código e dos runbooks. A busca
+  web por documentação primária também foi tentada, mas a ferramenta retornou
+  HTTP 401 e não foi usada como evidência.
