@@ -434,3 +434,22 @@ Próximo passo operacional após merge/deploy:
 2. Executar uma rodada controlada de `phase3_new_families` que inclua a configuração `[256,64,16]`, dropout `0,25`, learning rate `0,0003`, probability `0,45` e margin `0,05`.
 3. Confirmar em `neural_family_evaluations` e `neural_gate_decisions` que a família automática contém mais de uma seed e uma única decisão consolidada.
 4. Não promover se a consolidação confirmar instabilidade ou `passed=false`; manter o Apolo como champion.
+
+## 2026-09-08 — Busca ativa, ainda sem segunda rede aprovada
+
+Estado produtivo mais recente: existem 3.838 decisões MUEN, das quais 3.837
+foram rejeitadas e somente 1 foi aprovada. A única aprovação continua sendo o
+Apolo NEV, decidida em 10/07; nenhuma candidata posterior passou pelo Gate.
+
+A decisão mais recente, em `2026-09-08T04:31:03.88439Z`, demonstra que a busca
+segue executando. A família `neural_eod_phase3_family_4d7f7aa316382e89efed3a12`
+foi novamente rejeitada por drawdown excessivo e instabilidade entre seeds,
+mesmo após agregar 483 seeds. O próximo passo permanece:
+
+1. Manter o Apolo como único champion e não promover nenhuma candidata com
+   `passed=false`.
+2. Investigar por que as famílias consolidadas continuam acumulando drawdown
+   muito alto e instabilidade, sem afrouxar os gates para fabricar aprovação.
+3. Continuar monitorando a busca automática e só iniciar comparação para
+   promoção quando surgir uma nova decisão `passed=true`, seguida de aprovação
+   manual explícita.
