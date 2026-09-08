@@ -849,14 +849,14 @@ Próximo passo operacional de cripto após merge/deploy:
 - Para cripto, validei diretamente o endpoint produtivo. O `dry_run` retornou
   HTTP 200, `status=ok`, sem falhas e um candle fechado recente para cada um dos
   sete pares. Um POST real com janela de 120 barras também retornou HTTP 200,
-  sem falhas, e persistiu 833 linhas, cobrindo `2026-08-20T22:09:00Z` a
-  `2026-08-21T00:07:00Z`. Como 833 equivale a 119 barras novas para cada um dos
-  sete pares, embora o job devesse executar a cada cinco minutos com
-  sobreposição idempotente, a evidência indica uma lacuna de aproximadamente
-  duas horas antes da recuperação manual. A função e o `MERGE` estão saudáveis,
-  mas a recorrência automática deve ser tratada como degradada ou não
-  confirmada até que Scheduler e logs sejam auditados; o POST manual recuperou
-  a janela ainda alcançável pelo limite atual.
+  sem falhas, e submeteu 833 linhas ao `MERGE`, cobrindo
+  `2026-08-20T22:09:00Z` a `2026-08-21T00:07:00Z`. Correção posterior: o campo
+  `persisted_count` recebe `len(rows)` após o `MERGE`, inclusive para linhas já
+  existentes que foram atualizadas. Portanto, 833 não comprova que eram barras
+  novas, não mede uma lacuna de duas horas e não permite diagnosticar sozinho a
+  recorrência do Scheduler. Essa chamada confirmou apenas fonte, função e
+  escrita idempotente saudáveis; Scheduler, gaps e inserções líquidas ficaram
+  sem confirmação enquanto o MCP estava indisponível.
 - Recomendação para ampliar a pesquisa cripto, sem execução de ordens: primeiro
   consolidar qualidade e backfill do OHLCV já existente; depois priorizar
   negócios agregados, spread e profundidade do livro, e somente então dados de
@@ -879,3 +879,69 @@ Próximo passo operacional de cripto após merge/deploy:
   da API pública do GitHub Actions; inspeção do código e dos runbooks. A busca
   web por documentação primária também foi tentada, mas a ferramenta retornou
   HTTP 401 e não foi usada como evidência.
+
+## 2026-09-08 — Nova consulta de redes aprovadas
+
+- Consultei o estado produtivo para responder se a busca automática encontrou
+  outra rede aprovada. O endpoint `/api/ops/neural/gate-decisions` informou, nos
+  contadores globais retornados junto à decisão mais recente, 3.838 decisões
+  MUEN: 3.837 rejeitadas e somente 1 aprovada.
+- O endpoint `/api/ops/neural/champion-monitoring` confirmou que essa única
+  aprovação continua vinculada ao Apolo NEV, com família
+  `neural_eod_phase3_tabular_bottleneck_mlp_p48_m05_t50_block3_nev_rcsl3_grid3`,
+  decisão `passed` de `2026-07-10T16:03:26.188852Z` e modelo com status
+  `approved`. Portanto, não há uma segunda rede aprovada até esta verificação.
+- A busca continua ativa: a decisão mais recente ocorreu em
+  `2026-09-08T04:31:03.88439Z` para a família estável
+  `neural_eod_phase3_family_4d7f7aa316382e89efed3a12`, mas foi rejeitada por
+  `drawdown_excessivo` e `seeds_instaveis`. Ela agregava 483 seeds, delta mediano
+  de expectancy de aproximadamente `+0,002254` e drawdown de aproximadamente
+  `0,93018`, logo não deve ser promovida.
+- Tentei confirmar os números diretamente no BigQuery pelo MCP obrigatório,
+  sempre via JSON-RPC e HTTP. Foram cinco tentativas de `initialize`, com
+  backoff; todas retornaram HTTP 503 e não emitiram `mcp-session-id`. Por isso a
+  evidência desta rodada vem dos endpoints produtivos, cujos contadores são
+  calculados no BigQuery antes do limite de 1.000 linhas da resposta.
+- Comandos/ferramentas usados: `find`, `git status`, `rg`, `sed`, `tail` e Python
+  para inspecionar e resumir os payloads; `curl` com retries/backoff no MCP
+  HTTP/JSON-RPC e `curl` nos endpoints produtivos `gate-decisions`,
+  `champion-monitoring` e `evolution/leaderboard`.
+
+## 2026-09-08 — Estado atual das coletas de Ibovespa e criptomoedas
+
+- Tentei novamente consultar BigQuery, Schedulers e logs pelo MCP obrigatório,
+  exclusivamente via JSON-RPC e HTTP. As cinco tentativas de `initialize`, com
+  backoff, retornaram HTTP 503 por recusa do upstream e não forneceram
+  `mcp-session-id`. Assim, não foi possível afirmar o estado atual dos
+  Schedulers nem medir diretamente gaps nas tabelas intraday.
+- No backend produtivo, o inventário foi atualizado em
+  `2026-09-07T21:50:19.32778Z`, informa 52 tickers e 130.613 candles intraday e
+  mantém `pipelineHealth=OK`. A cobertura diária confirma `BOVA11` de
+  `2026-07-29` até o último pregão disponível, `2026-09-04`, com 28 pregões,
+  nenhum preço/volume inválido e nenhuma duplicidade. A cobertura de 21,21% é
+  calculada contra todo o horizonte iniciado em fevereiro, anterior à inclusão
+  do ETF, e não equivale à cobertura desde 29/07.
+- O backend diário não lista `IBOV`, como esperado: o COTAHIST materializa o ETF
+  `BOVA11`, não o índice. Sem acesso ao BigQuery nesta rodada, a continuidade
+  intraday específica de `IBOV` não pôde ser comprovada apesar de o inventário
+  geral estar recente. A materialização diária canônica do índice continua
+  pendente e não deve ser confundida com a coleta do proxy BOVA11.
+- O `crypto_market_pilot` respondeu HTTP 200 e `status=ok`, sem falhas, para os
+  sete pares. O `dry_run` obteve candles fechados até `2026-09-08T04:48:00Z`.
+  Dois POSTs reais concluíram o `MERGE` no BigQuery e deixaram a janela consultada
+  coberta até `2026-09-08T04:55:00Z`; isso confirma fonte, função e persistência
+  disponíveis no momento da verificação.
+- Os valores `persisted_count=833` e depois `63` representam linhas submetidas
+  ao `MERGE`, não inserções novas: o código define o campo como `len(rows)` e o
+  `MERGE` atualiza chaves já existentes. Logo, esses números não demonstram nem
+  descartam lacuna e não validam o Scheduler de cinco minutos. O estado correto
+  é: cripto operacional por chamada direta e atualizado manualmente até 04:55Z;
+  recorrência automática ainda não confirmada enquanto MCP/logs estiverem
+  indisponíveis.
+- Comandos/ferramentas usados: `git status`, `git log`, `rg`, `sed`, `nl`,
+  `curl` com retries/backoff no MCP HTTP/JSON-RPC; `curl` nos endpoints
+  produtivos `/api/ops/overview`, `/api/ops/pipeline`,
+  `/api/ops/quant/inventory-summary`, `/api/ops/quant/ticker-coverage` e
+  `crypto_market_pilot`; Python para resumir JSON; inspeção de
+  `functions/crypto_market_pilot/main.py` para validar a semântica de
+  `persisted_count`. O próximo passo operacional das redes neurais não mudou.
