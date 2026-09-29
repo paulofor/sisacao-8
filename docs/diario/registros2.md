@@ -945,3 +945,26 @@ Próximo passo operacional de cripto após merge/deploy:
   `crypto_market_pilot`; Python para resumir JSON; inspeção de
   `functions/crypto_market_pilot/main.py` para validar a semântica de
   `persisted_count`. O próximo passo operacional das redes neurais não mudou.
+
+## 2026-09-29 — Planejamento inicial da coleta de opções da B3
+
+- Confirmada a viabilidade técnica de coletar as principais opções, com a
+  ressalva de que o universo deve ser descoberto dinamicamente por
+  ativo-objeto, vencimento, negócios e volume, em vez de manter uma lista fixa
+  de símbolos que expiram.
+- Registrado em `docs/plano-coleta-opcoes-b3.md` um plano de piloto separado do
+  pipeline de ações, com dimensão de instrumentos, candles diários, universo
+  diário auditável, checks de qualidade e evolução intraday somente após
+  validação de fonte, licença e limites.
+- A inspeção confirmou que o parser COTAHIST atual lê ticker e OHLCV, mas não
+  preserva os atributos de contrato necessários para opções. Nenhuma função ou
+  tabela foi criada nesta etapa, respeitando a exigência de planejamento antes
+  da implementação.
+- O próximo passo das redes neurais não mudou; por isso,
+  `docs/diario/proximo-passo-redes2.md` foi mantido sem alterações.
+- Comandos/ferramentas usados: `find`, `git status`, `rg`, `sed`, `tail` e
+  `git log` para inspecionar instruções, documentação e implementação atual. A
+  busca web por documentação primária da B3 foi tentada, mas a ferramenta
+  retornou HTTP 401; portanto, ela não foi usada como evidência do plano. A
+  documentação foi validada com `git diff --check`, e a suíte do repositório
+  com `python -m flake8 .` e `python -m pytest` (225 testes aprovados).
